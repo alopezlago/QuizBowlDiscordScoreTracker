@@ -26,24 +26,31 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             // TODO: This should be stored in a more secure fashion.
-            discord = new DiscordClient(new DiscordConfiguration()
+            ////discord = new DiscordClient(new DiscordConfiguration()
+            ////{
+            ////    Token = tokens[1],
+            ////    TokenType = TokenType.Bot
+            ////});
+
+            ////// bad form, should be clearing this
+            ////discord.MessageCreated += async eventArgs =>
+            ////{
+            ////    // Maybe use Mention? and use Id for author.
+            ////    if (eventArgs.Author != discord.CurrentUser)
+            ////    {
+            ////        //await eventArgs.Message.RespondAsync($"Sent from @{eventArgs.Author.Username}. Content: '{eventArgs.Message.Content}'.");
+            ////        await eventArgs.Message.RespondAsync($"Sent from {eventArgs.Author.Mention}. Content: '{eventArgs.Message.Content}'.");
+            ////    }
+            ////};
+            using (Bot bot = new Bot(tokens[1]))
             {
-                Token = tokens[1],
-                TokenType = TokenType.Bot
-            });
+                await bot.ConnectAsync();
 
-            // bad form, should be clearing this
-            discord.MessageCreated += async eventArgs =>
-            {
-                await eventArgs.Message.RespondAsync("Sent from " + eventArgs.Author.Email);
-            };
-
-            await discord.ConnectAsync();
-
+                // Never leave.
+                await Task.Delay(-1);
+            }
+                
             ////TempClass tc = new TempClass();
-
-            // Never leave.
-            await Task.Delay(-1);
         }
     }
 }
