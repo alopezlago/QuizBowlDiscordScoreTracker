@@ -1,0 +1,1 @@
+﻿See this for getting the DSharp code: https://dsharpplus.emzi0767.com/articles/first_bot.html
