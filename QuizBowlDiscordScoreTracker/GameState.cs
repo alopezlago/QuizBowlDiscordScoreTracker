@@ -10,7 +10,7 @@ namespace QuizBowlDiscordScoreTracker
     // TODO: Once we add tests add an interface for this.
     public class GameState
     {
-        private const int finalScoresLimit = 15;
+        private const int ScoresListLimit = 15;
 
         private readonly SortedSet<Buzz> buzzQueue;
         private readonly HashSet<DiscordUser> alreadyBuzzedPlayers;
@@ -86,8 +86,8 @@ namespace QuizBowlDiscordScoreTracker
             StringBuilder builder = new StringBuilder();
             lock (collectionLock)
             {
-                string header = this.score.Count > finalScoresLimit ?
-                    $"Top {finalScoresLimit} scorers:" :
+                string header = this.score.Count > ScoresListLimit ?
+                    $"Top {ScoresListLimit} scorers:" :
                     "Scorers:";
                 builder.AppendLine(header);
                 foreach (KeyValuePair<DiscordUser, int> kvp in this.score)
@@ -169,7 +169,7 @@ namespace QuizBowlDiscordScoreTracker
                 next = this.buzzQueue.Min;
             }
             
-            nextPlayer = next.User;
+            nextPlayer = next?.User;
             return nextPlayer != null;
         }
     }
