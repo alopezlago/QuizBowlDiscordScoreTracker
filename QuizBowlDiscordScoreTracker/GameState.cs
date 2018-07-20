@@ -146,6 +146,7 @@ namespace QuizBowlDiscordScoreTracker
                 }
                 else
                 {
+                    this.buzzQueue.Remove(buzz);
                     this.alreadyBuzzedPlayers.Add(buzz.User);
                 }
 
