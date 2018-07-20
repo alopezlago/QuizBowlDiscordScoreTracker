@@ -21,7 +21,7 @@ namespace QuizBowlDiscordScoreTracker
             if (state.Reader == null)
             {
                 state.Reader = ctx.User;
-                await ctx.RespondAsync($"{ctx.User.Username} is the reader.");
+                await ctx.RespondAsync($"{ctx.User.Mention} is the reader.");
             }
         }
 
