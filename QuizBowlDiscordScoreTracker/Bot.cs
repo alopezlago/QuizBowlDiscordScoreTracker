@@ -4,23 +4,19 @@ using System.Threading.Tasks;
 using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.Entities;
+using DSharpPlus.EventArgs;
 
 namespace QuizBowlDiscordScoreTracker
 {
     public class Bot : IDisposable
     {
-        private readonly SortedSet<PlayerEntry> playersQueue;
-        private readonly HashSet<PlayerEntry> alreadyBuzzedPlayers;
-        private readonly Dictionary<DiscordUser, int> score;
-
+        private readonly GameState gameState;
         private readonly DiscordClient discordClient;
         private readonly CommandsNextModule commandsModule;
 
         public Bot(string accessToken)
         {
-            this.playersQueue = new SortedSet<PlayerEntry>();
-            this.alreadyBuzzedPlayers = new HashSet<PlayerEntry>();
-            this.score = new Dictionary<DiscordUser, int>();
+            this.gameState = new GameState();
 
             this.discordClient = new DiscordClient(new DiscordConfiguration()
             {
@@ -29,12 +25,20 @@ namespace QuizBowlDiscordScoreTracker
                 UseInternalLogHandler = true,
                 LogLevel = LogLevel.Debug
             });
+
+            DependencyCollectionBuilder dependencyCollectionBuilder = new DependencyCollectionBuilder();
+            dependencyCollectionBuilder.AddInstance(this.gameState);
             this.commandsModule = this.discordClient.UseCommandsNext(new CommandsNextConfiguration()
             {
-                StringPrefix = "!"
+                StringPrefix = "!",
+                CaseSensitive = false,
+                EnableDms = false,
+                Dependencies = dependencyCollectionBuilder.Build(),,
             });
 
             this.commandsModule.RegisterCommands<BotCommands>();
+
+            this.discordClient.MessageCreated += this.MessageReceived;
         }
 
         public Task ConnectAsync()
@@ -44,39 +48,18 @@ namespace QuizBowlDiscordScoreTracker
 
         public void Dispose()
         {
-            this.discordClient?.Dispose();
+            if (this.discordClient != null)
+            {
+                this.discordClient.MessageCreated -= this.MessageReceived;
+                this.discordClient.Dispose();
+            }
         }
 
-        private class PlayerEntry : IComparable<PlayerEntry>
+        private async Task MessageReceived(MessageCreateEventArgs args)
         {
-            public DiscordUser User { get; set; }
-
-            public DateTime Timestamp { get; set; }
-
-            public int CompareTo(PlayerEntry other)
-            {
-                if (other == null)
-                {
-                    return 1;
-                }
-
-                return this.Timestamp.CompareTo(other.Timestamp);
-            }
-
-            public override int GetHashCode()
-            {
-                return this.User.GetHashCode() ^ this.Timestamp.GetHashCode();
-            }
-
-            public override bool Equals(object obj)
-            {
-                if (obj is PlayerEntry entry)
-                {
-                    return this.User.Equals(entry.User) && this.Timestamp.Equals(entry.Timestamp);
-                }
-
-                return false;
-            }
+            // Accepted non-commands:
+            // From the reader: -5, 0, 10, 15, no penalty
+            args.Message.
         }
     }
 }
