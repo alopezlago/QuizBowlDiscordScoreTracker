@@ -23,16 +23,6 @@ namespace QuizBowlDiscordScoreTracker
                 Environment.Exit(1);
             }
 
-            ////// bad form, should be clearing this
-            ////discord.MessageCreated += async eventArgs =>
-            ////{
-            ////    // Maybe use Mention? and use Id for author.
-            ////    if (eventArgs.Author != discord.CurrentUser)
-            ////    {
-            ////        //await eventArgs.Message.RespondAsync($"Sent from @{eventArgs.Author.Username}. Content: '{eventArgs.Message.Content}'.");
-            ////        await eventArgs.Message.RespondAsync($"Sent from {eventArgs.Author.Mention}. Content: '{eventArgs.Message.Content}'.");
-            ////    }
-            ////};
             using (Bot bot = new Bot(tokens[1]))
             {
                 await bot.ConnectAsync();

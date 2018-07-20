@@ -68,6 +68,12 @@ namespace QuizBowlDiscordScoreTracker
             // From the reader: -5, 0, 10, 15, no penalty
             // From others: buzzes only
             string message = args.Message.Content.Trim();
+            if (message.StartsWith('!'))
+            {
+                // Skip commands
+                return;
+            }
+
             if (this.state.Reader == args.Author)
             {
                 switch (args.Message.Content)
