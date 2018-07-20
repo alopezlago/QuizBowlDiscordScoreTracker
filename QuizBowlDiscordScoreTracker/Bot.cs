@@ -10,7 +10,7 @@ namespace QuizBowlDiscordScoreTracker
 {
     public class Bot : IDisposable
     {
-        private static readonly Regex BuzzRegex = new Regex("^bu?z+$");
+        private static readonly Regex BuzzRegex = new Regex("^bu?z+$", RegexOptions.IgnoreCase);
 
         private readonly GameState state;
         private readonly DiscordClient discordClient;
