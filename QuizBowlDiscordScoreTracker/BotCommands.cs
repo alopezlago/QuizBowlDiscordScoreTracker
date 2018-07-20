@@ -7,20 +7,8 @@ namespace QuizBowlDiscordScoreTracker
 {
     public class BotCommands
     {
-        // Will need:
-        // !reader to set themselves as the reader
-        // !stop or !end to reset and remove themselves as the reader
-        // !score to get the score
-        // !next or !clear to move to the next question
-
-        // May just want this in the Bot class, since we want the queues.
-        ////[Command("hi")]
-        ////public async Task Hi(CommandContext ctx)
-        ////{
-        ////    await ctx.RespondAsync($"Hi there, {ctx.User.Mention}!");
-        ////}
-
-        [Command("reader")]
+        [Command("read")]
+        [Description("Set yourself as the reader.")]
         public async Task SetReader(CommandContext ctx)
         {
             GameState state = ctx.Dependencies.GetDependency<GameState>();
@@ -38,25 +26,33 @@ namespace QuizBowlDiscordScoreTracker
         }
 
         [Command("stop")]
+        [Description("Ends the game, clearing the stats and allowing others to read.")]
         public async Task Stop(CommandContext ctx)
         {
             await ClearAll(ctx);
         }
 
         [Command("end")]
+        [Description("Ends the game, clearing the stats and allowing others to read.")]
         public async Task End(CommandContext ctx)
         {
             await ClearAll(ctx);
         }
 
         [Command("score")]
+        [Description("Get the top scores in the current game.")]
         public async Task GetScore(CommandContext ctx)
         {
             GameState state = ctx.Dependencies.GetDependency<GameState>();
-            await ctx.RespondAsync(state.GetScores());
+            // Only show scores when there's a game going on, i.e. there's a reader
+            if (state.Reader != null)
+            {
+                await ctx.RespondAsync(state.GetScores());
+            }
         }
 
         [Command("clear")]
+        [Description("Clears the player queue. Use this if no one answered correctly.")]
         public Task Clear(CommandContext ctx)
         {
             GameState state = ctx.Dependencies.GetDependency<GameState>();
@@ -69,6 +65,7 @@ namespace QuizBowlDiscordScoreTracker
         }
 
         [Command("next")]
+        [Description("Moves to the next player in the queue. This is the same as scoring 0.")]
         public Task Next(CommandContext ctx)
         {
             GameState state = ctx.Dependencies.GetDependency<GameState>();
