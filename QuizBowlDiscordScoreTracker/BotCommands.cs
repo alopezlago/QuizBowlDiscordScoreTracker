@@ -1,7 +1,9 @@
-﻿using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
+using DSharpPlus.Entities;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -47,7 +49,22 @@ namespace QuizBowlDiscordScoreTracker
             // Only show scores when there's a game going on, i.e. there's a reader
             if (state.Reader != null)
             {
-                await ctx.RespondAsync(state.GetScores());
+                ////await ctx.RespondAsync(state.GetScores());
+                IDictionary<DiscordUser, int> scores = state.GetScores2();
+                ////ctx.RespondAsync(embed: new DiscordEmbed()
+                ////{
+                ////    Title =
+
+                ////});
+                DiscordEmbedBuilder builder = new DiscordEmbedBuilder();
+                builder.Title = scores.Count > GameState.ScoresListLimit ? $"Top {GameState.ScoresListLimit} Scores" : "Scores";
+                builder.WithColor(DiscordColor.PhthaloGreen);
+                foreach (KeyValuePair<DiscordUser, int> kvp in scores)
+                {
+                    builder.AddField(kvp.Key.Username, $"{kvp.Key.Username}: {kvp.Value}");
+                }
+
+                await ctx.RespondAsync(embed: builder.Build());
             }
         }
 

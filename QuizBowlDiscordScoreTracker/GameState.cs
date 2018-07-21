@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using DSharpPlus.Entities;
 
@@ -10,7 +11,7 @@ namespace QuizBowlDiscordScoreTracker
     // TODO: Once we add tests add an interface for this.
     public class GameState
     {
-        private const int ScoresListLimit = 15;
+        public const int ScoresListLimit = 15;
 
         private readonly SortedSet<Buzz> buzzQueue;
         private readonly HashSet<DiscordUser> alreadyBuzzedPlayers;
@@ -97,6 +98,14 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             return builder.ToString();
+        }
+
+        public IDictionary<DiscordUser, int> GetScores2()
+        {
+            lock (collectionLock)
+            {
+                return this.score.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            }
         }
 
         // This takes the place of "Next", since a positive score will clear.
