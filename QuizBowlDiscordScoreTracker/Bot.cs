@@ -16,13 +16,13 @@ namespace QuizBowlDiscordScoreTracker
         private readonly DiscordClient discordClient;
         private readonly CommandsNextModule commandsModule;
 
-        public Bot(string accessToken)
+        public Bot(ConfigOptions options)
         {
             this.state = new GameState();
 
             this.discordClient = new DiscordClient(new DiscordConfiguration()
             {
-                Token = accessToken,
+                Token = options.BotToken,
                 TokenType = TokenType.Bot,
                 UseInternalLogHandler = true,
                 LogLevel = LogLevel.Debug
@@ -30,6 +30,7 @@ namespace QuizBowlDiscordScoreTracker
 
             DependencyCollectionBuilder dependencyCollectionBuilder = new DependencyCollectionBuilder();
             dependencyCollectionBuilder.AddInstance(this.state);
+            dependencyCollectionBuilder.AddInstance(options);
             this.commandsModule = this.discordClient.UseCommandsNext(new CommandsNextConfiguration()
             {
                 StringPrefix = "!",
