@@ -41,6 +41,9 @@ namespace QuizBowlDiscordScoreTracker
             this.commandsModule.RegisterCommands<BotCommands>();
 
             this.discordClient.MessageCreated += this.MessageReceived;
+
+            // TODO: We should make sure that, if the reader disconnects, we can reset the game or pick a new reader.
+            // TODO: Add a username (email) field for "administrators", who can reset the reader,
         }
 
         public Task ConnectAsync()
