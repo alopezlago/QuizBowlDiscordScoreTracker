@@ -12,12 +12,12 @@
   
   <ItemGroup>
     <!-- The txt files aren't automatically copied to the bin folder-->
-    <Content Include="discordToken.txt">
+    <None Include="discordToken.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="user.config">
+    </None>
+    <None Include="config.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    </None>
   </ItemGroup>
 
 </Project>

@@ -1,7 +1,6 @@
-﻿using System;
+﻿using Newtonsoft.Json;
 using System.IO;
 using System.Threading.Tasks;
-using DSharpPlus;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -15,20 +14,39 @@ namespace QuizBowlDiscordScoreTracker
 
         static async Task MainAsync(string[] args)
         {
-            // TODO: Redo the tokens text file
-            string[] tokens = File.ReadAllLines("discordToken.txt");
-            if (tokens.Length < 2)
-            {
-                Console.Error.WriteLine("Error: tokens file is improperly formatted.");
-                Environment.Exit(1);
-            }
 
-            using (Bot bot = new Bot(tokens[1]))
+            ConfigOptions options = await GetConfigOptions();
+            using (Bot bot = new Bot(options))
             {
                 await bot.ConnectAsync();
 
                 // Never leave.
                 await Task.Delay(-1);
+            }
+        }
+
+        static async Task<ConfigOptions> GetConfigOptions()
+        {
+            // TODO: Get the token from an encrypted file. This could be done by using DPAPI and writing a tool to help
+            // convert the user access token into a token file using DPAPI. The additional entropy could be a config
+            // option.
+            // In preparation for this work the token is still taken from a separate file.
+            string botToken = await File.ReadAllTextAsync("discordToken.txt");
+
+            if (File.Exists("config.txt"))
+            {
+                string jsonOptions = await File.ReadAllTextAsync("config.txt");
+                ConfigOptions options = JsonConvert.DeserializeObject<ConfigOptions>(jsonOptions);
+                options.BotToken = botToken;
+                return options;
+            }
+            else
+            {
+                return new ConfigOptions()
+                {
+                    AdminIds = new string[0],
+                    BotToken = botToken
+                };
             }
         }
     }

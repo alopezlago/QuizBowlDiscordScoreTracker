@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using DSharpPlus;
@@ -33,7 +34,7 @@ namespace QuizBowlDiscordScoreTracker
         public async Task SetNewReader(CommandContext context, DiscordMember newReader)
         {
             GameState state = context.Dependencies.GetDependency<GameState>();
-            if (state.Reader == context.User)
+            if (CanPerformReaderActions(state, context))
             {
                 if (newReader?.Presence?.User != null)
                 {
@@ -129,8 +130,16 @@ namespace QuizBowlDiscordScoreTracker
 
         private static bool CanPerformReaderActions(GameState state, CommandContext context)
         {
-            return state.Reader == context.User ||
-                context.Channel.PermissionsFor(context.Member) == Permissions.Administrator;
+            if (state.Reader == context.User ||
+                context.Channel.PermissionsFor(context.Member) == Permissions.Administrator)
+            {
+                return true;
+            }
+
+            // We can't rely on Email because the bot may not have acess to it
+            ConfigOptions options = context.Dependencies.GetDependency<ConfigOptions>();
+            return options.AdminIds != null &&
+                options.AdminIds.Contains(context.User.Id.ToString(CultureInfo.InvariantCulture));
         }
     }
 }
