@@ -11,7 +11,7 @@ namespace QuizBowlDiscordScoreTracker
     // TODO: Once we add tests add an interface for this.
     public class GameState
     {
-        public const int ScoresListLimit = 15;
+        public const int ScoresListLimit = 10;
 
         private readonly SortedSet<Buzz> buzzQueue;
         private readonly HashSet<DiscordUser> alreadyBuzzedPlayers;
@@ -82,59 +82,14 @@ namespace QuizBowlDiscordScoreTracker
             return true;
         }
 
-        public string GetScores()
-        {
-            StringBuilder builder = new StringBuilder();
-            lock (collectionLock)
-            {
-                string header = this.score.Count > ScoresListLimit ?
-                    $"Top {ScoresListLimit} scorers:" :
-                    "Scorers:";
-                builder.AppendLine(header);
-                foreach (KeyValuePair<DiscordUser, int> kvp in this.score)
-                {
-                    builder.AppendLine($"{kvp.Key.Username}: {kvp.Value}");
-                }
-            }
-
-            return builder.ToString();
-        }
-
-        public IDictionary<DiscordUser, int> GetScores2()
+        public IEnumerable<KeyValuePair<DiscordUser, int>> GetScores()
         {
             lock (collectionLock)
             {
-                return this.score.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+                // Return a sorted copy.
+                return this.score.OrderByDescending(kvp => kvp.Value);
             }
         }
-
-        // This takes the place of "Next", since a positive score will clear.
-        // Returns the next player in the queue. If the score is positive, then there is no next player, so it returns
-        // null.
-        ////public DiscordUser ScorePlayer(DiscordUser user, int score)
-        ////{
-        ////    if (score > 0)
-        ////    {
-        ////        // Correct
-        ////        this.playersQueue.Clear();
-        ////        this.alreadyBuzzedPlayers.Clear();
-        ////    }
-        ////    else
-        ////    {
-        ////        this.alreadyBuzzedPlayers.Add(user);
-        ////    }
-
-        ////    // TODO: We may want to limit what score can be, to protect against typos.
-        ////    // This could be something passed in through a command, too. Like a set/array of allowed scores.
-        ////    if (!this.score.TryGetValue(user, out int currentScore))
-        ////    {
-        ////        currentScore = 0;
-        ////    }
-
-        ////    // We may have to make this a thread-safe dictionary.
-        ////    this.score[user] = currentScore + score;
-        ////    return this.GetNextPlayer();
-        ////}
 
         public void ScorePlayer(int score)
         {

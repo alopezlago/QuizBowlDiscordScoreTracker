@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using DSharpPlus;
 using DSharpPlus.CommandsNext;
@@ -11,69 +12,87 @@ namespace QuizBowlDiscordScoreTracker
     {
         [Command("read")]
         [Description("Set yourself as the reader.")]
-        public async Task SetReader(CommandContext ctx)
+        public async Task SetReader(CommandContext context)
         {
-            GameState state = ctx.Dependencies.GetDependency<GameState>();
+            GameState state = context.Dependencies.GetDependency<GameState>();
 
             // TODO: Determine if we want to allow admins/those who can kick to set the reader, to take it away from
             // someone who shouldn't read.
             // The code to calculate this is:
-            // ctx.Channel.PermissionsFor(ctx.Member) == Permissions.Administrator | Permissions.KickMembers | Permissions.BanMembers;
+            // context.Channel.PermissionsFor(context.Member) == Permissions.Administrator | Permissions.KickMembers | Permissions.BanMembers;
 
             if (state.Reader == null)
             {
-                state.Reader = ctx.User;
-                await ctx.RespondAsync($"{ctx.User.Mention} is the reader.");
+                state.Reader = context.User;
+                await context.RespondAsync($"{context.User.Mention} is the reader.");
+            }
+        }
+
+        [Command("setnewreader")]
+        [Description("Set another user as the reader.")]
+        public async Task SetNewReader(CommandContext context, DiscordMember newReader)
+        {
+            GameState state = context.Dependencies.GetDependency<GameState>();
+            if (state.Reader == context.User)
+            {
+                if (newReader?.Presence?.User != null)
+                {
+                    state.Reader = newReader.Presence.User;
+                    await context.RespondAsync($"{state.Reader.Mention} is now the reader.");
+                }
+                else
+                {
+                    await context.RespondAsync($"User could not be found. Could not set the new reader.");
+                }
             }
         }
 
         [Command("stop")]
         [Description("Ends the game, clearing the stats and allowing others to read.")]
-        public async Task Stop(CommandContext ctx)
+        public async Task Stop(CommandContext context)
         {
-            await ClearAll(ctx);
+            await ClearAll(context);
         }
 
         [Command("end")]
         [Description("Ends the game, clearing the stats and allowing others to read.")]
-        public async Task End(CommandContext ctx)
+        public async Task End(CommandContext context)
         {
-            await ClearAll(ctx);
+            await ClearAll(context);
         }
 
         [Command("score")]
         [Description("Get the top scores in the current game.")]
-        public async Task GetScore(CommandContext ctx)
+        public async Task GetScore(CommandContext context)
         {
-            GameState state = ctx.Dependencies.GetDependency<GameState>();
-            // Only show scores when there's a game going on, i.e. there's a reader
+            GameState state = context.Dependencies.GetDependency<GameState>();
             if (state.Reader != null)
             {
-                ////await ctx.RespondAsync(state.GetScores());
-                IDictionary<DiscordUser, int> scores = state.GetScores2();
-                ////ctx.RespondAsync(embed: new DiscordEmbed()
-                ////{
-                ////    Title =
+                IEnumerable<KeyValuePair<DiscordUser, int>> scores = state.GetScores();
 
-                ////});
                 DiscordEmbedBuilder builder = new DiscordEmbedBuilder();
-                builder.Title = scores.Count > GameState.ScoresListLimit ? $"Top {GameState.ScoresListLimit} Scores" : "Scores";
-                builder.WithColor(DiscordColor.PhthaloGreen);
-                foreach (KeyValuePair<DiscordUser, int> kvp in scores)
+                builder.Title = scores.Count() > GameState.ScoresListLimit ?
+                    $"Top {GameState.ScoresListLimit} Scores" :
+                    "Scores";
+                builder.WithColor(DiscordColor.Gold);
+                foreach (KeyValuePair<DiscordUser, int> score in scores)
                 {
-                    builder.AddField(kvp.Key.Username, $"{kvp.Key.Username}: {kvp.Value}");
+                    DiscordMember member = await context.Guild.GetMemberAsync(score.Key.Id);
+                    string name = member.Nickname ?? member.DisplayName;
+                    builder.AddField(member.DisplayName, score.Value.ToString());
                 }
 
-                await ctx.RespondAsync(embed: builder.Build());
+                DiscordEmbed embed = builder.Build();
+                await context.Message.RespondAsync(embed: embed);
             }
         }
 
         [Command("clear")]
         [Description("Clears the player queue. Use this if no one answered correctly.")]
-        public Task Clear(CommandContext ctx)
+        public Task Clear(CommandContext context)
         {
-            GameState state = ctx.Dependencies.GetDependency<GameState>();
-            if (CanPerformReaderActions(state, ctx))
+            GameState state = context.Dependencies.GetDependency<GameState>();
+            if (CanPerformReaderActions(state, context))
             {
                 state.ClearCurrentRound();
             }
@@ -83,10 +102,10 @@ namespace QuizBowlDiscordScoreTracker
 
         [Command("next")]
         [Description("Moves to the next player in the queue. This is the same as scoring 0.")]
-        public Task Next(CommandContext ctx)
+        public Task Next(CommandContext context)
         {
-            GameState state = ctx.Dependencies.GetDependency<GameState>();
-            if (CanPerformReaderActions(state, ctx))
+            GameState state = context.Dependencies.GetDependency<GameState>();
+            if (CanPerformReaderActions(state, context))
             {
                 state.ScorePlayer(0);
             }
@@ -94,24 +113,24 @@ namespace QuizBowlDiscordScoreTracker
             return Task.CompletedTask;
         }
 
-        private static async Task ClearAll(CommandContext ctx)
+        private static async Task ClearAll(CommandContext context)
         {
-            GameState state = ctx.Dependencies.GetDependency<GameState>();
+            GameState state = context.Dependencies.GetDependency<GameState>();
 
             // TODO: Determine if we want to allow admins/those who can kick to set the reader, to take it away from
             // someone who shouldn't read.
             // The code to calculate this is:
-            if (CanPerformReaderActions(state, ctx))
+            if (CanPerformReaderActions(state, context))
             {
                 state.ClearAll();
-                await ctx.RespondAsync($"Reading over. All stats cleared.");
+                await context.RespondAsync($"Reading over. All stats cleared.");
             }
         }
 
-        private static bool CanPerformReaderActions(GameState state, CommandContext ctx)
+        private static bool CanPerformReaderActions(GameState state, CommandContext context)
         {
-            return state.Reader == ctx.User ||
-                ctx.Channel.PermissionsFor(ctx.Member) == Permissions.Administrator;
+            return state.Reader == context.User ||
+                context.Channel.PermissionsFor(context.Member) == Permissions.Administrator;
         }
     }
 }
