@@ -1,8 +1,7 @@
-﻿using System;
+﻿using DSharpPlus.Entities;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using DSharpPlus.Entities;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -17,10 +16,14 @@ namespace QuizBowlDiscordScoreTracker
         private readonly HashSet<DiscordUser> alreadyBuzzedPlayers;
         private readonly Dictionary<DiscordUser, int> score;
 
+        private DiscordUser reader;
+        private DiscordChannel channel;
         // TODO: We may want to add a set of people who have retrieved the score to prevent spamming. May be better
         // at the controller/bot level.
 
         private object collectionLock = new object();
+        private object readerLock = new object();
+        private object channelLock = new object();
 
         public GameState()
         {
@@ -28,10 +31,45 @@ namespace QuizBowlDiscordScoreTracker
             this.alreadyBuzzedPlayers = new HashSet<DiscordUser>();
             this.score = new Dictionary<DiscordUser, int>();
             this.Reader = null;
+            this.Channel = null;
         }
 
         // We may want a lock for this, but conflicts here are much less likely
-        public DiscordUser Reader { get; set; }
+        public DiscordUser Reader
+        {
+            get
+            {
+                lock (this.readerLock)
+                {
+                    return this.reader;
+                }
+            }
+            set
+            {
+                lock (this.readerLock)
+                {
+                    this.reader = value;
+                }
+            }
+        }
+
+        public DiscordChannel Channel
+        {
+            get
+            {
+                lock (this.channelLock)
+                {
+                    return this.channel;
+                }
+            }
+            set
+            {
+                lock (this.channelLock)
+                {
+                    this.channel = value;
+                }
+            }
+        }
 
         public void ClearAll()
         {
@@ -43,6 +81,7 @@ namespace QuizBowlDiscordScoreTracker
             }
             
             this.Reader = null;
+            this.Channel = null;
         }
 
         public void ClearCurrentRound()

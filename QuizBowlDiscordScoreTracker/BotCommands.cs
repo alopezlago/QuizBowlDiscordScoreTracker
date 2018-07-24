@@ -16,15 +16,10 @@ namespace QuizBowlDiscordScoreTracker
         public async Task SetReader(CommandContext context)
         {
             GameState state = context.Dependencies.GetDependency<GameState>();
-
-            // TODO: Determine if we want to allow admins/those who can kick to set the reader, to take it away from
-            // someone who shouldn't read.
-            // The code to calculate this is:
-            // context.Channel.PermissionsFor(context.Member) == Permissions.Administrator | Permissions.KickMembers | Permissions.BanMembers;
-
             if (state.Reader == null)
             {
                 state.Reader = context.User;
+                state.Channel = context.Channel;
                 await context.RespondAsync($"{context.User.Mention} is the reader.");
             }
         }
@@ -117,10 +112,6 @@ namespace QuizBowlDiscordScoreTracker
         private static async Task ClearAll(CommandContext context)
         {
             GameState state = context.Dependencies.GetDependency<GameState>();
-
-            // TODO: Determine if we want to allow admins/those who can kick to set the reader, to take it away from
-            // someone who shouldn't read.
-            // The code to calculate this is:
             if (CanPerformReaderActions(state, context))
             {
                 state.ClearAll();
