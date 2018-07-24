@@ -12,13 +12,19 @@ namespace QuizBowlDiscordScoreTracker
     {
         private static readonly Regex BuzzRegex = new Regex("^bu?z+$", RegexOptions.IgnoreCase);
 
+        // TODO: Rewrite this so that we have a dictionary of game states mapped to the channel the bot is reading in.
         private readonly GameState state;
+        private readonly ConfigOptions options;
         private readonly DiscordClient discordClient;
         private readonly CommandsNextModule commandsModule;
+
+        private bool? readerRejoined;
+        private object readerRejoinedLock = new object();
 
         public Bot(ConfigOptions options)
         {
             this.state = new GameState();
+            this.options = options;
 
             this.discordClient = new DiscordClient(new DiscordConfiguration()
             {
@@ -41,10 +47,12 @@ namespace QuizBowlDiscordScoreTracker
 
             this.commandsModule.RegisterCommands<BotCommands>();
 
-            this.discordClient.MessageCreated += this.MessageReceived;
+            this.readerRejoined = null;
+
+            this.discordClient.MessageCreated += this.OnMessageCreated;
 
             // TODO: We should make sure that, if the reader disconnects, we can reset the game or pick a new reader.
-            // TODO: Add a username (email) field for "administrators", who can reset the reader,
+            this.discordClient.PresenceUpdated += this.OnPresenceUpdated;
         }
 
         public Task ConnectAsync()
@@ -56,12 +64,13 @@ namespace QuizBowlDiscordScoreTracker
         {
             if (this.discordClient != null)
             {
-                this.discordClient.MessageCreated -= this.MessageReceived;
+                this.discordClient.MessageCreated -= this.OnMessageCreated;
+                this.discordClient.PresenceUpdated -= this.OnPresenceUpdated;
                 this.discordClient.Dispose();
             }
         }
 
-        private async Task MessageReceived(MessageCreateEventArgs args)
+        private async Task OnMessageCreated(MessageCreateEventArgs args)
         {
             if (args.Author == this.discordClient.CurrentUser)
             {
@@ -100,7 +109,7 @@ namespace QuizBowlDiscordScoreTracker
 
                 return;
             }
-            
+
             if (BuzzRegex.IsMatch(message))
             {
                 if (this.state.AddPlayer(args.Message.Author) &&
@@ -110,6 +119,56 @@ namespace QuizBowlDiscordScoreTracker
                     await this.PromptNextPlayer(args.Message);
                 }
             }
+        }
+
+        private Task OnPresenceUpdated(PresenceUpdateEventArgs args)
+        {
+            if (this.state.Reader == args.Member.Presence?.User)
+            {
+                lock (this.readerRejoinedLock)
+                {
+                    if (this.readerRejoined == null && args.Member.Presence.Status == UserStatus.Offline)
+                    {
+                        this.readerRejoined = false;
+                    }
+                    else if (this.readerRejoined == false && args.Member.Presence.Status != UserStatus.Offline)
+                    {
+                        this.readerRejoined = true;
+                        return Task.CompletedTask;
+                    }
+                    else
+                    {
+                        return Task.CompletedTask;
+                    }
+                }
+
+                // The if-statement is structured so that we can call Task.Delay later without holding onto the lock
+                // We should only be here if the first condition was true
+                Task t = new Task(async () =>
+                {
+                    await Task.Delay(this.options.WaitForRejoinMs);
+                    bool reset = false;
+                    lock (this.readerRejoinedLock)
+                    {
+                        reset = this.readerRejoined == false;
+                        this.readerRejoined = null;
+                    }
+
+                    if (reset)
+                    {
+                        await this.state.Channel?.SendMessageAsync(
+                            $"Reader {args.Member.Mention} has left. Ending the game.");
+                        this.state.ClearAll();
+                    }
+                });
+
+                t.Start();
+                // This is a lie, but await seems to block the event handlers from receiving other events, so say that
+                // we have completed.
+                return Task.CompletedTask;
+            }
+
+            return Task.CompletedTask;
         }
 
         private async Task PromptNextPlayer(DiscordMessage message)
