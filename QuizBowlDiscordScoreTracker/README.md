@@ -1,13 +1,19 @@
-﻿See this for getting the DSharp code: https://dsharpplus.emzi0767.com/articles/first_bot.html
+﻿### Quiz Bowl Discord Score Tracker
+This is a Discord bot which keeps track of who buzzed in, as well as each player's score.
 
-Useful page for adding bots to servers: https://github.com/jagrosh/MusicBot/wiki/Adding-Your-Bot-To-Your-Server
-Specifically, access this:
-https://discordapp.com/oauth2/authorize?client_id=CLIENTID&scope=bot
+#### Requirements:
+- [.Net Core 2.1 SDK](https://www.microsoft.com/net/download/dotnet-core/2.1#sdk-2.1.300)
+  - If using Visual Studio, you need Visual Studio 2017.5
+  - I still need to test it on Community edition
+- DSharpPlus and DSharpPlus.CommandNext Nuget packages
+  - These may be automatically downloaded. If not, you can get them by Managing your Nuget references in the solution.
+- Until the main bot application is public and/or multi-channel support is added, you need to add your own user. [Here is a guide for that](https://dsharpplus.emzi0767.com/articles/getting_started.html).
+  - You will need to visit a link like this to register your bot user: https://discordapp.com/oauth2/authorize?client_id=CLIENTID&scope=bot
 
-Should be similar to previous score bot. Appears there is a command API, so should use that.
-
-Needs:
-- Support Mono. Likely requires using this: https://dsharpplus.emzi0767.com/articles/alt_ws.html
-- Support withdrawls (!wd?)
+#### Needs:
+- Support Mono. Likely requires using [this](https://dsharpplus.emzi0767.com/articles/alt_ws.html), or the library needs to support .Net Core 2.1.
 - Add unit tests. This will require making interface wrappers for DiscordUser/DiscordChannel to let us test the game state.
   - Another alternative is to use dependency injection to let us test Bot as well.
+- Support multiple channels, which will require a collection of GameStates (perhaps a dictionary of channels to states).
+
+This bot was built with [DSharpPlus](https://dsharpplus.emzi0767.com/articles/first_bot.html)
