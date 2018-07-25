@@ -6,7 +6,7 @@ using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
-    // TODO: Once we add tests add an interface for this.
+    // TODO: Add interfaces for DiscordUser/DiscordChannel so we can add unit tests.
     public class GameState
     {
         public const int ScoresListLimit = 10;
@@ -33,7 +33,6 @@ namespace QuizBowlDiscordScoreTracker
             this.Channel = null;
         }
 
-        // We may want a lock for this, but conflicts here are much less likely
         public DiscordUser Reader
         {
             get
@@ -102,7 +101,7 @@ namespace QuizBowlDiscordScoreTracker
 
             Buzz player = new Buzz()
             {
-                // TODO: Should this come from the message?
+                // TODO: Consider taking this from the message. This would require passing in another parameter.
                 Timestamp = DateTime.Now,
                 User = user
             };
@@ -161,12 +160,12 @@ namespace QuizBowlDiscordScoreTracker
                 if (buzz == null)
                 {
                     // This is a bug we should log when logging is added.
+                    Debug.Fail($"{nameof(this.ScorePlayer)} should not be called when there are no players in the queue.");
                     return;
                 }
 
                 if (score > 0)
                 {
-                    // Correct
                     this.buzzQueue.Clear();
                     this.alreadyBuzzedPlayers.Clear();
                 }
@@ -182,7 +181,6 @@ namespace QuizBowlDiscordScoreTracker
                     currentScore = 0;
                 }
 
-                // We may have to make this a thread-safe dictionary.
                 this.score[buzz.User] = currentScore + score;
             }
         }

@@ -45,6 +45,7 @@ namespace QuizBowlDiscordScoreTracker
                 return new ConfigOptions()
                 {
                     AdminIds = new string[0],
+                    WaitForRejoinMs = 10000,
                     BotToken = botToken
                 };
             }
