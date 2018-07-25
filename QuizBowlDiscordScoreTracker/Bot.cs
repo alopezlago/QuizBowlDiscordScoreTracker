@@ -50,8 +50,6 @@ namespace QuizBowlDiscordScoreTracker
             this.readerRejoined = null;
 
             this.discordClient.MessageCreated += this.OnMessageCreated;
-
-            // TODO: We should make sure that, if the reader disconnects, we can reset the game or pick a new reader.
             this.discordClient.PresenceUpdated += this.OnPresenceUpdated;
         }
 
@@ -77,9 +75,6 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            // Accepted non-commands:
-            // From the reader: -5, 0, 10, 15, no penalty
-            // From others: buzzes only
             string message = args.Message.Content.Trim();
             if (message.StartsWith('!'))
             {
