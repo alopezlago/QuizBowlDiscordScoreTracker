@@ -1,12 +1,11 @@
 ﻿using DSharpPlus.Entities;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
-    // TODO: Come up with the state machine. Some methods are here now, but the flow isn't solid yet.
-
     // TODO: Once we add tests add an interface for this.
     public class GameState
     {
@@ -116,9 +115,33 @@ namespace QuizBowlDiscordScoreTracker
                 }
 
                 this.buzzQueue.Add(player);
+                this.alreadyBuzzedPlayers.Add(user);
             }
             
             return true;
+        }
+
+        public bool WithdrawPlayer(DiscordUser user)
+        {
+            // readers cannot withdraw themselves
+            if (user == this.Reader)
+            {
+                return false;
+            }
+
+            int count = 0;
+            lock (collectionLock)
+            {
+                if (alreadyBuzzedPlayers.Remove(user))
+                {
+                    // Unless we change Buzz's Equals to only take the User into account then we have to go through the
+                    // whole set to withdraw.
+                    count = this.buzzQueue.RemoveWhere(buzz => buzz.User == user);
+                    Debug.Assert(count <= 1, "The same user should not be in the queue more than once.");
+                }
+            }
+
+            return count > 0;
         }
 
         public IEnumerable<KeyValuePair<DiscordUser, int>> GetScores()
@@ -150,7 +173,6 @@ namespace QuizBowlDiscordScoreTracker
                 else
                 {
                     this.buzzQueue.Remove(buzz);
-                    this.alreadyBuzzedPlayers.Add(buzz.User);
                 }
 
                 // TODO: We may want to limit what score can be, to protect against typos.

@@ -6,13 +6,8 @@ https://discordapp.com/oauth2/authorize?client_id=CLIENTID&scope=bot
 
 Should be similar to previous score bot. Appears there is a command API, so should use that.
 
-- Should use a SortedSet to keep track of people. Can keep track of them in a class/tuple. Sort by earliest date.
-- When it's someone turn the bot should post a mention.
-- When the reader says -5, go to the next player
-- When the reader says 10/15, clear the list
-- When a player says wd, take them away from the SortedSet.
-- Keep a separate set of players who have already buzzed.
-
-- Need a command to set the reader; only reader and mods can unset it.
-
-- Regex to match: ^bu?z+$ (after we trim)
+Needs:
+- Support Mono. Likely requires using this: https://dsharpplus.emzi0767.com/articles/alt_ws.html
+- Support withdrawls (!wd?)
+- Add unit tests. This will require making interface wrappers for DiscordUser/DiscordChannel to let us test the game state.
+  - Another alternative is to use dependency injection to let us test Bot as well.

@@ -110,11 +110,11 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            if (BuzzRegex.IsMatch(message))
+            bool hasPlayerBuzzedIn = BuzzRegex.IsMatch(message) && this.state.AddPlayer(args.Message.Author);
+            if (hasPlayerBuzzedIn ||
+                (message.Equals("wd", StringComparison.CurrentCultureIgnoreCase) && this.state.WithdrawPlayer(args.Message.Author)))
             {
-                if (this.state.AddPlayer(args.Message.Author) &&
-                    this.state.TryGetNextPlayer(out DiscordUser nextPlayer) &&
-                    nextPlayer == args.Message.Author)
+                if (this.state.TryGetNextPlayer(out DiscordUser nextPlayer) && nextPlayer == args.Message.Author)
                 {
                     await this.PromptNextPlayer(args.Message);
                 }
