@@ -18,7 +18,6 @@ namespace QuizBowlDiscordScoreTracker
         // TODO: We may need a lock for this, and this lock would need to be accessible form BotCommands. We could wrap
         // this in an object which would do the locking for us.
         private readonly Dictionary<DiscordChannel, GameState> games;
-        private readonly GameState state;
         private readonly ConfigOptions options;
         private readonly DiscordClient discordClient;
         private readonly CommandsNextModule commandsModule;
@@ -28,7 +27,6 @@ namespace QuizBowlDiscordScoreTracker
 
         public Bot(ConfigOptions options)
         {
-            this.state = new GameState();
             this.games = new Dictionary<DiscordChannel, GameState>();
             this.options = options;
 
@@ -41,7 +39,6 @@ namespace QuizBowlDiscordScoreTracker
             });
 
             DependencyCollectionBuilder dependencyCollectionBuilder = new DependencyCollectionBuilder();
-            dependencyCollectionBuilder.AddInstance(this.state);
             dependencyCollectionBuilder.AddInstance(this.games);
             dependencyCollectionBuilder.AddInstance(options);
             this.commandsModule = this.discordClient.UseCommandsNext(new CommandsNextConfiguration()
@@ -107,7 +104,7 @@ namespace QuizBowlDiscordScoreTracker
                         await PromptNextPlayer(state, args.Message);
                         break;
                     case "no penalty":
-                        this.state.ScorePlayer(0);
+                        state.ScorePlayer(0);
                         await PromptNextPlayer(state, args.Message);
                         break;
                     default:
