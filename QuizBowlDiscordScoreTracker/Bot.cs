@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using DSharpPlus;
@@ -13,17 +15,21 @@ namespace QuizBowlDiscordScoreTracker
         private static readonly Regex BuzzRegex = new Regex("^bu?z+$", RegexOptions.IgnoreCase);
 
         // TODO: Rewrite this so that we have a dictionary of game states mapped to the channel the bot is reading in.
+        // TODO: We may need a lock for this, and this lock would need to be accessible form BotCommands. We could wrap
+        // this in an object which would do the locking for us.
+        private readonly Dictionary<DiscordChannel, GameState> games;
         private readonly GameState state;
         private readonly ConfigOptions options;
         private readonly DiscordClient discordClient;
         private readonly CommandsNextModule commandsModule;
 
-        private bool? readerRejoined;
-        private object readerRejoinedLock = new object();
+        private Dictionary<DiscordUser, bool> readerRejoinedMap;
+        private object readerRejoinedMapLock = new object();
 
         public Bot(ConfigOptions options)
         {
             this.state = new GameState();
+            this.games = new Dictionary<DiscordChannel, GameState>();
             this.options = options;
 
             this.discordClient = new DiscordClient(new DiscordConfiguration()
@@ -36,6 +42,7 @@ namespace QuizBowlDiscordScoreTracker
 
             DependencyCollectionBuilder dependencyCollectionBuilder = new DependencyCollectionBuilder();
             dependencyCollectionBuilder.AddInstance(this.state);
+            dependencyCollectionBuilder.AddInstance(this.games);
             dependencyCollectionBuilder.AddInstance(options);
             this.commandsModule = this.discordClient.UseCommandsNext(new CommandsNextConfiguration()
             {
@@ -47,7 +54,7 @@ namespace QuizBowlDiscordScoreTracker
 
             this.commandsModule.RegisterCommands<BotCommands>();
 
-            this.readerRejoined = null;
+            this.readerRejoinedMap = new Dictionary<DiscordUser, bool>();
 
             this.discordClient.MessageCreated += this.OnMessageCreated;
             this.discordClient.PresenceUpdated += this.OnPresenceUpdated;
@@ -82,7 +89,12 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            if (this.state.Reader == args.Author)
+            if (!this.games.TryGetValue(args.Channel, out GameState state))
+            {
+                return;
+            }
+
+            if (state.Reader == args.Author)
             {
                 switch (args.Message.Content)
                 {
@@ -91,12 +103,12 @@ namespace QuizBowlDiscordScoreTracker
                     case "10":
                     case "15":
                     case "20":
-                        this.state.ScorePlayer(int.Parse(message));
-                        await this.PromptNextPlayer(args.Message);
+                        state.ScorePlayer(int.Parse(message));
+                        await PromptNextPlayer(state, args.Message);
                         break;
                     case "no penalty":
                         this.state.ScorePlayer(0);
-                        await PromptNextPlayer(args.Message);
+                        await PromptNextPlayer(state, args.Message);
                         break;
                     default:
                         break;
@@ -105,30 +117,42 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            bool hasPlayerBuzzedIn = BuzzRegex.IsMatch(message) && this.state.AddPlayer(args.Message.Author);
+            bool hasPlayerBuzzedIn = BuzzRegex.IsMatch(message) && state.AddPlayer(args.Message.Author);
             if (hasPlayerBuzzedIn ||
-                (message.Equals("wd", StringComparison.CurrentCultureIgnoreCase) && this.state.WithdrawPlayer(args.Message.Author)))
+                (message.Equals("wd", StringComparison.CurrentCultureIgnoreCase) && state.WithdrawPlayer(args.Message.Author)))
             {
-                if (this.state.TryGetNextPlayer(out DiscordUser nextPlayer) && nextPlayer == args.Message.Author)
+                if (state.TryGetNextPlayer(out DiscordUser nextPlayer) && nextPlayer == args.Message.Author)
                 {
-                    await this.PromptNextPlayer(args.Message);
+                    await PromptNextPlayer(state, args.Message);
                 }
             }
         }
 
         private Task OnPresenceUpdated(PresenceUpdateEventArgs args)
         {
-            if (this.state.Reader == args.Member.Presence?.User)
+            DiscordUser user = args.Member.Presence?.User;
+            if (user == null)
             {
-                lock (this.readerRejoinedLock)
+                // Can't do anything, we don't know what game they were reading.
+                return Task.CompletedTask;
+            }
+
+            KeyValuePair<DiscordChannel, GameState>[] readingGames = this.games
+                .Where(kvp => kvp.Value.Reader == user)
+                .ToArray();
+
+            if (readingGames.Length > 0)
+            {
+                lock (this.readerRejoinedMapLock)
                 {
-                    if (this.readerRejoined == null && args.Member.Presence.Status == UserStatus.Offline)
+                    if (!this.readerRejoinedMap.TryGetValue(user, out bool hasRejoined) &&
+                        args.Member.Presence.Status == UserStatus.Offline)
                     {
-                        this.readerRejoined = false;
+                        this.readerRejoinedMap[user] = false;
                     }
-                    else if (this.readerRejoined == false && args.Member.Presence.Status != UserStatus.Offline)
+                    else if (hasRejoined == false && args.Member.Presence.Status != UserStatus.Offline)
                     {
-                        this.readerRejoined = true;
+                        this.readerRejoinedMap[user] = true;
                         return Task.CompletedTask;
                     }
                     else
@@ -142,18 +166,25 @@ namespace QuizBowlDiscordScoreTracker
                 Task t = new Task(async () =>
                 {
                     await Task.Delay(this.options.WaitForRejoinMs);
-                    bool reset = false;
-                    lock (this.readerRejoinedLock)
+                    bool rejoined = false;
+                    lock (this.readerRejoinedMapLock)
                     {
-                        reset = this.readerRejoined == false;
-                        this.readerRejoined = null;
+                        this.readerRejoinedMap.TryGetValue(user, out rejoined);
+                        this.readerRejoinedMap.Remove(user);
                     }
 
-                    if (reset)
+                    if (!rejoined)
                     {
-                        await this.state.Channel?.SendMessageAsync(
-                            $"Reader {args.Member.Mention} has left. Ending the game.");
-                        this.state.ClearAll();
+                        Task<DiscordMessage>[] sendResetTasks = new Task<DiscordMessage>[readingGames.Length];
+                        for (int i = 0; i < readingGames.Length; i++)
+                        {
+                            KeyValuePair<DiscordChannel, GameState> pair = readingGames[i];
+                            pair.Value.ClearAll();
+                            sendResetTasks[i] = pair.Key.SendMessageAsync(
+                                $"Reader {args.Member.Mention} has left. Ending the game.");
+                        }
+
+                        await Task.WhenAll(sendResetTasks);
                     }
                 });
 
@@ -166,9 +197,9 @@ namespace QuizBowlDiscordScoreTracker
             return Task.CompletedTask;
         }
 
-        private async Task PromptNextPlayer(DiscordMessage message)
+        private static async Task PromptNextPlayer(GameState state, DiscordMessage message)
         {
-            if (this.state.TryGetNextPlayer(out DiscordUser user))
+            if (state.TryGetNextPlayer(out DiscordUser user))
             {
                 await message.RespondAsync(user.Mention);
             }

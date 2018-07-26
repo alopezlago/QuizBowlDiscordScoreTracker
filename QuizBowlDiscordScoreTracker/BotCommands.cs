@@ -15,11 +15,14 @@ namespace QuizBowlDiscordScoreTracker
         [Description("Set yourself as the reader.")]
         public async Task SetReader(CommandContext context)
         {
-            GameState state = context.Dependencies.GetDependency<GameState>();
-            if (state.Reader == null)
+            Dictionary<DiscordChannel, GameState> games =
+                context.Dependencies.GetDependency<Dictionary<DiscordChannel, GameState>>();
+            if (!games.TryGetValue(context.Channel, out GameState state) || state.Reader == null)
             {
+                state = new GameState();
                 state.Reader = context.User;
-                state.Channel = context.Channel;
+                games[context.Channel] = state;
+                
                 await context.RespondAsync($"{context.User.Mention} is the reader.");
             }
         }
@@ -28,7 +31,7 @@ namespace QuizBowlDiscordScoreTracker
         [Description("Set another user as the reader.")]
         public async Task SetNewReader(CommandContext context, DiscordMember newReader)
         {
-            GameState state = context.Dependencies.GetDependency<GameState>();
+            GameState state = GetGameState(context);
             if (CanPerformReaderActions(state, context))
             {
                 if (newReader?.Presence?.User != null)
@@ -61,7 +64,7 @@ namespace QuizBowlDiscordScoreTracker
         [Description("Get the top scores in the current game.")]
         public async Task GetScore(CommandContext context)
         {
-            GameState state = context.Dependencies.GetDependency<GameState>();
+            GameState state = GetGameState(context);
             if (state.Reader != null)
             {
                 IEnumerable<KeyValuePair<DiscordUser, int>> scores = state.GetScores();
@@ -87,7 +90,7 @@ namespace QuizBowlDiscordScoreTracker
         [Description("Clears the player queue. Use this if no one answered correctly.")]
         public Task Clear(CommandContext context)
         {
-            GameState state = context.Dependencies.GetDependency<GameState>();
+            GameState state = GetGameState(context);
             if (CanPerformReaderActions(state, context))
             {
                 state.ClearCurrentRound();
@@ -100,7 +103,7 @@ namespace QuizBowlDiscordScoreTracker
         [Description("Moves to the next player in the queue. This is the same as scoring 0.")]
         public Task Next(CommandContext context)
         {
-            GameState state = context.Dependencies.GetDependency<GameState>();
+            GameState state = GetGameState(context);
             if (CanPerformReaderActions(state, context))
             {
                 state.ScorePlayer(0);
@@ -111,10 +114,12 @@ namespace QuizBowlDiscordScoreTracker
 
         private static async Task ClearAll(CommandContext context)
         {
-            GameState state = context.Dependencies.GetDependency<GameState>();
-            if (CanPerformReaderActions(state, context))
+            Dictionary<DiscordChannel, GameState> games =
+                context.Dependencies.GetDependency<Dictionary<DiscordChannel, GameState>>();
+            if (games.TryGetValue(context.Channel, out GameState state) && CanPerformReaderActions(state, context))
             {
                 state.ClearAll();
+                games.Remove(context.Channel);
                 await context.RespondAsync($"Reading over. All stats cleared.");
             }
         }
@@ -131,6 +136,13 @@ namespace QuizBowlDiscordScoreTracker
             ConfigOptions options = context.Dependencies.GetDependency<ConfigOptions>();
             return options.AdminIds != null &&
                 options.AdminIds.Contains(context.User.Id.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static GameState GetGameState(CommandContext context)
+        {
+            Dictionary<DiscordChannel, GameState> games = context.Dependencies.GetDependency<Dictionary<DiscordChannel, GameState>>();
+            games.TryGetValue(context.Channel, out GameState state);
+            return state;
         }
     }
 }
