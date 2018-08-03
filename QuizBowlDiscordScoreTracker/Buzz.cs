@@ -1,11 +1,10 @@
 ﻿using System;
-using DSharpPlus.Entities;
 
 namespace QuizBowlDiscordScoreTracker
 {
     public class Buzz : IComparable<Buzz>
     {
-        public DiscordUser User { get; set; }
+        public ulong UserId { get; set; }
 
         public DateTime Timestamp { get; set; }
 
@@ -21,14 +20,14 @@ namespace QuizBowlDiscordScoreTracker
 
         public override int GetHashCode()
         {
-            return this.User.GetHashCode() ^ this.Timestamp.GetHashCode();
+            return this.UserId.GetHashCode() ^ this.Timestamp.GetHashCode();
         }
 
         public override bool Equals(object obj)
         {
             if (obj is Buzz entry)
             {
-                return this.User.Equals(entry.User) && this.Timestamp.Equals(entry.Timestamp);
+                return this.UserId == entry.UserId && this.Timestamp.Equals(entry.Timestamp);
             }
 
             return false;

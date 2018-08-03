@@ -1,8 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Threading.Tasks;
-using DSharpPlus;
+﻿using System.Threading.Tasks;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
@@ -11,138 +7,53 @@ namespace QuizBowlDiscordScoreTracker
 {
     public class BotCommands
     {
+        private readonly BotCommandHandler handler;
+
+        public BotCommands()
+        {
+            this.handler = new BotCommandHandler();
+        }
+
         [Command("read")]
         [Description("Set yourself as the reader.")]
-        public async Task SetReader(CommandContext context)
+        public Task SetReader(CommandContext context)
         {
-            Dictionary<DiscordChannel, GameState> games =
-                context.Dependencies.GetDependency<Dictionary<DiscordChannel, GameState>>();
-            if (!games.TryGetValue(context.Channel, out GameState state) || state.Reader == null)
-            {
-                state = new GameState();
-                state.Reader = context.User;
-                games[context.Channel] = state;
-                
-                await context.RespondAsync($"{context.User.Mention} is the reader.");
-            }
+            return this.handler.SetReader(new DiscordCommandContextWrapper(context));
         }
 
         [Command("setnewreader")]
         [Description("Set another user as the reader.")]
-        public async Task SetNewReader(CommandContext context, DiscordMember newReader)
+        public Task SetNewReader(CommandContext context, DiscordMember newReader)
         {
-            GameState state = GetGameState(context);
-            if (CanPerformReaderActions(state, context))
-            {
-                if (newReader?.Presence?.User != null)
-                {
-                    state.Reader = newReader.Presence.User;
-                    await context.RespondAsync($"{state.Reader.Mention} is now the reader.");
-                }
-                else
-                {
-                    await context.RespondAsync($"User could not be found. Could not set the new reader.");
-                }
-            }
+            return this.handler.SetNewReader(new DiscordCommandContextWrapper(context), newReader.Id);
         }
 
         [Command("stop")]
         [Description("Ends the game, clearing the stats and allowing others to read.")]
-        public async Task Stop(CommandContext context)
+        public Task Stop(CommandContext context)
         {
-            await ClearAll(context);
+            return this.handler.ClearAll(new DiscordCommandContextWrapper(context));
         }
 
         [Command("end")]
         [Description("Ends the game, clearing the stats and allowing others to read.")]
-        public async Task End(CommandContext context)
+        public Task End(CommandContext context)
         {
-            await ClearAll(context);
+            return this.handler.ClearAll(new DiscordCommandContextWrapper(context));
         }
 
         [Command("score")]
         [Description("Get the top scores in the current game.")]
-        public async Task GetScore(CommandContext context)
+        public Task GetScore(CommandContext context)
         {
-            GameState state = GetGameState(context);
-            if (state.Reader != null)
-            {
-                IEnumerable<KeyValuePair<DiscordUser, int>> scores = state.GetScores();
-
-                DiscordEmbedBuilder builder = new DiscordEmbedBuilder();
-                builder.Title = scores.Count() > GameState.ScoresListLimit ?
-                    $"Top {GameState.ScoresListLimit} Scores" :
-                    "Scores";
-                builder.WithColor(DiscordColor.Gold);
-                foreach (KeyValuePair<DiscordUser, int> score in scores)
-                {
-                    DiscordMember member = await context.Guild.GetMemberAsync(score.Key.Id);
-                    string name = member.Nickname ?? member.DisplayName;
-                    builder.AddField(member.DisplayName, score.Value.ToString());
-                }
-
-                DiscordEmbed embed = builder.Build();
-                await context.Message.RespondAsync(embed: embed);
-            }
+            return this.handler.GetScore(new DiscordCommandContextWrapper(context));
         }
 
         [Command("clear")]
         [Description("Clears the player queue. Use this if no one answered correctly.")]
         public Task Clear(CommandContext context)
         {
-            GameState state = GetGameState(context);
-            if (CanPerformReaderActions(state, context))
-            {
-                state.ClearCurrentRound();
-            }
-
-            return Task.CompletedTask;
-        }
-
-        [Command("next")]
-        [Description("Moves to the next player in the queue. This is the same as scoring 0.")]
-        public Task Next(CommandContext context)
-        {
-            GameState state = GetGameState(context);
-            if (CanPerformReaderActions(state, context))
-            {
-                state.ScorePlayer(0);
-            }
-
-            return Task.CompletedTask;
-        }
-
-        private static async Task ClearAll(CommandContext context)
-        {
-            Dictionary<DiscordChannel, GameState> games =
-                context.Dependencies.GetDependency<Dictionary<DiscordChannel, GameState>>();
-            if (games.TryGetValue(context.Channel, out GameState state) && CanPerformReaderActions(state, context))
-            {
-                state.ClearAll();
-                games.Remove(context.Channel);
-                await context.RespondAsync($"Reading over. All stats cleared.");
-            }
-        }
-
-        private static bool CanPerformReaderActions(GameState state, CommandContext context)
-        {
-            if (state.Reader == context.User ||
-                context.Channel.PermissionsFor(context.Member) == Permissions.Administrator)
-            {
-                return true;
-            }
-
-            // We can't rely on Email because the bot may not have acess to it
-            ConfigOptions options = context.Dependencies.GetDependency<ConfigOptions>();
-            return options.AdminIds != null &&
-                options.AdminIds.Contains(context.User.Id.ToString(CultureInfo.InvariantCulture));
-        }
-
-        private static GameState GetGameState(CommandContext context)
-        {
-            Dictionary<DiscordChannel, GameState> games = context.Dependencies.GetDependency<Dictionary<DiscordChannel, GameState>>();
-            games.TryGetValue(context.Channel, out GameState state);
-            return state;
+            return this.handler.Clear(new DiscordCommandContextWrapper(context));
         }
     }
 }

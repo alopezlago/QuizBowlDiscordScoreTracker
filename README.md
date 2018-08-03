@@ -12,7 +12,8 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 
 #### Needs:
 - Support Mono. Likely requires using [this](https://dsharpplus.emzi0767.com/articles/alt_ws.html), or the library needs to support .Net Core 2.1.
-- Add unit tests. This will require making interface wrappers for DiscordUser/DiscordChannel to let us test the game state.
-  - Another alternative is to use dependency injection to let us test Bot as well.
+- Add unit tests for the event handlers in Bot.cs. This will require further refactoring similar to what was done with BotCommand/BotCommandHandler.
+- Consider adding support for tournaments
+  - This requires lots more work, including persisting stats in case of a crash, and determining which rooms belong to the tournament, etc.
 
 This bot was built with [DSharpPlus](https://dsharpplus.emzi0767.com/articles/first_bot.html)
