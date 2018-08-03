@@ -1,21 +1,19 @@
-﻿using DSharpPlus.Entities;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
-    // TODO: Add interfaces for DiscordUser/DiscordChannel so we can add unit tests.
     public class GameState
     {
         public const int ScoresListLimit = 10;
 
         private readonly SortedSet<Buzz> buzzQueue;
-        private readonly HashSet<DiscordUser> alreadyBuzzedPlayers;
-        private readonly Dictionary<DiscordUser, int> score;
+        private readonly HashSet<ulong> alreadyBuzzedPlayers;
+        private readonly Dictionary<ulong, int> score;
 
-        private DiscordUser reader;
+        private ulong? readerId;
         // TODO: We may want to add a set of people who have retrieved the score to prevent spamming. May be better
         // at the controller/bot level.
 
@@ -25,25 +23,25 @@ namespace QuizBowlDiscordScoreTracker
         public GameState()
         {
             this.buzzQueue = new SortedSet<Buzz>();
-            this.alreadyBuzzedPlayers = new HashSet<DiscordUser>();
-            this.score = new Dictionary<DiscordUser, int>();
-            this.Reader = null;
+            this.alreadyBuzzedPlayers = new HashSet<ulong>();
+            this.score = new Dictionary<ulong, int>();
+            this.ReaderId = null;
         }
 
-        public DiscordUser Reader
+        public ulong? ReaderId
         {
             get
             {
                 lock (this.readerLock)
                 {
-                    return this.reader;
+                    return this.readerId;
                 }
             }
             set
             {
                 lock (this.readerLock)
                 {
-                    this.reader = value;
+                    this.readerId = value;
                 }
             }
         }
@@ -57,7 +55,7 @@ namespace QuizBowlDiscordScoreTracker
                 this.score.Clear();
             }
             
-            this.Reader = null;
+            this.ReaderId = null;
         }
 
         public void ClearCurrentRound()
@@ -69,10 +67,10 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public bool AddPlayer(DiscordUser user)
+        public bool AddPlayer(ulong userId)
         {
             // readers cannot add themselves
-            if (user == this.Reader)
+            if (userId == this.ReaderId)
             {
                 return false;
             }
@@ -81,27 +79,27 @@ namespace QuizBowlDiscordScoreTracker
             {
                 // TODO: Consider taking this from the message. This would require passing in another parameter.
                 Timestamp = DateTime.Now,
-                User = user
+                UserId = userId
             };
 
             lock (collectionLock)
             {
-                if (this.alreadyBuzzedPlayers.Contains(user))
+                if (this.alreadyBuzzedPlayers.Contains(userId))
                 {
                     return false;
                 }
 
                 this.buzzQueue.Add(player);
-                this.alreadyBuzzedPlayers.Add(user);
+                this.alreadyBuzzedPlayers.Add(userId);
             }
             
             return true;
         }
 
-        public bool WithdrawPlayer(DiscordUser user)
+        public bool WithdrawPlayer(ulong userId)
         {
             // readers cannot withdraw themselves
-            if (user == this.Reader)
+            if (userId == this.ReaderId)
             {
                 return false;
             }
@@ -109,11 +107,11 @@ namespace QuizBowlDiscordScoreTracker
             int count = 0;
             lock (collectionLock)
             {
-                if (alreadyBuzzedPlayers.Remove(user))
+                if (alreadyBuzzedPlayers.Remove(userId))
                 {
                     // Unless we change Buzz's Equals to only take the User into account then we have to go through the
                     // whole set to withdraw.
-                    count = this.buzzQueue.RemoveWhere(buzz => buzz.User == user);
+                    count = this.buzzQueue.RemoveWhere(buzz => buzz.UserId == userId);
                     Debug.Assert(count <= 1, "The same user should not be in the queue more than once.");
                 }
             }
@@ -121,7 +119,7 @@ namespace QuizBowlDiscordScoreTracker
             return count > 0;
         }
 
-        public IEnumerable<KeyValuePair<DiscordUser, int>> GetScores()
+        public IEnumerable<KeyValuePair<ulong, int>> GetScores()
         {
             lock (collectionLock)
             {
@@ -154,25 +152,31 @@ namespace QuizBowlDiscordScoreTracker
 
                 // TODO: We may want to limit what score can be, to protect against typos.
                 // This could be something passed in through a command, too. Like a set/array of allowed scores.
-                if (!this.score.TryGetValue(buzz.User, out int currentScore))
+                if (!this.score.TryGetValue(buzz.UserId, out int currentScore))
                 {
                     currentScore = 0;
                 }
 
-                this.score[buzz.User] = currentScore + score;
+                this.score[buzz.UserId] = currentScore + score;
             }
         }
 
-        public bool TryGetNextPlayer(out DiscordUser nextPlayer)
+        public bool TryGetNextPlayer(out ulong nextPlayerId)
         {
             Buzz next;
             lock (collectionLock)
             {
                 next = this.buzzQueue.Min;
             }
+
+            if (next == null)
+            {
+                nextPlayerId = 0;
+                return false;
+            }
             
-            nextPlayer = next?.User;
-            return nextPlayer != null;
+            nextPlayerId = next.UserId;
+            return true;
         }
     }
 }

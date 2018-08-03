@@ -91,7 +91,7 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            if (state.Reader == args.Author)
+            if (state.ReaderId == args.Author.Id)
             {
                 switch (args.Message.Content)
                 {
@@ -114,11 +114,11 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            bool hasPlayerBuzzedIn = BuzzRegex.IsMatch(message) && state.AddPlayer(args.Message.Author);
+            bool hasPlayerBuzzedIn = BuzzRegex.IsMatch(message) && state.AddPlayer(args.Message.Author.Id);
             if (hasPlayerBuzzedIn ||
-                (message.Equals("wd", StringComparison.CurrentCultureIgnoreCase) && state.WithdrawPlayer(args.Message.Author)))
+                (message.Equals("wd", StringComparison.CurrentCultureIgnoreCase) && state.WithdrawPlayer(args.Message.Author.Id)))
             {
-                if (state.TryGetNextPlayer(out DiscordUser nextPlayer) && nextPlayer == args.Message.Author)
+                if (state.TryGetNextPlayer(out ulong nextPlayerId) && nextPlayerId == args.Message.Author.Id)
                 {
                     await PromptNextPlayer(state, args.Message);
                 }
@@ -135,7 +135,7 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             KeyValuePair<DiscordChannel, GameState>[] readingGames = this.games
-                .Where(kvp => kvp.Value.Reader == user)
+                .Where(kvp => kvp.Value.ReaderId == user.Id)
                 .ToArray();
 
             if (readingGames.Length > 0)
@@ -196,8 +196,9 @@ namespace QuizBowlDiscordScoreTracker
 
         private static async Task PromptNextPlayer(GameState state, DiscordMessage message)
         {
-            if (state.TryGetNextPlayer(out DiscordUser user))
+            if (state.TryGetNextPlayer(out ulong userId))
             {
+                DiscordUser user = await message.Channel.Guild.GetMemberAsync(userId);
                 await message.RespondAsync(user.Mention);
             }
         }
