@@ -1,4 +1,6 @@
-﻿namespace QuizBowlDiscordScoreTracker
+﻿using System.Collections.Generic;
+
+namespace QuizBowlDiscordScoreTracker
 {
     public class ConfigOptions
     {
@@ -20,6 +22,18 @@
         /// the game.
         /// </summary>
         public int WaitForRejoinMs { get; set; }
+
+        /// <summary>
+        /// The channels which the bot will listen to. It maps server names (use IDs?) to channels supported on that
+        /// server.
+        /// </summary>
+        public IDictionary<string, string[]> SupportedChannels { get; set; }
+
+        /// <summary>
+        /// The emojis which represent buzzes. They should be of the form ":buzz:", which is the emoji text the user
+        /// types.
+        /// </summary>
+        public string[] BuzzEmojis { get; set; }
 
         public string BotToken { get; set; }
     }

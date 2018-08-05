@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using DSharpPlus;
@@ -21,6 +22,7 @@ namespace QuizBowlDiscordScoreTracker
         private readonly ConfigOptions options;
         private readonly DiscordClient discordClient;
         private readonly CommandsNextModule commandsModule;
+        private readonly Regex[] buzzEmojisRegex;
 
         private Dictionary<DiscordUser, bool> readerRejoinedMap;
         private object readerRejoinedMapLock = new object();
@@ -51,6 +53,8 @@ namespace QuizBowlDiscordScoreTracker
 
             this.commandsModule.RegisterCommands<BotCommands>();
 
+            this.buzzEmojisRegex = BuildBuzzEmojiRegexes(this.options);
+
             this.readerRejoinedMap = new Dictionary<DiscordUser, bool>();
 
             this.discordClient.MessageCreated += this.OnMessageCreated;
@@ -69,6 +73,38 @@ namespace QuizBowlDiscordScoreTracker
                 this.discordClient.MessageCreated -= this.OnMessageCreated;
                 this.discordClient.PresenceUpdated -= this.OnPresenceUpdated;
                 this.discordClient.Dispose();
+            }
+        }
+
+        private static Regex[] BuildBuzzEmojiRegexes(ConfigOptions options)
+        {
+            if (options.BuzzEmojis == null)
+            {
+                return new Regex[0];
+            }
+
+            Regex[] result = new Regex[options.BuzzEmojis.Length];
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < options.BuzzEmojis.Length; i++)
+            {
+                string buzzEmoji = options.BuzzEmojis[i];
+                builder.Append("^<");
+                builder.Append(buzzEmoji);
+                builder.Append("\\d+>$");
+                Regex regex = new Regex(builder.ToString());
+                result[i] = regex;
+                builder.Clear();
+            }
+
+            return result;
+        }
+
+        private static async Task PromptNextPlayer(GameState state, DiscordMessage message)
+        {
+            if (state.TryGetNextPlayer(out ulong userId))
+            {
+                DiscordUser user = await message.Channel.Guild.GetMemberAsync(userId);
+                await message.RespondAsync(user.Mention);
             }
         }
 
@@ -114,7 +150,7 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            bool hasPlayerBuzzedIn = BuzzRegex.IsMatch(message) && state.AddPlayer(args.Message.Author.Id);
+            bool hasPlayerBuzzedIn = this.IsBuzz(message) && state.AddPlayer(args.Message.Author.Id);
             if (hasPlayerBuzzedIn ||
                 (message.Equals("wd", StringComparison.CurrentCultureIgnoreCase) && state.WithdrawPlayer(args.Message.Author.Id)))
             {
@@ -194,13 +230,9 @@ namespace QuizBowlDiscordScoreTracker
             return Task.CompletedTask;
         }
 
-        private static async Task PromptNextPlayer(GameState state, DiscordMessage message)
+        private bool IsBuzz(string buzzText)
         {
-            if (state.TryGetNextPlayer(out ulong userId))
-            {
-                DiscordUser user = await message.Channel.Guild.GetMemberAsync(userId);
-                await message.RespondAsync(user.Mention);
-            }
+            return BuzzRegex.IsMatch(buzzText) || this.buzzEmojisRegex.Any(regex => regex.IsMatch(buzzText));
         }
     }
 }
