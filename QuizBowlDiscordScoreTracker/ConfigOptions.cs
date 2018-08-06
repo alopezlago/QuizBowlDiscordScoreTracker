@@ -24,8 +24,9 @@ namespace QuizBowlDiscordScoreTracker
         public int WaitForRejoinMs { get; set; }
 
         /// <summary>
-        /// The channels which the bot will listen to. It maps server names (use IDs?) to channels supported on that
-        /// server.
+        /// The channels which the bot will listen to. It maps guild/server names to channels supported on that server.
+        /// If this is null, then every channel is supported.
+        /// A version which uses guild/channel IDs instead may be supported later.
         /// </summary>
         public IDictionary<string, string[]> SupportedChannels { get; set; }
 

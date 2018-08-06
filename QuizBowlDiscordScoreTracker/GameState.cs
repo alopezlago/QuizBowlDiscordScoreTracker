@@ -13,6 +13,9 @@ namespace QuizBowlDiscordScoreTracker
         private readonly HashSet<ulong> alreadyBuzzedPlayers;
         private readonly Dictionary<ulong, int> score;
 
+        // TODO: To support undo we need to keep a stack of "score events", which says who scored when.
+        // We could store deltas, but storing copies of the structures may be easier for now.
+
         private ulong? readerId;
         // TODO: We may want to add a set of people who have retrieved the score to prevent spamming. May be better
         // at the controller/bot level.
