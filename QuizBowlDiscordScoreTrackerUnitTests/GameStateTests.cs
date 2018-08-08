@@ -298,6 +298,26 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.AreEqual(10, scorePair.Value, "The second player should have negged.");
         }
 
+        [TestMethod]
+        public void UndoOnNoScoreDoesNothing()
+        {
+            const ulong firstId = 1;
+
+            GameState gameState = new GameState();
+            Assert.IsTrue(gameState.AddPlayer(firstId), "Add should succeed.");
+            Assert.IsFalse(gameState.Undo(out ulong id), "Undo should return false.");
+            Assert.IsTrue(
+                gameState.TryGetNextPlayer(out ulong nextPlayerId),
+                "We should still have a player in the buzz queue.");
+            Assert.AreEqual(firstId, nextPlayerId, "Next player should be the first one.");
+        }
+
+        // TODO: Add tests for undo
+        // - Undo on one score (negative/zero) puts that user back to the front of the buzz queue, and undoes their score. Queues are restored.
+        // - Undo on one score (positive) puts that user back to the front of the buzz queue, and undoes their score. Queues are restored.
+        // - Undo has a limit, if we score over that, we can't get back the one past the limit.
+        // - Undo can carry between questions
+
         // TODO: Add tests for Bot. We'd want to create another class that implements the event handlers, but has different arguments
         // which don't require Discord-specific classes.
     }

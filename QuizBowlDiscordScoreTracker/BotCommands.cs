@@ -76,6 +76,16 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
+        [Command("undo")]
+        [Description("Undoes a scoring operation.")]
+        public async Task Undo(CommandContext context)
+        {
+            if (IsSupportedChannel(context))
+            {
+                await this.handler.Clear(new DiscordCommandContextWrapper(context));
+            }
+        }
+
         // We check this here instead of in the handler because we should only handle events in supported channels.
         private static bool IsSupportedChannel(CommandContext context)
         {
