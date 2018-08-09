@@ -88,5 +88,13 @@ namespace QuizBowlDiscordScoreTracker
                 await context.RespondAsync(embed: embed);
             }
         }
+
+        public async Task Undo(ICommandContextWrapper context)
+        {
+            if (context.CanPerformReaderActions && context.State.Undo(out ulong userId))
+            {
+                await context.RespondAsync($"Undid scoring for {context.GetUserNickname(userId)}");
+            }
+        }
     }
 }

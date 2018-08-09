@@ -209,6 +209,55 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task CanUndoWithReader()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            MockCommandContextWrapper newContext = await RunWithReader(async (handler, context) =>
+            {
+                context.State.AddPlayer(buzzer);
+                context.State.ScorePlayer(10);
+                await handler.Undo(context);
+            });
+
+            Assert.IsTrue(
+                newContext.State.TryGetNextPlayer(out ulong nextPlayerId),
+                "Queue should be restored, so we should have a player.");
+            Assert.AreEqual(buzzer, nextPlayerId, "Incorrect player in the queue.");
+        }
+
+        [TestMethod]
+        public async Task CanUndoWithAdmin()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            MockCommandContextWrapper newContext = await RunWithAdmin(async (handler, context) =>
+            {
+                context.State.AddPlayer(buzzer);
+                context.State.ScorePlayer(10);
+                await handler.Undo(context);
+            });
+
+            Assert.IsTrue(
+                newContext.State.TryGetNextPlayer(out ulong nextPlayerId),
+                "Queue should be restored, so we should have a player.");
+            Assert.AreEqual(buzzer, nextPlayerId, "Incorrect player in the queue.");
+        }
+
+        [TestMethod]
+        public async Task CannotUndoWithUnprivilegedUser()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            MockCommandContextWrapper newContext = await RunWithUnprivilegedUser(async (handler, context) =>
+            {
+                context.State.AddPlayer(buzzer);
+                context.State.ScorePlayer(10);
+                await handler.Undo(context);
+            });
+
+            Assert.IsFalse(
+                newContext.State.TryGetNextPlayer(out ulong nextPlayerId), "Queue should be empty.");
+        }
+
+        [TestMethod]
         public async Task GetScoreContainsPlayers()
         {
             const int points = 10;

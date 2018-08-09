@@ -298,6 +298,144 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.AreEqual(10, scorePair.Value, "The second player should have negged.");
         }
 
+        [TestMethod]
+        public void UndoOnNoScoreDoesNothing()
+        {
+            const ulong firstId = 1;
+
+            GameState gameState = new GameState();
+            Assert.IsTrue(gameState.AddPlayer(firstId), "Add should succeed.");
+            Assert.IsFalse(gameState.Undo(out ulong id), "Undo should return false.");
+            Assert.IsTrue(
+                gameState.TryGetNextPlayer(out ulong nextPlayerId),
+                "We should still have a player in the buzz queue.");
+            Assert.AreEqual(firstId, nextPlayerId, "Next player should be the first one.");
+        }
+
+        [TestMethod]
+        public void UndoNeggedQuestion()
+        {
+            TestUndoRestoresState(-5);
+        }
+
+        [TestMethod]
+        public void UndoNoPenaltyQuestion()
+        {
+            TestUndoRestoresState(0);
+        }
+
+        [TestMethod]
+        public void UndoCorrectQuestion()
+        {
+            TestUndoRestoresState(10);
+        }
+
+        [TestMethod]
+        public void UndoQueueHasLimit()
+        {
+            GameState gameState = new GameState();
+
+            ulong[] ids = new ulong[GameState.UndoStackLimit + 1];
+            for (ulong i = 0; i < (ulong)ids.Length; i++)
+            {
+                ids[i] = i;
+                Assert.IsTrue(gameState.AddPlayer(i), $"Adding player {i} should succeed.");
+                gameState.ScorePlayer(-5);
+            }
+
+            for (ulong i = (ulong)ids.Length - 1; i > 0; i--)
+            {
+                Assert.IsTrue(gameState.Undo(out ulong undoId), $"Undo #{i} should succeed.");
+                Assert.AreEqual(i, undoId, $"We should have undone player {i}'s buzz.");
+            }
+
+            Assert.IsFalse(
+                gameState.Undo(out ulong lastUndoId),
+                "We should no longer be able to undo since we reached the limit.");
+
+            IDictionary<ulong, int> scores = gameState.GetScores().ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            foreach (ulong id in ids.Skip(1))
+            {
+                Assert.IsTrue(
+                    scores.TryGetValue(id, out int score),
+                    $"Unable to get the score for player {id}");
+                Assert.AreEqual(0, score, $"Unexpected score for player {id}");
+            }
+
+            Assert.IsTrue(scores.TryGetValue(0, out int firstScore), "Unable to get the first player's score.");
+            Assert.AreEqual(-5, firstScore, "First player's score should remain the same.");
+        }
+
+        [TestMethod]
+        public void UndoPersistsBetweenQuestions()
+        {
+            const ulong firstId = 1;
+            const ulong secondId = 2;
+
+            GameState gameState = new GameState();
+            Assert.IsTrue(gameState.AddPlayer(firstId), "First add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(secondId), "Second add should succeed.");
+
+            gameState.ScorePlayer(10);
+            Assert.IsTrue(gameState.AddPlayer(firstId), "First add in second question should succeed.");
+            gameState.ScorePlayer(15);
+
+            Assert.IsTrue(gameState.Undo(out ulong firstUndoId), "First undo should succeed.");
+            Assert.AreEqual(firstId, firstUndoId, "First ID returned by undo is incorrect.");
+            Assert.IsTrue(gameState.Undo(out ulong secondUndoId), "Second undo should succeed.");
+            Assert.AreEqual(firstId, secondUndoId, "Second ID returned by undo is incorrect.");
+
+            gameState.ScorePlayer(-5);
+            Assert.IsTrue(gameState.TryGetNextPlayer(out ulong nextPlayerId), "There should be a player in the queue.");
+            Assert.AreEqual(secondId, nextPlayerId, "Wrong player in queue.");
+        }
+
+        public static void TestUndoRestoresState(int pointsFromBuzz)
+        {
+            const ulong firstId = 1;
+            const ulong secondId = 2;
+            const int firstPointsFromBuzz = 10;
+
+            GameState gameState = new GameState();
+            // To make sure we're not just clearing the field, give the first player points
+            Assert.IsTrue(gameState.AddPlayer(firstId), "First add should succeed.");
+            gameState.ScorePlayer(firstPointsFromBuzz);
+
+
+            Assert.IsTrue(gameState.AddPlayer(firstId), "First add in second question should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(secondId), "Second add in second question should succeed.");
+
+            gameState.ScorePlayer(pointsFromBuzz);
+            IDictionary<ulong, int> scores = gameState.GetScores().ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            Assert.IsTrue(scores.TryGetValue(firstId, out int score), "Unable to get score for the first player.");
+            Assert.AreEqual(pointsFromBuzz + firstPointsFromBuzz, score, "Incorrect score.");
+
+            Assert.IsTrue(gameState.Undo(out ulong id), "Undo should return true.");
+            Assert.IsTrue(
+                gameState.TryGetNextPlayer(out ulong nextPlayerId),
+                "We should still have a player in the buzz queue.");
+            Assert.AreEqual(firstId, nextPlayerId, "Next player should be the first one.");
+
+            scores = gameState.GetScores().ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            Assert.IsTrue(
+                scores.TryGetValue(firstId, out int scoreAfterUndo),
+                "Unable to get score for the first player after undo.");
+            Assert.AreEqual(firstPointsFromBuzz, scoreAfterUndo, "Incorrect score after undo.");
+
+            Assert.IsFalse(
+                gameState.AddPlayer(firstId),
+                "First player already buzzed, so we shouldn't be able to add them again.");
+            Assert.IsFalse(
+                gameState.AddPlayer(secondId),
+                "Second player already buzzed, so we shouldn't be able to add them again.");
+
+            gameState.ScorePlayer(0);
+            Assert.IsTrue(
+                gameState.TryGetNextPlayer(out ulong finalPlayerId),
+                "Buzz queue should have two players after an undo.");
+            Assert.AreEqual(secondId, finalPlayerId, "Next player should be the second one.");
+        }
+
         // TODO: Add tests for Bot. We'd want to create another class that implements the event handlers, but has different arguments
         // which don't require Discord-specific classes.
     }

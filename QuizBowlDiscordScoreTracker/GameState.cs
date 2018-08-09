@@ -8,10 +8,15 @@ namespace QuizBowlDiscordScoreTracker
     public class GameState
     {
         public const int ScoresListLimit = 10;
+        public const int UndoStackLimit = 10;
 
         private readonly SortedSet<Buzz> buzzQueue;
         private readonly HashSet<ulong> alreadyBuzzedPlayers;
         private readonly Dictionary<ulong, int> score;
+        private readonly LinkedList<ScoreAction> undoStack;
+
+        // TODO: To support undo we need to keep a stack of "score events", which says who scored when.
+        // We could store deltas, but storing copies of the structures may be easier for now.
 
         private ulong? readerId;
         // TODO: We may want to add a set of people who have retrieved the score to prevent spamming. May be better
@@ -25,6 +30,7 @@ namespace QuizBowlDiscordScoreTracker
             this.buzzQueue = new SortedSet<Buzz>();
             this.alreadyBuzzedPlayers = new HashSet<ulong>();
             this.score = new Dictionary<ulong, int>();
+            this.undoStack = new LinkedList<ScoreAction>();
             this.ReaderId = null;
         }
 
@@ -53,6 +59,7 @@ namespace QuizBowlDiscordScoreTracker
                 this.buzzQueue.Clear();
                 this.alreadyBuzzedPlayers.Clear();
                 this.score.Clear();
+                this.undoStack.Clear();
             }
             
             this.ReaderId = null;
@@ -64,6 +71,7 @@ namespace QuizBowlDiscordScoreTracker
             {
                 this.buzzQueue.Clear();
                 this.alreadyBuzzedPlayers.Clear();
+                this.undoStack.Clear();
             }
         }
 
@@ -140,6 +148,9 @@ namespace QuizBowlDiscordScoreTracker
                     return;
                 }
 
+                // Push this before we modify the collections, so we can get the original state.
+                this.PushToUndoQueue(buzz, score);
+
                 if (score > 0)
                 {
                     this.buzzQueue.Clear();
@@ -156,7 +167,7 @@ namespace QuizBowlDiscordScoreTracker
                 {
                     currentScore = 0;
                 }
-
+                
                 this.score[buzz.UserId] = currentScore + score;
             }
         }
@@ -177,6 +188,74 @@ namespace QuizBowlDiscordScoreTracker
             
             nextPlayerId = next.UserId;
             return true;
+        }
+
+        public bool Undo(out ulong undoId)
+        {
+            lock (this.collectionLock)
+            {
+                if (undoStack.Count == 0)
+                {
+                    undoId = 0;
+                    return false;
+                }
+
+                ScoreAction action = undoStack.First.Value;
+                undoStack.RemoveFirst();
+
+                this.score[action.Buzz.UserId] -= action.Score;
+                if (action.Score > 0)
+                {
+                    // These fields are read-only, so clear and add the results.
+                    this.alreadyBuzzedPlayers.Clear();
+                    this.alreadyBuzzedPlayers.UnionWith(action.AlreadyBuzzedPlayers);
+                    this.buzzQueue.Clear();
+                    this.buzzQueue.UnionWith(action.BuzzQueue);
+                }
+                else
+                {
+                    this.buzzQueue.Add(action.Buzz);
+                }
+
+                undoId = action.Buzz.UserId;
+                return true;
+            }
+        }
+
+        // This should be called with the collection lock wrapping it
+        private void PushToUndoQueue(Buzz buzz, int score)
+        {
+            if (undoStack.Count >= UndoStackLimit)
+            {
+                undoStack.RemoveLast();
+            }
+
+            undoStack.AddFirst(new ScoreAction(buzz, score, this));
+        }
+
+        // TODO: Look into storing only the deltas of the collections, so that we don't copy the collection for each
+        // action.
+        // Tracks who buzzed in, what the score was, and who was in the already buzzed list.
+        private class ScoreAction
+        {
+            public ScoreAction(Buzz buzz, int score, GameState state)
+            {
+                this.Buzz = buzz;
+                this.Score = score;
+
+                // Don't modify the existing collections. We may want to investigate using invariant collections so that
+                // we don't have to copy these values.
+                this.AlreadyBuzzedPlayers = new HashSet<ulong>(state.alreadyBuzzedPlayers);
+                this.BuzzQueue = new SortedSet<Buzz>(state.buzzQueue);
+            }
+
+            public Buzz Buzz { get; private set; }
+
+            public int Score { get; private set; }
+
+            public HashSet<ulong> AlreadyBuzzedPlayers { get; private set; }
+
+            public SortedSet<Buzz> BuzzQueue { get; private set; }
         }
     }
 }
