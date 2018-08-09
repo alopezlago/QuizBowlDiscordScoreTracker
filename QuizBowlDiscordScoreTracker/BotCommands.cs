@@ -82,7 +82,7 @@ namespace QuizBowlDiscordScoreTracker
         {
             if (IsSupportedChannel(context))
             {
-                await this.handler.Clear(new DiscordCommandContextWrapper(context));
+                await this.handler.Undo(new DiscordCommandContextWrapper(context));
             }
         }
 

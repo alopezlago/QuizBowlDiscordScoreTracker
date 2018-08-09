@@ -214,7 +214,6 @@ namespace QuizBowlDiscordScoreTracker
                 }
                 else
                 {
-                    this.alreadyBuzzedPlayers.Remove(action.Buzz.UserId);
                     this.buzzQueue.Add(action.Buzz);
                 }
 
@@ -226,7 +225,7 @@ namespace QuizBowlDiscordScoreTracker
         // This should be called with the collection lock wrapping it
         private void PushToUndoQueue(Buzz buzz, int score)
         {
-            if (undoStack.Count > UndoStackLimit)
+            if (undoStack.Count >= UndoStackLimit)
             {
                 undoStack.RemoveLast();
             }
@@ -234,23 +233,18 @@ namespace QuizBowlDiscordScoreTracker
             undoStack.AddFirst(new ScoreAction(buzz, score, this));
         }
 
-        // TODO: Move this to a class we can test?
-        // Could collect these in a list (remove last one), then in the object which stores this list, Undo would
-        // take the id, update the score dictionary to undo the score, and remove it from alreadyBuzzedPlayers.
-        // Alternative is to change the round state. Have separate RoundState object for already buzzed and current
-        // player, and GameState stores this and Score.
-        // we only need the set if the buzz was positive, because we have to add them back.
+        // TODO: Look into storing only the deltas of the collections, so that we don't copy the collection for each
+        // action.
+        // Tracks who buzzed in, what the score was, and who was in the already buzzed list.
         private class ScoreAction
         {
-            // Tracks who buzzed in, what the score was, and who was in the already buzzed list.
-            // We may want read-only/invariant collections for already-buzzed.
-            // An alternative is to keep track of all of the structures, so you can undo clears/ends
-
             public ScoreAction(Buzz buzz, int score, GameState state)
             {
-                // Don't modify the existing collections.
                 this.Buzz = buzz;
                 this.Score = score;
+
+                // Don't modify the existing collections. We may want to investigate using invariant collections so that
+                // we don't have to copy these values.
                 this.AlreadyBuzzedPlayers = new HashSet<ulong>(state.alreadyBuzzedPlayers);
                 this.BuzzQueue = new SortedSet<Buzz>(state.buzzQueue);
             }
@@ -259,7 +253,6 @@ namespace QuizBowlDiscordScoreTracker
 
             public int Score { get; private set; }
 
-            // This will only have a value if score > 0, because we need to remember who buzzed in.
             public HashSet<ulong> AlreadyBuzzedPlayers { get; private set; }
 
             public SortedSet<Buzz> BuzzQueue { get; private set; }
