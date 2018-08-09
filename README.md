@@ -16,10 +16,7 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 - Add unit tests for the event handlers in Bot.cs. This will require further refactoring similar to what was done with BotCommand/BotCommandHandler.
 - Consider adding support for tournaments
   - This requires lots more work, including persisting stats in case of a crash, and determining which rooms belong to the tournament, etc.
-- Allow undoing scores
 - Allow teams to be created. This should be something the reader can set up.
-- Handle buzz emojis (:buzz: or :buz:). This needs to come from the Guild's emojis. This may need to be a configuration option.
-- Limit which channels the bot can interact with.
 
 #### Instructions:
 - If you want to be the reader, type in !read
