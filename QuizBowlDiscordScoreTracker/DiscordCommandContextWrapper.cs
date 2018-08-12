@@ -37,10 +37,10 @@ namespace QuizBowlDiscordScoreTracker
                 Dictionary<DiscordChannel, GameState> games =
                     this.context.Dependencies.GetDependency<Dictionary<DiscordChannel, GameState>>();
 
-                if (value == null && this.CanPerformReaderActions)
+                if (value == null)
                 {
                     // Remove this game from the dictionary of games
-                    if (games.TryGetValue(this.context.Channel, out GameState state))
+                    if (this.CanPerformReaderActions && games.TryGetValue(this.context.Channel, out GameState state))
                     {
                         state.ClearAll();
                         games.Remove(this.context.Channel);

@@ -163,7 +163,7 @@ namespace QuizBowlDiscordScoreTracker
 
         private Task OnPresenceUpdated(PresenceUpdateEventArgs args)
         {
-            DiscordUser user = args.Member.Presence?.User;
+            DiscordUser user = args.Member?.Presence?.User;
             if (user == null)
             {
                 // Can't do anything, we don't know what game they were reading.
