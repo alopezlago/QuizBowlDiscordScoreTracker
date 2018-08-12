@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
-    public class GameState
+    public partial class GameState
     {
         public const int ScoresListLimit = 10;
 
@@ -40,6 +40,14 @@ namespace QuizBowlDiscordScoreTracker
                 {
                     this.readerId = value;
                 }
+            }
+        }
+
+        private PhaseState CurrentPhase
+        {
+            get
+            {
+                return this.phases.Last.Value;
             }
         }
 
