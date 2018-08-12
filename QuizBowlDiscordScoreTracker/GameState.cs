@@ -108,10 +108,10 @@ namespace QuizBowlDiscordScoreTracker
         {
             lock (phasesLock)
             {
-                // TODO: Investigate the performance of this approach. It may be faster to create a dictionary and do
-                // the matching ourselves.
+                // TODO: Investigate the performance of this approach.
                 //     - Quick test on my machine shows that even with 1 million phases it takes ~35 ms. That's still
-                //       not great.
+                //       not great, but it's about the same as looping through with a for loop. We may want to cache thes
+                //       results, though it will need to be synchronized with Undo.
                 // This gets all of the score pairs from the phases, groups them together, sums the values in the
                 // grouping, and then sorts it.
                 return this.phases
