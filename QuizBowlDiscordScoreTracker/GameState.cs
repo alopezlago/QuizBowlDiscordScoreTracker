@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
-    public partial class GameState
+    public class GameState
     {
         public const int ScoresListLimit = 10;
 
@@ -53,7 +53,7 @@ namespace QuizBowlDiscordScoreTracker
 
         public void ClearAll()
         {
-            lock (phasesLock)
+            lock (this.phasesLock)
             {
                 this.SetupInitialPhases();
             }
@@ -63,7 +63,7 @@ namespace QuizBowlDiscordScoreTracker
 
         public void ClearCurrentRound()
         {
-            lock (phasesLock)
+            lock (this.phasesLock)
             {
                 this.CurrentPhase.Clear();
             }
@@ -84,7 +84,7 @@ namespace QuizBowlDiscordScoreTracker
                 UserId = userId
             };
 
-            lock (phasesLock)
+            lock (this.phasesLock)
             {
                 return this.CurrentPhase.AddBuzz(player);
             }
@@ -98,7 +98,7 @@ namespace QuizBowlDiscordScoreTracker
                 return false;
             }
 
-            lock (phasesLock)
+            lock (this.phasesLock)
             {
                 return this.CurrentPhase.WithdrawPlayer(userId);
             }
@@ -106,7 +106,7 @@ namespace QuizBowlDiscordScoreTracker
 
         public IEnumerable<KeyValuePair<ulong, int>> GetScores()
         {
-            lock (phasesLock)
+            lock (this.phasesLock)
             {
                 // TODO: Investigate the performance of this approach.
                 //     - Quick test on my machine shows that even with 1 million phases it takes ~35 ms. That's still
@@ -124,7 +124,7 @@ namespace QuizBowlDiscordScoreTracker
 
         public void ScorePlayer(int score)
         {
-            lock (phasesLock)
+            lock (this.phasesLock)
             {
                 if (this.CurrentPhase.TryScore(score) && score > 0)
                 {
@@ -136,7 +136,7 @@ namespace QuizBowlDiscordScoreTracker
 
         public bool TryGetNextPlayer(out ulong nextPlayerId)
         {
-            lock (phasesLock)
+            lock (this.phasesLock)
             {
                 return this.CurrentPhase.TryGetNextPlayer(out nextPlayerId);
             }
