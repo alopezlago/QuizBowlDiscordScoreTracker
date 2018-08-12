@@ -331,42 +331,6 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
-        public void UndoQueueHasLimit()
-        {
-            GameState gameState = new GameState();
-
-            ulong[] ids = new ulong[GameState.UndoStackLimit + 1];
-            for (ulong i = 0; i < (ulong)ids.Length; i++)
-            {
-                ids[i] = i;
-                Assert.IsTrue(gameState.AddPlayer(i), $"Adding player {i} should succeed.");
-                gameState.ScorePlayer(-5);
-            }
-
-            for (ulong i = (ulong)ids.Length - 1; i > 0; i--)
-            {
-                Assert.IsTrue(gameState.Undo(out ulong undoId), $"Undo #{i} should succeed.");
-                Assert.AreEqual(i, undoId, $"We should have undone player {i}'s buzz.");
-            }
-
-            Assert.IsFalse(
-                gameState.Undo(out ulong lastUndoId),
-                "We should no longer be able to undo since we reached the limit.");
-
-            IDictionary<ulong, int> scores = gameState.GetScores().ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-            foreach (ulong id in ids.Skip(1))
-            {
-                Assert.IsTrue(
-                    scores.TryGetValue(id, out int score),
-                    $"Unable to get the score for player {id}");
-                Assert.AreEqual(0, score, $"Unexpected score for player {id}");
-            }
-
-            Assert.IsTrue(scores.TryGetValue(0, out int firstScore), "Unable to get the first player's score.");
-            Assert.AreEqual(-5, firstScore, "First player's score should remain the same.");
-        }
-
-        [TestMethod]
         public void UndoPersistsBetweenQuestions()
         {
             const ulong firstId = 1;

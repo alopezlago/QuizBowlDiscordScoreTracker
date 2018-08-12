@@ -1,36 +1,27 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
-    public class GameState
+    public partial class GameState
     {
         public const int ScoresListLimit = 10;
-        public const int UndoStackLimit = 10;
 
-        private readonly SortedSet<Buzz> buzzQueue;
-        private readonly HashSet<ulong> alreadyBuzzedPlayers;
-        private readonly Dictionary<ulong, int> score;
-        private readonly LinkedList<ScoreAction> undoStack;
-
-        // TODO: To support undo we need to keep a stack of "score events", which says who scored when.
-        // We could store deltas, but storing copies of the structures may be easier for now.
-
+        private readonly LinkedList<PhaseState> phases;
+        
         private ulong? readerId;
         // TODO: We may want to add a set of people who have retrieved the score to prevent spamming. May be better
         // at the controller/bot level.
 
-        private object collectionLock = new object();
+        // TODO: Investigate whether we really need phasesLock if the PhaseState has locks on its own collection.
+        private object phasesLock = new object();
         private object readerLock = new object();
 
         public GameState()
         {
-            this.buzzQueue = new SortedSet<Buzz>();
-            this.alreadyBuzzedPlayers = new HashSet<ulong>();
-            this.score = new Dictionary<ulong, int>();
-            this.undoStack = new LinkedList<ScoreAction>();
+            this.phases = new LinkedList<PhaseState>();
+            this.SetupInitialPhases();
             this.ReaderId = null;
         }
 
@@ -52,14 +43,19 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
+        private PhaseState CurrentPhase
+        {
+            get
+            {
+                return this.phases.Last.Value;
+            }
+        }
+
         public void ClearAll()
         {
-            lock (collectionLock)
+            lock (phasesLock)
             {
-                this.buzzQueue.Clear();
-                this.alreadyBuzzedPlayers.Clear();
-                this.score.Clear();
-                this.undoStack.Clear();
+                this.SetupInitialPhases();
             }
             
             this.ReaderId = null;
@@ -67,11 +63,9 @@ namespace QuizBowlDiscordScoreTracker
 
         public void ClearCurrentRound()
         {
-            lock (collectionLock)
+            lock (phasesLock)
             {
-                this.buzzQueue.Clear();
-                this.alreadyBuzzedPlayers.Clear();
-                this.undoStack.Clear();
+                this.CurrentPhase.Clear();
             }
         }
 
@@ -90,18 +84,10 @@ namespace QuizBowlDiscordScoreTracker
                 UserId = userId
             };
 
-            lock (collectionLock)
+            lock (phasesLock)
             {
-                if (this.alreadyBuzzedPlayers.Contains(userId))
-                {
-                    return false;
-                }
-
-                this.buzzQueue.Add(player);
-                this.alreadyBuzzedPlayers.Add(userId);
+                return this.CurrentPhase.AddBuzz(player);
             }
-            
-            return true;
         }
 
         public bool WithdrawPlayer(ulong userId)
@@ -112,150 +98,75 @@ namespace QuizBowlDiscordScoreTracker
                 return false;
             }
 
-            int count = 0;
-            lock (collectionLock)
+            lock (phasesLock)
             {
-                if (alreadyBuzzedPlayers.Remove(userId))
-                {
-                    // Unless we change Buzz's Equals to only take the User into account then we have to go through the
-                    // whole set to withdraw.
-                    count = this.buzzQueue.RemoveWhere(buzz => buzz.UserId == userId);
-                    Debug.Assert(count <= 1, "The same user should not be in the queue more than once.");
-                }
+                return this.CurrentPhase.WithdrawPlayer(userId);
             }
-
-            return count > 0;
         }
 
         public IEnumerable<KeyValuePair<ulong, int>> GetScores()
         {
-            lock (collectionLock)
+            lock (phasesLock)
             {
-                // Return a sorted copy.
-                return this.score.OrderByDescending(kvp => kvp.Value);
+                // TODO: Investigate the performance of this approach.
+                //     - Quick test on my machine shows that even with 1 million phases it takes ~35 ms. That's still
+                //       not great, but it's about the same as looping through with a for loop. We may want to cache thes
+                //       results, though it will need to be synchronized with Undo.
+                // This gets all of the score pairs from the phases, groups them together, sums the values in the
+                // grouping, and then sorts it.
+                return this.phases
+                    .SelectMany(phase => phase.Scores)
+                    .GroupBy(kvp => kvp.Key, kvp => kvp.Value)
+                    .Select(grouping => new KeyValuePair<ulong, int>(grouping.Key, grouping.Sum()))
+                    .OrderByDescending(kvp => kvp.Value);
             }
         }
 
         public void ScorePlayer(int score)
         {
-            lock (collectionLock)
+            lock (phasesLock)
             {
-                Buzz buzz = this.buzzQueue.Min;
-                if (buzz == null)
+                if (this.CurrentPhase.TryScore(score) && score > 0)
                 {
-                    // This is a bug we should log when logging is added.
-                    Debug.Fail($"{nameof(this.ScorePlayer)} should not be called when there are no players in the queue.");
-                    return;
+                    // Player was correct, so move on to the next phase.
+                    this.phases.AddLast(new PhaseState());
                 }
-
-                // Push this before we modify the collections, so we can get the original state.
-                this.PushToUndoQueue(buzz, score);
-
-                if (score > 0)
-                {
-                    this.buzzQueue.Clear();
-                    this.alreadyBuzzedPlayers.Clear();
-                }
-                else
-                {
-                    this.buzzQueue.Remove(buzz);
-                }
-
-                // TODO: We may want to limit what score can be, to protect against typos.
-                // This could be something passed in through a command, too. Like a set/array of allowed scores.
-                if (!this.score.TryGetValue(buzz.UserId, out int currentScore))
-                {
-                    currentScore = 0;
-                }
-                
-                this.score[buzz.UserId] = currentScore + score;
             }
         }
 
         public bool TryGetNextPlayer(out ulong nextPlayerId)
         {
-            Buzz next;
-            lock (collectionLock)
+            lock (phasesLock)
             {
-                next = this.buzzQueue.Min;
-            }
-
-            if (next == null)
-            {
-                nextPlayerId = 0;
-                return false;
-            }
-            
-            nextPlayerId = next.UserId;
-            return true;
-        }
-
-        public bool Undo(out ulong undoId)
-        {
-            lock (this.collectionLock)
-            {
-                if (undoStack.Count == 0)
-                {
-                    undoId = 0;
-                    return false;
-                }
-
-                ScoreAction action = undoStack.First.Value;
-                undoStack.RemoveFirst();
-
-                this.score[action.Buzz.UserId] -= action.Score;
-                if (action.Score > 0)
-                {
-                    // These fields are read-only, so clear and add the results.
-                    this.alreadyBuzzedPlayers.Clear();
-                    this.alreadyBuzzedPlayers.UnionWith(action.AlreadyBuzzedPlayers);
-                    this.buzzQueue.Clear();
-                    this.buzzQueue.UnionWith(action.BuzzQueue);
-                }
-                else
-                {
-                    this.buzzQueue.Add(action.Buzz);
-                }
-
-                undoId = action.Buzz.UserId;
-                return true;
+                return this.CurrentPhase.TryGetNextPlayer(out nextPlayerId);
             }
         }
 
-        // This should be called with the collection lock wrapping it
-        private void PushToUndoQueue(Buzz buzz, int score)
+        public bool Undo(out ulong userId)
         {
-            if (undoStack.Count >= UndoStackLimit)
+            lock (this.phasesLock)
             {
-                undoStack.RemoveLast();
-            }
+                // There are three cases:
+                // - The phase has actions that we can undo. Just undo the action and return true.
+                // - The phase does not have actions to undo, but the previous phase does. Remove the current phase, go
+                //   to the previous one, and undo that one.
+                // - We haven't had any actions (start of 1st phase), so there is nothing to undo.
+                bool couldUndo = this.CurrentPhase.Undo(out userId);
+                while (!couldUndo && this.phases.Count > 1)
+                {
+                    this.phases.RemoveLast();
+                    couldUndo = this.CurrentPhase.Undo(out userId);
+                }
 
-            undoStack.AddFirst(new ScoreAction(buzz, score, this));
+                return couldUndo;
+            }
         }
 
-        // TODO: Look into storing only the deltas of the collections, so that we don't copy the collection for each
-        // action.
-        // Tracks who buzzed in, what the score was, and who was in the already buzzed list.
-        private class ScoreAction
+        private void SetupInitialPhases()
         {
-            public ScoreAction(Buzz buzz, int score, GameState state)
-            {
-                this.Buzz = buzz;
-                this.Score = score;
-
-                // Don't modify the existing collections. We may want to investigate using invariant collections so that
-                // we don't have to copy these values.
-                this.AlreadyBuzzedPlayers = new HashSet<ulong>(state.alreadyBuzzedPlayers);
-                this.BuzzQueue = new SortedSet<Buzz>(state.buzzQueue);
-            }
-
-            public Buzz Buzz { get; private set; }
-
-            public int Score { get; private set; }
-
-            public HashSet<ulong> AlreadyBuzzedPlayers { get; private set; }
-
-            public SortedSet<Buzz> BuzzQueue { get; private set; }
+            // We must always have one phase.
+            this.phases.Clear();
+            this.phases.AddFirst(new PhaseState());
         }
     }
 }
