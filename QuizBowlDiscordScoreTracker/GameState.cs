@@ -6,6 +6,7 @@ namespace QuizBowlDiscordScoreTracker
 {
     public partial class GameState
     {
+        // Note: this needs to be under 25 if we plan on sticking with Embeds.
         public const int ScoresListLimit = 10;
 
         private readonly LinkedList<PhaseState> phases;
