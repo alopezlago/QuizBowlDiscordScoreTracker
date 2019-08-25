@@ -74,19 +74,29 @@ namespace QuizBowlDiscordScoreTracker
                 IEnumerable<KeyValuePair<ulong, int>> scores = context.State.GetScores();
 
                 DiscordEmbedBuilder builder = new DiscordEmbedBuilder();
-                builder.Title = scores.Count() > GameState.ScoresListLimit ?
+                builder.Title = scores.Take(checked(GameState.ScoresListLimit + 1)).Count() > GameState.ScoresListLimit ?
                     $"Top {GameState.ScoresListLimit} Scores" :
                     "Scores";
                 builder.WithColor(DiscordColor.Gold);
-                foreach (KeyValuePair<ulong, int> score in scores)
+                foreach (KeyValuePair<ulong, int> score in scores.Take(GameState.ScoresListLimit))
                 {
-                    string name = await context.GetUserNickname(score.Key);
+                    string name = (await context.GetUserNickname(score.Key)) ?? "<Unknown>";
                     builder.AddField(name, score.Value.ToString());
                 }
 
                 DiscordEmbed embed = builder.Build();
                 await context.RespondAsync(embed: embed);
             }
+        }
+
+        public Task NextQuestion(ICommandContextWrapper context)
+        {
+            if (context.CanPerformReaderActions)
+            {
+                context.State.NextQuestion();
+            }
+
+            return Task.CompletedTask;
         }
 
         public async Task Undo(ICommandContextWrapper context)

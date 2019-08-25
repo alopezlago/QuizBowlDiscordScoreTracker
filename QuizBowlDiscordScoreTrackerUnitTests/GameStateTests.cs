@@ -188,6 +188,27 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public void NextQuestionClearsQueueAndKeepsReader()
+        {
+            const ulong id = 1234;
+            const ulong readerId = 12345;
+            GameState gameState = new GameState();
+            gameState.ReaderId = readerId;
+
+            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed.");
+            gameState.ScorePlayer(-5);
+            gameState.NextQuestion();
+            Assert.IsFalse(gameState.TryGetNextPlayer(out ulong nextPlayerId), "Queue should have been cleared.");
+            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed after clear.");
+            Assert.AreEqual(readerId, gameState.ReaderId, "Reader should remain the same.");
+            IEnumerable<KeyValuePair<ulong, int>> scores = gameState.GetScores();
+            Assert.AreEqual(1, scores.Count(), "Unexpected number of scores.");
+            KeyValuePair<ulong, int> score = scores.First();
+            Assert.AreEqual(id, score.Key, "Unexpected ID for the score.");
+            Assert.AreEqual(-5, score.Value, "Unexpected point total for the score.");
+        }
+
+        [TestMethod]
         public void CannotAddPlayerAfterNeg()
         {
             const ulong id = 1;

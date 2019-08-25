@@ -22,7 +22,8 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 - If you want to be the reader, type in !read
 - Read questions. Buzz in with "buzz", or near equivalents like "bzz", "buzzzz", etc.
 - When someone buzzes in, give them a score (-5, 0, 10, 15, 20). If the person gets the question wrong, the next person in the queue will be prompted.
-  - If no one got the question correct, type in !clear
+  - If no one got the question correct, type in !next
+  - If the current question is in a bad state and you need to clear all answers and the queue, type in !clear
 - You can type !score to get the current scores
 - When you're done reading, type !end
 

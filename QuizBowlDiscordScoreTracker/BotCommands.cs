@@ -1,9 +1,7 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using DSharpPlus.CommandsNext;
+﻿using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
+using System.Threading.Tasks;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -67,12 +65,22 @@ namespace QuizBowlDiscordScoreTracker
         }
 
         [Command("clear")]
-        [Description("Clears the player queue. Use this if no one answered correctly.")]
+        [Description("Clears the player queue and answers from this question, including scores from this question.")]
         public async Task Clear(CommandContext context)
         {
             if (IsSupportedChannel(context))
             {
                 await this.handler.Clear(new DiscordCommandContextWrapper(context));
+            }
+        }
+
+        [Command("next")]
+        [Description("Clears the player queue and moves to the next question. Use this if no one answered correctly.")]
+        public async Task Next(CommandContext context)
+        {
+            if (IsSupportedChannel(context))
+            {
+                await this.handler.NextQuestion(new DiscordCommandContextWrapper(context));
             }
         }
 
@@ -90,18 +98,7 @@ namespace QuizBowlDiscordScoreTracker
         private static bool IsSupportedChannel(CommandContext context)
         {
             ConfigOptions options = context.Dependencies.GetDependency<ConfigOptions>();
-            IDictionary<string, string[]> supportedChannelsMap = options.SupportedChannels;
-            if (supportedChannelsMap == null)
-            {
-                return true;
-            }
-
-            // TODO: We may want to convert supportedChannels into a Dictionary in the constructor so we can do these
-            // lookups more efficiently. In general there shouldn't be too many supported channels per guild so
-            // this shouldn't be bad performance-wise.
-            // TODO: For now this is case-sensitive; I don't know if Discord cares about casing in its channels.
-            return supportedChannelsMap.TryGetValue(context.Guild.Name, out string[] supportedChannels) &&
-                supportedChannels.Contains(context.Channel.Name);
+            return options.IsSupportedChannel(context.Guild.Name, context.Channel.Name);
         }
     }
 }

@@ -110,6 +110,7 @@ namespace QuizBowlDiscordScoreTracker
 
         private async Task OnMessageCreated(MessageCreateEventArgs args)
         {
+            // Skip the bot's messages
             if (args.Author == this.discordClient.CurrentUser)
             {
                 return;
@@ -119,6 +120,11 @@ namespace QuizBowlDiscordScoreTracker
             if (message.StartsWith('!'))
             {
                 // Skip commands
+                return;
+            }
+
+            if (!this.options.IsSupportedChannel(args.Guild.Name, args.Channel.Name))
+            {
                 return;
             }
 
@@ -138,26 +144,46 @@ namespace QuizBowlDiscordScoreTracker
                     case "20":
                         state.ScorePlayer(int.Parse(message));
                         await PromptNextPlayer(state, args.Message);
-                        break;
+                        return;
                     case "no penalty":
                         state.ScorePlayer(0);
                         await PromptNextPlayer(state, args.Message);
-                        break;
+                        return;
                     default:
-                        break;
+                        return;
                 }
-
-                return;
             }
 
-            bool hasPlayerBuzzedIn = this.IsBuzz(message) && state.AddPlayer(args.Message.Author.Id);
-            if (hasPlayerBuzzedIn ||
-                (message.Equals("wd", StringComparison.CurrentCultureIgnoreCase) && state.WithdrawPlayer(args.Message.Author.Id)))
+            // Player has buzzed in
+            if (this.IsBuzz(message) && state.AddPlayer(args.Message.Author.Id))
             {
                 if (state.TryGetNextPlayer(out ulong nextPlayerId) && nextPlayerId == args.Message.Author.Id)
                 {
                     await PromptNextPlayer(state, args.Message);
                 }
+
+                return;
+            }
+
+            // Player has withdrawn
+            if (message.Equals("wd", StringComparison.CurrentCultureIgnoreCase) && state.WithdrawPlayer(args.Message.Author.Id))
+            {
+                if (state.TryGetNextPlayer(out ulong nextPlayerId) && nextPlayerId == args.Message.Author.Id)
+                {
+                    // If the player withdrawing is at the top of the queue, prompt the next player
+                    if (nextPlayerId == args.Message.Author.Id)
+                    {
+                        await PromptNextPlayer(state, args.Message);
+                    }
+                }
+                else
+                {
+                    // If there are no players in the queue, have the bot recognize the withdrawl
+                    DiscordUser messageUser = await args.Channel.Guild.GetMemberAsync(args.Message.Author.Id);
+                    await args.Channel.SendMessageAsync($"{messageUser.Mention} has withdrawn.");
+                }
+
+                return;
             }
         }
 

@@ -4,13 +4,15 @@ using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
-    public class GameState
+    public partial class GameState
     {
+        // Note: this needs to be under 25 if we plan on sticking with Embeds.
         public const int ScoresListLimit = 10;
 
         private readonly LinkedList<PhaseState> phases;
         
         private ulong? readerId;
+        private KeyValuePair<ulong, int>[] cachedScore;
         // TODO: We may want to add a set of people who have retrieved the score to prevent spamming. May be better
         // at the controller/bot level.
 
@@ -21,6 +23,7 @@ namespace QuizBowlDiscordScoreTracker
         public GameState()
         {
             this.phases = new LinkedList<PhaseState>();
+            this.cachedScore = null;
             this.SetupInitialPhases();
             this.ReaderId = null;
         }
@@ -66,6 +69,7 @@ namespace QuizBowlDiscordScoreTracker
             lock (this.phasesLock)
             {
                 this.CurrentPhase.Clear();
+                this.cachedScore = null;
             }
         }
 
@@ -110,15 +114,30 @@ namespace QuizBowlDiscordScoreTracker
             {
                 // TODO: Investigate the performance of this approach.
                 //     - Quick test on my machine shows that even with 1 million phases it takes ~35 ms. That's still
-                //       not great, but it's about the same as looping through with a for loop. We may want to cache thes
-                //       results, though it will need to be synchronized with Undo.
+                //       not great, but it's about the same as looping through with a for loop. The caching should help mitigate
+                //       any expensive computations
                 // This gets all of the score pairs from the phases, groups them together, sums the values in the
                 // grouping, and then sorts it.
-                return this.phases
-                    .SelectMany(phase => phase.Scores)
-                    .GroupBy(kvp => kvp.Key, kvp => kvp.Value)
-                    .Select(grouping => new KeyValuePair<ulong, int>(grouping.Key, grouping.Sum()))
-                    .OrderByDescending(kvp => kvp.Value);
+                if (this.cachedScore == null)
+                {
+                    this.cachedScore = this.phases
+                        .SelectMany(phase => phase.Scores)
+                        .GroupBy(kvp => kvp.Key, kvp => kvp.Value)
+                        .Select(grouping => new KeyValuePair<ulong, int>(grouping.Key, grouping.Sum()))
+                        .OrderByDescending(kvp => kvp.Value)
+                        .ToArray();
+                }
+
+                return this.cachedScore;
+            }
+        }
+
+        public void NextQuestion()
+        {
+            lock (this.phasesLock)
+            {
+                // Add a new phase, since the last one is over
+                this.phases.AddLast(new PhaseState());
             }
         }
 
@@ -126,10 +145,14 @@ namespace QuizBowlDiscordScoreTracker
         {
             lock (this.phasesLock)
             {
-                if (this.CurrentPhase.TryScore(score) && score > 0)
+                if (this.CurrentPhase.TryScore(score))
                 {
+                    this.cachedScore = null;
                     // Player was correct, so move on to the next phase.
-                    this.phases.AddLast(new PhaseState());
+                    if (score > 0)
+                    {
+                        this.phases.AddLast(new PhaseState());
+                    }
                 }
             }
         }
@@ -158,6 +181,9 @@ namespace QuizBowlDiscordScoreTracker
                     couldUndo = this.CurrentPhase.Undo(out userId);
                 }
 
+                // In the only case where nothing was undone, there's no score to calculate, so clearing the cache is harmless
+                this.cachedScore = null;
+
                 return couldUndo;
             }
         }
@@ -165,6 +191,7 @@ namespace QuizBowlDiscordScoreTracker
         private void SetupInitialPhases()
         {
             // We must always have one phase.
+            this.cachedScore = null;
             this.phases.Clear();
             this.phases.AddFirst(new PhaseState());
         }
