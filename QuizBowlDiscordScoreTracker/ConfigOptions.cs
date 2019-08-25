@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -7,7 +8,12 @@ namespace QuizBowlDiscordScoreTracker
         // File with this should look like:
         // {
         //    "adminIds": [ "413243442536807758", "223201443436757988"],
-        //    "waitForRejoinMs": 10000
+        //    "waitForRejoinMs": 10000,
+        //    "buzzEmojis": [":buzz:"],
+        //    "supportedChannels": {
+        //        "server1": ["channel1"],
+        //        "server2": ["packet", "channel2"],
+        //    }
         // }
         // Token currently comes from a separate file, since it should eventually be encrypted and not included with
         // the config file.
@@ -37,5 +43,19 @@ namespace QuizBowlDiscordScoreTracker
         public string[] BuzzEmojis { get; set; }
 
         public string BotToken { get; set; }
+
+        public bool IsSupportedChannel(string guildName, string channelName)
+        {
+            if (this.SupportedChannels == null)
+            {
+                return true;
+            }
+
+            // TODO: We may want to convert supportedChannels into a Dictionary in the constructor so we can do these
+            // lookups more efficiently. In general there shouldn't be too many supported channels per guild so
+            // this shouldn't be bad performance-wise.
+            return this.SupportedChannels.TryGetValue(guildName, out string[] supportedChannels) &&
+                supportedChannels.Contains(channelName);
+        }
     }
 }
