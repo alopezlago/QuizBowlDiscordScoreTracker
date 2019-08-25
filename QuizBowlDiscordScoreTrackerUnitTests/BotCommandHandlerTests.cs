@@ -209,6 +209,50 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task CanNextQuestionWithReader()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            MockCommandContextWrapper newContext = await RunWithReader(async (handler, context) =>
+            {
+                context.State.AddPlayer(buzzer);
+                await handler.NextQuestion(context);
+            });
+
+            Assert.IsFalse(newContext.State.TryGetNextPlayer(out ulong nextPlayerId), "Queue should've been cleared.");
+            Assert.IsTrue(newContext.State.AddPlayer(buzzer), "We should be able to add the buzzer again.");
+        }
+
+        [TestMethod]
+        public async Task CanNextQuestionWithAdmin()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            MockCommandContextWrapper newContext = await RunWithAdmin(async (handler, context) =>
+            {
+                context.State.AddPlayer(buzzer);
+                await handler.NextQuestion(context);
+            });
+
+            Assert.IsFalse(newContext.State.TryGetNextPlayer(out ulong nextPlayerId), "Queue should've been cleared.");
+            Assert.IsTrue(newContext.State.AddPlayer(buzzer), "We should be able to add the buzzer again.");
+        }
+
+        [TestMethod]
+        public async Task CannotNextQuestionWithUnprivilegedUser()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            MockCommandContextWrapper newContext = await RunWithUnprivilegedUser(async (handler, context) =>
+            {
+                context.State.AddPlayer(buzzer);
+                await handler.NextQuestion(context);
+            });
+
+            Assert.IsTrue(
+                newContext.State.TryGetNextPlayer(out ulong nextPlayerId),
+                "Queue should not have been cleared.");
+            Assert.AreEqual(buzzer, nextPlayerId, "Next player in the queue should have been the buzzer.");
+        }
+
+        [TestMethod]
         public async Task CanUndoWithReader()
         {
             ulong buzzer = GetExistingNonReaderUserId();
@@ -334,6 +378,44 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(
                 embed.Title.Contains(GameState.ScoresListLimit.ToString()),
                 $"Title should contain the scores list limit. Title: {embed.Title}");
+        }
+
+        [TestMethod]
+        public async Task GetScoreShowsNoMoreThanLimit()
+        {
+            GameState existingState = new GameState();
+            existingState.ReaderId = 0;
+
+            HashSet<ulong> existingIds = new HashSet<ulong>();
+            const ulong lastId = GameState.ScoresListLimit + 1;
+            for (ulong i = 1; i <= lastId; i++)
+            {
+                existingIds.Add(i);
+            }
+
+            MockCommandContextWrapper context = new MockCommandContextWrapper()
+            {
+                ExistingUserIds = existingIds,
+                State = existingState,
+                UserId = 1
+            };
+
+            // We want to go to the point where the number of players equals the limit, where we still show the
+            // original title
+            for (ulong i = 1; i < lastId; i++)
+            {
+                context.State.AddPlayer(i);
+                context.State.ScorePlayer(10);
+            }
+
+            BotCommandHandler handler = new BotCommandHandler();
+            await handler.GetScore(context);
+            Assert.AreEqual(1, context.SentEmbeds.Count, "Unexpected number of embeds sent after second GetScore.");
+            DiscordEmbed embed = context.SentEmbeds.Last();
+            Assert.AreEqual(
+                GameState.ScoresListLimit,
+                embed.Fields.Count,
+                $"Number of scorers shown is not the same as the scoring limit.");
         }
 
         private async Task<MockCommandContextWrapper> RunWithReader(

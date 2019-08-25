@@ -65,12 +65,22 @@ namespace QuizBowlDiscordScoreTracker
         }
 
         [Command("clear")]
-        [Description("Clears the player queue. Use this if no one answered correctly.")]
+        [Description("Clears the player queue and answers from this question, including scores from this question.")]
         public async Task Clear(CommandContext context)
         {
             if (IsSupportedChannel(context))
             {
                 await this.handler.Clear(new DiscordCommandContextWrapper(context));
+            }
+        }
+
+        [Command("next")]
+        [Description("Clears the player queue and moves to the next question. Use this if no one answered correctly.")]
+        public async Task Next(CommandContext context)
+        {
+            if (IsSupportedChannel(context))
+            {
+                await this.handler.NextQuestion(new DiscordCommandContextWrapper(context));
             }
         }
 
