@@ -168,7 +168,7 @@ namespace QuizBowlDiscordScoreTracker
             // Player has withdrawn
             if (message.Equals("wd", StringComparison.CurrentCultureIgnoreCase) && state.WithdrawPlayer(args.Message.Author.Id))
             {
-                if (state.TryGetNextPlayer(out ulong nextPlayerId) && nextPlayerId == args.Message.Author.Id)
+                if (state.TryGetNextPlayer(out ulong nextPlayerId))
                 {
                     // If the player withdrawing is at the top of the queue, prompt the next player
                     if (nextPlayerId == args.Message.Author.Id)
