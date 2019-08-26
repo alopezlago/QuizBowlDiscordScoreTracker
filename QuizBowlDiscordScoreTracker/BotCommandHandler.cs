@@ -62,8 +62,8 @@ namespace QuizBowlDiscordScoreTracker
             if (context.CanPerformReaderActions)
             {
                 context.State.ClearAll();
-                await context.RespondAsync($"Reading over. All stats cleared.");
                 context.State = null;
+                await context.RespondAsync($"Reading over. All stats cleared.");
             }
         }
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
@@ -11,8 +12,8 @@ namespace QuizBowlDiscordScoreTracker
 {
     public class DiscordCommandContextWrapper : ICommandContextWrapper
     {
-        CommandContext context;
-        GameState cachedGameState;
+        private CommandContext context;
+        private GameState cachedGameState;
 
         public DiscordCommandContextWrapper(CommandContext context)
         {
@@ -23,14 +24,14 @@ namespace QuizBowlDiscordScoreTracker
         {
             get
             {
-                if (cachedGameState == null)
+                if (this.cachedGameState == null)
                 {
                     Dictionary<DiscordChannel, GameState> games = this.context.Dependencies.GetDependency<Dictionary<DiscordChannel, GameState>>();
                     games.TryGetValue(this.context.Channel, out GameState state);
-                    cachedGameState = state;
+                    this.cachedGameState = state;
                 }
 
-                return cachedGameState;
+                return this.cachedGameState;
             }
             set
             {
@@ -40,10 +41,14 @@ namespace QuizBowlDiscordScoreTracker
                 if (value == null)
                 {
                     // Remove this game from the dictionary of games
+                    // TODO: Possible issue: this.CanPerformReaderActions relies on the state. It might be best to keep this check out
+                    // of this class.
                     if (this.CanPerformReaderActions && games.TryGetValue(this.context.Channel, out GameState state))
                     {
                         state.ClearAll();
-                        games.Remove(this.context.Channel);
+                        bool removed = games.Remove(this.context.Channel);
+                        Debug.Assert(removed, "Game wasn't removed.");
+                        this.cachedGameState = null;
                     }
 
                     return;
