@@ -1,4 +1,6 @@
 ﻿using Newtonsoft.Json;
+using System;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Threading.Tasks;
 
@@ -7,15 +9,14 @@ namespace QuizBowlDiscordScoreTracker
     class Program
     {
         // Following the example from https://dsharpplus.emzi0767.com/articles/first_bot.html
-        static void Main(string[] args)
+        public static void Main()
         {
-            MainAsync(args).ConfigureAwait(false).GetAwaiter().GetResult();
+            MainAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
-        static async Task MainAsync(string[] args)
+        private static async Task MainAsync()
         {
-
-            ConfigOptions options = await GetConfigOptions();
+            BotConfiguration options = await GetConfigOptions();
             using (Bot bot = new Bot(options))
             {
                 await bot.ConnectAsync();
@@ -25,7 +26,7 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        static async Task<ConfigOptions> GetConfigOptions()
+        static async Task<BotConfiguration> GetConfigOptions()
         {
             // TODO: Get the token from an encrypted file. This could be done by using DPAPI and writing a tool to help
             // convert the user access token into a token file using DPAPI. The additional entropy could be a config
@@ -36,16 +37,16 @@ namespace QuizBowlDiscordScoreTracker
             if (File.Exists("config.txt"))
             {
                 string jsonOptions = await File.ReadAllTextAsync("config.txt");
-                ConfigOptions options = JsonConvert.DeserializeObject<ConfigOptions>(jsonOptions);
+                BotConfiguration options = JsonConvert.DeserializeObject<BotConfiguration>(jsonOptions);
                 options.BotToken = botToken;
                 return options;
             }
             else
             {
-                return new ConfigOptions()
+                return new BotConfiguration()
                 {
-                    AdminIds = new string[0],
                     WaitForRejoinMs = 10000,
+                    MuteDelayMs = 500,
                     BotToken = botToken
                 };
             }

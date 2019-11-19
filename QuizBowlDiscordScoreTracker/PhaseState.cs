@@ -34,7 +34,7 @@ namespace QuizBowlDiscordScoreTracker
         {
             lock (collectionLock)
             {
-                if (this.alreadyBuzzedPlayers.Contains(player.UserId))
+                if (player == null || this.alreadyBuzzedPlayers.Contains(player.UserId))
                 {
                     return false;
                 }
@@ -133,8 +133,13 @@ namespace QuizBowlDiscordScoreTracker
                 return false;
             }
 
+            // TODO: Should we always just remove the score action? Is it possible to ever have more points than 0?
             userId = action.Buzz.UserId;
             this.scores[userId] -= action.Score;
+            if (this.scores[userId] == 0)
+            {
+                this.scores.Remove(userId);
+            }
 
             // We shouldn't need to change the list of already buzzed players, because in order to have an action the
             // player must've buzzed in. We do need to add the player back to the queue. The queue should be sorted by

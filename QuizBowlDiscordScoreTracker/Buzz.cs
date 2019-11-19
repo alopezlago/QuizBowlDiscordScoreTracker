@@ -32,5 +32,40 @@ namespace QuizBowlDiscordScoreTracker
 
             return false;
         }
+
+        public static bool operator ==(Buzz left, Buzz right)
+        {
+            if (ReferenceEquals(left, null))
+            {
+                return ReferenceEquals(right, null);
+            }
+
+            return left.Equals(right);
+        }
+
+        public static bool operator !=(Buzz left, Buzz right)
+        {
+            return !(left == right);
+        }
+
+        public static bool operator <(Buzz left, Buzz right)
+        {
+            return ReferenceEquals(left, null) ? !ReferenceEquals(right, null) : left.CompareTo(right) < 0;
+        }
+
+        public static bool operator <=(Buzz left, Buzz right)
+        {
+            return ReferenceEquals(left, null) || left.CompareTo(right) <= 0;
+        }
+
+        public static bool operator >(Buzz left, Buzz right)
+        {
+            return !ReferenceEquals(left, null) && left.CompareTo(right) > 0;
+        }
+
+        public static bool operator >=(Buzz left, Buzz right)
+        {
+            return ReferenceEquals(left, null) ? ReferenceEquals(right, null) : left.CompareTo(right) >= 0;
+        }
     }
 }
