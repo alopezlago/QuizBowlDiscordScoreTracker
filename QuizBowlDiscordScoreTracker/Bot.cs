@@ -65,6 +65,7 @@ namespace QuizBowlDiscordScoreTracker
 
             this.client.MessageReceived += this.OnMessageCreated;
             this.client.GuildMemberUpdated += this.OnPresenceUpdated;
+            this.client.Log += this.LogMessageAsync;
         }
 
         public async Task ConnectAsync()
@@ -74,12 +75,28 @@ namespace QuizBowlDiscordScoreTracker
             await this.client.StartAsync();
         }
 
+        private Task LogMessageAsync(LogMessage message)
+        {
+            if (message.Exception != null)
+            {
+                return Console.Error.WriteLineAsync(
+                    $"Exception from Discord.Net: {message.Exception.Message}\nStack trace:\n{message.Exception.StackTrace}");
+            }
+            else if (message.Severity >= LogSeverity.Info)
+            {
+                return Console.Out.WriteLineAsync($"[{message.Severity}] Discord.Net message: {message.Message}");
+            }
+            
+            return Task.CompletedTask;
+        }
+
         public void Dispose()
         {
             if (this.client != null)
             {
                 this.client.MessageReceived -= this.OnMessageCreated;
                 this.client.GuildMemberUpdated -= this.OnPresenceUpdated;
+                this.client.Log -= this.LogMessageAsync;
                 this.client.Dispose();
             }
         }
