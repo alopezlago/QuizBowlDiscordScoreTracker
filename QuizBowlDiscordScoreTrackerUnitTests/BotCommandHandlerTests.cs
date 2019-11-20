@@ -1,38 +1,41 @@
-﻿using System;
+﻿using Discord;
+using Discord.Commands;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
+using QuizBowlDiscordScoreTracker;
+using QuizBowlDiscordScoreTracker.Commands;
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
-using DSharpPlus.Entities;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using QuizBowlDiscordScoreTracker;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
     [TestClass]
     public class BotCommandHandlerTests
     {
-        private const ulong DefaultReaderId = 2;
-        private const ulong DefaultAdminId = 1;
+        private const ulong DefaultReaderId = 1;
         private static readonly HashSet<ulong> DefaultIds = new HashSet<ulong>(new ulong[] { 1, 2, 3 });
+
+        private const ulong DefaultChannelId = 11;
 
         [TestMethod]
         public async Task CanSetReaderToExistingUser()
         {
-            MockCommandContextWrapper context = new MockCommandContextWrapper()
-            {
-                ExistingUserIds = GetDefaultIds(),
-                State = null,
-                UserId = DefaultReaderId
-            };
+            CreateHandler(
+                DefaultIds,
+                DefaultChannelId,
+                DefaultReaderId,
+                out BotCommandHandler handler,
+                out GameState currentGame,
+                out MessageStore messageStore);
+            await handler.SetReader();
 
-            BotCommandHandler handler = new BotCommandHandler();
-            await handler.SetReader(context);
-
-            Assert.IsNotNull(context.State, "State should not be null after setting the reader.");
-            Assert.AreEqual(DefaultReaderId, context.State.ReaderId, "Reader ID was not set properly.");
-            Assert.AreEqual(1, context.SentMessages.Count, "Unexpected number of messages sent.");
+            Assert.AreEqual(DefaultReaderId, currentGame.ReaderId, "Reader ID was not set properly.");
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
             Assert.IsTrue(
-                context.SentMessages.First().Contains(context.UserMention),
+                messageStore.ChannelMessages.First().Contains($"@User_{DefaultReaderId}", StringComparison.InvariantCulture),
                 "Message should include the Mention of the user.");
         }
 
@@ -41,17 +44,16 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             // This will fail, but in our use case this would be impossible.
             ulong readerId = GetNonexistentUserId();
-            MockCommandContextWrapper context = new MockCommandContextWrapper()
-            {
-                ExistingUserIds = GetDefaultIds(),
-                State = null,
-                UserId = readerId
-            };
+            CreateHandler(
+                DefaultIds,
+                DefaultChannelId,
+                readerId,
+                out BotCommandHandler handler,
+                out GameState currentGame,
+                out MessageStore messageStore);
+            await handler.SetReader();
 
-            BotCommandHandler handler = new BotCommandHandler();
-            await handler.SetReader(context);
-
-            Assert.IsNull(context.State, "State should not be created when the reader does not exist.");
+            Assert.IsNull(currentGame.ReaderId, "Reader should not be set for nonexistent user.");
         }
 
         [TestMethod]
@@ -60,245 +62,152 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong existingReaderId = 1;
             const ulong newReaderId = 2;
 
-            GameState existingState = new GameState();
-            existingState.ReaderId = existingReaderId;
+            CreateHandler(
+                DefaultIds,
+                DefaultChannelId,
+                newReaderId,
+                out BotCommandHandler handler,
+                out GameState currentGame,
+                out MessageStore messageStore);
+            currentGame.ReaderId = existingReaderId;
+            await handler.SetReader();
 
-            MockCommandContextWrapper context = new MockCommandContextWrapper()
-            {
-                ExistingUserIds = GetDefaultIds(),
-                State = existingState,
-                UserId = newReaderId
-            };
-
-            BotCommandHandler handler = new BotCommandHandler();
-            await handler.SetReader(context);
-
-            Assert.AreEqual(existingReaderId, context.State.ReaderId, "Reader ID was not overwritten.");
-            Assert.AreEqual(0, context.SentMessages.Count, "No messages should be sent.");
+            Assert.AreEqual(existingReaderId, currentGame.ReaderId, "Reader ID was not overwritten.");
+            Assert.AreEqual(0, messageStore.ChannelMessages.Count, "No messages should be sent.");
         }
 
         [TestMethod]
-        public async Task CanSetNewReaderWhenReaderChoosesExistingUser()
+        public async Task CanSetExistingUserAsNewReader()
         {
             ulong newReaderId = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithReader(
-                async (handler, context) => await handler.SetNewReader(context, newReaderId));
+            CreateHandler(
+                DefaultIds,
+                DefaultChannelId,
+                DefaultReaderId,
+                out BotCommandHandler handler,
+                out GameState currentGame,
+                out MessageStore messageStore);
+            currentGame.ReaderId = 0;
 
-            Assert.AreEqual(newReaderId, newContext.State.ReaderId, "Reader ID was not set correctly.");
-            Assert.AreEqual(1, newContext.SentMessages.Count, "Unexpected number of messages sent.");
+            await handler.SetNewReader(newReaderId);
 
-            string newReaderMention = await newContext.GetUserMention(newReaderId);
-            string message = newContext.SentMessages.First();
+            Assert.AreEqual(newReaderId, currentGame.ReaderId, "Reader ID was not set correctly.");
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+
+            string newReaderMention = $"@User_{newReaderId}";
             Assert.IsTrue(
-                message.Contains(newReaderMention),
-                $"Message should include the Mention of the user. Message: '{message}'.");
-        }
-
-        [TestMethod]
-        public async Task CanSetNewReaderWhenAdminChoosesExistingUser()
-        {
-            ulong newReaderId = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithAdmin(
-                async (handler, context) => await handler.SetNewReader(context, newReaderId));
-
-            Assert.AreEqual(newReaderId, newContext.State.ReaderId, "Reader ID was not set correctly.");
-            Assert.AreEqual(1, newContext.SentMessages.Count, "Unexpected number of messages sent.");
-
-            string newReaderMention = await newContext.GetUserMention(newReaderId);
-            Assert.IsTrue(
-                newContext.SentMessages.First().Contains(newReaderMention),
+                messageStore.ChannelMessages.First().Contains(newReaderMention, StringComparison.InvariantCulture),
                 "Message should include the Mention of the user.");
-        }
-
-        [TestMethod]
-        public async Task CannotSetNewReaderWhenUnprivilegedUserChoosesExistingUser()
-        {
-            ulong newReaderId = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithUnprivilegedUser(
-                async (handler, context) => await handler.SetNewReader(context, newReaderId));
-
-            Assert.AreEqual(DefaultReaderId, newContext.State.ReaderId, "Reader ID should not have been reset.");
-            Assert.AreEqual(0, newContext.SentMessages.Count, "Unexpected number of messages sent.");
         }
 
         [TestMethod]
         public async Task CannotSetNewReaderWhenReaderChoosesNonexistentUser()
         {
             ulong newReaderId = GetNonexistentUserId();
-            MockCommandContextWrapper newContext = await RunWithReader(
-                async (handler, context) => await handler.SetNewReader(context, newReaderId));
+            CreateHandler(
+                DefaultIds,
+                DefaultChannelId,
+                DefaultReaderId,
+                out BotCommandHandler handler,
+                out GameState currentGame,
+                out MessageStore messageStore);
+            await handler.SetReader();
+            messageStore.Clear();
 
-            Assert.AreEqual(DefaultReaderId, newContext.State.ReaderId, "Reader ID should not have been reset.");
-            Assert.AreEqual(1, newContext.SentMessages.Count, "Unexpected number of messages sent.");
+            await handler.SetNewReader(newReaderId);
 
-            string message = newContext.SentMessages.First();
+            Assert.AreEqual(DefaultReaderId, currentGame.ReaderId, "Reader ID should not have been reset.");
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+
+            string message = messageStore.ChannelMessages.First();
             Assert.IsTrue(
-                message.Contains("User could not be found"),
+                message.Contains("User could not be found", StringComparison.InvariantCulture),
                 $"'User could not be found' was not found in the message. Message: '{message}'.");
         }
 
         [TestMethod]
-        public async Task CanClearWithReader()
+        public async Task ClearEmptiesQueue()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithReader(async (handler, context) =>
-            {
-                context.State.AddPlayer(buzzer);
-                await handler.Clear(context);
-            });
+            CreateHandler(
+                DefaultIds,
+                DefaultChannelId,
+                DefaultReaderId,
+                out BotCommandHandler handler,
+                out GameState currentGame,
+                out MessageStore messageStore);
 
-            Assert.IsFalse(newContext.State.TryGetNextPlayer(out ulong nextPlayerId), "Queue should've been cleared.");
-            Assert.IsTrue(newContext.State.AddPlayer(buzzer), "We should be able to add the buzzer again.");
+            currentGame.AddPlayer(buzzer);
+            await handler.Clear();
+
+            Assert.IsFalse(currentGame.TryGetNextPlayer(out ulong nextPlayerId), "Queue should've been cleared.");
+            Assert.IsTrue(currentGame.AddPlayer(buzzer), "We should be able to add the buzzer again.");
         }
 
         [TestMethod]
-        public async Task CanClearWithAdmin()
+        public async Task ClearAllRemovesGame()
+        {
+            GameStateManager manager = new GameStateManager();
+            manager.TryCreate(DefaultChannelId, out GameState currentGame);
+            MessageStore messageStore = new MessageStore();
+            ICommandContext commandContext = CreateCommandContext(
+                messageStore, DefaultIds, DefaultChannelId, DefaultReaderId);
+            BotCommandHandler handler = new BotCommandHandler(commandContext, manager, currentGame);
+
+            await handler.ClearAll();
+
+            Assert.IsFalse(
+                manager.TryGet(DefaultChannelId, out GameState game),
+                "Game should have been removed from the manager.");
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+        }
+
+        [TestMethod]
+        public async Task NextQuestionClears()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithAdmin(async (handler, context) =>
-            {
-                context.State.AddPlayer(buzzer);
-                await handler.Clear(context);
-            });
+            CreateHandler(
+                DefaultIds,
+                DefaultChannelId,
+                DefaultReaderId,
+                out BotCommandHandler handler,
+                out GameState currentGame,
+                out MessageStore messageStore);
 
-            Assert.IsFalse(newContext.State.TryGetNextPlayer(out ulong nextPlayerId), "Queue should've been cleared.");
-            Assert.IsTrue(newContext.State.AddPlayer(buzzer), "We should be able to add the buzzer again.");
-        }
+            currentGame.AddPlayer(buzzer);
+            await handler.NextQuestion();
 
-        [TestMethod]
-        public async Task CannotClearWithUnprivilegedUser()
-        {
-            ulong buzzer = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithUnprivilegedUser(async (handler, context) =>
-            {
-                context.State.AddPlayer(buzzer);
-                await handler.Clear(context);
-            });
-
-            Assert.IsTrue(
-                newContext.State.TryGetNextPlayer(out ulong nextPlayerId),
-                "Queue should not have been cleared.");
-            Assert.AreEqual(buzzer, nextPlayerId, "Next player in the queue should have been the buzzer.");
-        }
-
-        [TestMethod]
-        public async Task CanClearAllWithReader()
-        {
-            MockCommandContextWrapper newContext = await RunWithReader(
-                async (handler, context) => await handler.ClearAll(context));
-            Assert.IsNull(newContext.State, "Game state should have been cleared completely.");
-            Assert.AreEqual(1, newContext.SentMessages.Count, "Unexpected number of messages sent.");
-        }
-
-        [TestMethod]
-        public async Task CanClearAllWithAdmin()
-        {
-            MockCommandContextWrapper newContext = await RunWithAdmin(
-                async (handler, context) => await handler.ClearAll(context));
-            Assert.IsNull(newContext.State, "Game state should have been cleared completely.");
-            Assert.AreEqual(1, newContext.SentMessages.Count, "Unexpected number of messages sent.");
-        }
-
-        [TestMethod]
-        public async Task CannotClearAllWithUnprivilegedUser()
-        {
-            MockCommandContextWrapper newContext = await RunWithUnprivilegedUser(
-                async (handler, context) => await handler.ClearAll(context));
-            Assert.IsNotNull(newContext.State, "Game state should have remained the same.");
-            Assert.AreEqual(0, newContext.SentMessages.Count, "Unexpected number of messages sent.");
-        }
-
-        [TestMethod]
-        public async Task CanNextQuestionWithReader()
-        {
-            ulong buzzer = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithReader(async (handler, context) =>
-            {
-                context.State.AddPlayer(buzzer);
-                await handler.NextQuestion(context);
-            });
-
-            Assert.IsFalse(newContext.State.TryGetNextPlayer(out ulong nextPlayerId), "Queue should've been cleared.");
-            Assert.IsTrue(newContext.State.AddPlayer(buzzer), "We should be able to add the buzzer again.");
-        }
-
-        [TestMethod]
-        public async Task CanNextQuestionWithAdmin()
-        {
-            ulong buzzer = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithAdmin(async (handler, context) =>
-            {
-                context.State.AddPlayer(buzzer);
-                await handler.NextQuestion(context);
-            });
-
-            Assert.IsFalse(newContext.State.TryGetNextPlayer(out ulong nextPlayerId), "Queue should've been cleared.");
-            Assert.IsTrue(newContext.State.AddPlayer(buzzer), "We should be able to add the buzzer again.");
-        }
-
-        [TestMethod]
-        public async Task CannotNextQuestionWithUnprivilegedUser()
-        {
-            ulong buzzer = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithUnprivilegedUser(async (handler, context) =>
-            {
-                context.State.AddPlayer(buzzer);
-                await handler.NextQuestion(context);
-            });
-
-            Assert.IsTrue(
-                newContext.State.TryGetNextPlayer(out ulong nextPlayerId),
-                "Queue should not have been cleared.");
-            Assert.AreEqual(buzzer, nextPlayerId, "Next player in the queue should have been the buzzer.");
+            Assert.IsFalse(currentGame.TryGetNextPlayer(out ulong nextPlayerId), "Queue should've been cleared.");
+            Assert.IsTrue(currentGame.AddPlayer(buzzer), "We should be able to add the buzzer again.");
         }
 
         [TestMethod]
         public async Task CanUndoWithReader()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithReader(async (handler, context) =>
-            {
-                context.State.AddPlayer(buzzer);
-                context.State.ScorePlayer(10);
-                await handler.Undo(context);
-            });
+            CreateHandler(
+                DefaultIds,
+                DefaultChannelId,
+                DefaultReaderId,
+                out BotCommandHandler handler,
+                out GameState currentGame,
+                out MessageStore messageStore);
+
+            currentGame.ReaderId = 0;
+            currentGame.AddPlayer(buzzer);
+            currentGame.ScorePlayer(10);
+            await handler.Undo();
 
             Assert.IsTrue(
-                newContext.State.TryGetNextPlayer(out ulong nextPlayerId),
+                currentGame.TryGetNextPlayer(out ulong nextPlayerId),
                 "Queue should be restored, so we should have a player.");
             Assert.AreEqual(buzzer, nextPlayerId, "Incorrect player in the queue.");
-        }
 
-        [TestMethod]
-        public async Task CanUndoWithAdmin()
-        {
-            ulong buzzer = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithAdmin(async (handler, context) =>
-            {
-                context.State.AddPlayer(buzzer);
-                context.State.ScorePlayer(10);
-                await handler.Undo(context);
-            });
-
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
             Assert.IsTrue(
-                newContext.State.TryGetNextPlayer(out ulong nextPlayerId),
-                "Queue should be restored, so we should have a player.");
-            Assert.AreEqual(buzzer, nextPlayerId, "Incorrect player in the queue.");
-        }
-
-        [TestMethod]
-        public async Task CannotUndoWithUnprivilegedUser()
-        {
-            ulong buzzer = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithUnprivilegedUser(async (handler, context) =>
-            {
-                context.State.AddPlayer(buzzer);
-                context.State.ScorePlayer(10);
-                await handler.Undo(context);
-            });
-
-            Assert.IsFalse(
-                newContext.State.TryGetNextPlayer(out ulong nextPlayerId), "Queue should be empty.");
+                message.Contains($"@User_{buzzer}", StringComparison.InvariantCulture),
+                "Mention should be included in undo message as a prompt.");
         }
 
         [TestMethod]
@@ -308,21 +217,30 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             // Unprivileged users should be able to get the score.
             ulong buzzer = GetExistingNonReaderUserId();
-            MockCommandContextWrapper newContext = await RunWithUnprivilegedUser(async (handler, context) =>
-            {
-                context.State.AddPlayer(buzzer);
-                context.State.ScorePlayer(points);
-                await handler.GetScore(context);
-            });
+            CreateHandler(
+                DefaultIds,
+                DefaultChannelId,
+                DefaultReaderId,
+                out BotCommandHandler handler,
+                out GameState currentGame,
+                out MessageStore messageStore);
 
-            Assert.AreEqual(0, newContext.SentMessages.Count, "Unexpected number of messages sent.");
-            Assert.AreEqual(1, newContext.SentEmbeds.Count, "Unexpected number of embeds sent.");
+            currentGame.ReaderId = 0;
+            currentGame.AddPlayer(buzzer);
+            currentGame.ScorePlayer(points);
+            await handler.GetScore();
 
-            string nickname = await newContext.GetUserNickname(buzzer);
-            DiscordEmbed embed = newContext.SentEmbeds.First();
-            DiscordEmbedField field = embed.Fields.FirstOrDefault(f => f.Name == nickname);
-            Assert.IsNotNull(field, "We should have a field with the user's nickname.");
-            Assert.AreEqual(points.ToString(), field.Value, "Field should match the player's score.");
+            Assert.AreEqual(0, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
+
+            string embed = messageStore.ChannelEmbeds.First();
+            string[] lines = embed.Split(Environment.NewLine);
+            string playerLine = lines.FirstOrDefault(
+                line => line.StartsWith($"User_{buzzer}", StringComparison.InvariantCulture));
+            Assert.IsNotNull(playerLine, "We should have a field with the user's nickname or username.");
+            Assert.IsTrue(
+                playerLine.Contains(points.ToString(CultureInfo.InvariantCulture), StringComparison.InvariantCulture),
+                "Field should match the player's score.");
         }
 
         [TestMethod]
@@ -338,46 +256,58 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 existingIds.Add(i);
             }
 
-            MockCommandContextWrapper context = new MockCommandContextWrapper()
-            {
-                ExistingUserIds = existingIds,
-                State = existingState,
-                UserId = 1
-            };
+            CreateHandler(
+                existingIds,
+                DefaultChannelId,
+                DefaultReaderId,
+                out BotCommandHandler handler,
+                out GameState currentGame,
+                out MessageStore messageStore);
 
-            BotCommandHandler handler = new BotCommandHandler();
-            await handler.GetScore(context);
+            currentGame.ReaderId = 0;
+            await handler.GetScore();
 
-            Assert.AreEqual(1, context.SentEmbeds.Count, "Unexpected number of embeds sent after first GetScore.");
-            DiscordEmbed embed = context.SentEmbeds.Last();
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent after first GetScore.");
+            string embed = messageStore.ChannelEmbeds.Last();
             Assert.IsFalse(
-                embed.Title.Contains(GameState.ScoresListLimit.ToString()),
-                $"On start, the title should not contain the scores list limit. Title: {embed.Title}");
+                embed.Contains(
+                    GameState.ScoresListLimit.ToString(CultureInfo.InvariantCulture),
+                    StringComparison.InvariantCulture),
+                $"On start, the title should not contain the scores list limit. Embed: {embed}");
 
             // We want to go to the point where the number of players equals the limit, where we still show the
             // original title
             for (ulong i = 1; i < lastId; i++)
             {
-                context.State.AddPlayer(i);
-                context.State.ScorePlayer(10);
+                currentGame.AddPlayer(i);
+                currentGame.ScorePlayer(10);
             }
 
-            await handler.GetScore(context);
-            Assert.AreEqual(2, context.SentEmbeds.Count, "Unexpected number of embeds sent after first GetScore.");
-            embed = context.SentEmbeds.Last();
+            await handler.GetScore();
+            Assert.AreEqual(2, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent after first GetScore.");
+            embed = messageStore.ChannelEmbeds.Last();
+
+            // Get the title, which should be before the first new line
+            embed = embed.Substring(0, embed.IndexOf(Environment.NewLine, StringComparison.InvariantCulture));
             Assert.IsFalse(
-                embed.Title.Contains(GameState.ScoresListLimit.ToString()),
-                $"When the nubmer of scorers matches the limit, the title should not contain the scores list limit. Title: {embed.Title}");
+                embed.Contains(
+                    GameState.ScoresListLimit.ToString(CultureInfo.InvariantCulture),
+                    StringComparison.InvariantCulture),
+                $"When the number of scorers matches the limit, the embed should not contain the scores list limit. Embed: {embed}");
 
-            context.State.AddPlayer(lastId);
-            context.State.ScorePlayer(-5);
+            currentGame.AddPlayer(lastId);
+            currentGame.ScorePlayer(-5);
 
-            await handler.GetScore(context);
-            Assert.AreEqual(3, context.SentEmbeds.Count, "Unexpected number of embeds sent after second GetScore.");
-            embed = context.SentEmbeds.Last();
+            await handler.GetScore();
+            Assert.AreEqual(3, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent after second GetScore.");
+            embed = messageStore.ChannelEmbeds.Last();
+
+            embed = embed.Substring(0, embed.IndexOf(Environment.NewLine, StringComparison.InvariantCulture));
             Assert.IsTrue(
-                embed.Title.Contains(GameState.ScoresListLimit.ToString()),
-                $"Title should contain the scores list limit. Title: {embed.Title}");
+                embed.Contains(
+                    GameState.ScoresListLimit.ToString(CultureInfo.InvariantCulture),
+                    StringComparison.InvariantCulture),
+                $"Title should contain the scores list limit. Embed: {embed}");
         }
 
         [TestMethod]
@@ -393,105 +323,142 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 existingIds.Add(i);
             }
 
-            MockCommandContextWrapper context = new MockCommandContextWrapper()
-            {
-                ExistingUserIds = existingIds,
-                State = existingState,
-                UserId = 1
-            };
+            CreateHandler(
+                existingIds,
+                DefaultChannelId,
+                0,
+                out BotCommandHandler handler,
+                out GameState currentGame,
+                out MessageStore messageStore);
+
+            currentGame.ReaderId = 0;
 
             // We want to go to the point where the number of players equals the limit, where we still show the
             // original title
             for (ulong i = 1; i < lastId; i++)
             {
-                context.State.AddPlayer(i);
-                context.State.ScorePlayer(10);
+                currentGame.AddPlayer(i);
+                currentGame.ScorePlayer(10);
             }
 
-            BotCommandHandler handler = new BotCommandHandler();
-            await handler.GetScore(context);
-            Assert.AreEqual(1, context.SentEmbeds.Count, "Unexpected number of embeds sent after second GetScore.");
-            DiscordEmbed embed = context.SentEmbeds.Last();
+            await handler.GetScore();
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent after second GetScore.");
+            string embed = messageStore.ChannelEmbeds.Last();
+
+            // The number of partitions should be one more than the number of times the delimiter appears (e.g. a;b is
+            // split into a and b, but there is one ;)
+            int nicknameFields = embed.Split("User_").Length - 1;
             Assert.AreEqual(
                 GameState.ScoresListLimit,
-                embed.Fields.Count,
+                nicknameFields,
                 $"Number of scorers shown is not the same as the scoring limit.");
         }
 
-        private async Task<MockCommandContextWrapper> RunWithReader(
-            Func<BotCommandHandler, MockCommandContextWrapper, Task> asyncAction)
+        private static void CreateHandler(
+            HashSet<ulong> existingUserIds,
+            ulong channelId,
+            ulong userId,
+            out BotCommandHandler handler,
+            out GameState currentGame,
+            out MessageStore messageStore)
         {
-            GameState existingState = new GameState();
-            existingState.ReaderId = DefaultReaderId;
-
-            MockCommandContextWrapper context = new MockCommandContextWrapper()
-            {
-                ExistingUserIds = GetDefaultIds(),
-                State = existingState,
-                UserId = DefaultReaderId,
-                CanPerformReaderActions = true
-            };
-
-            BotCommandHandler handler = new BotCommandHandler();
-            await asyncAction(handler, context);
-            return context;
+            GameStateManager manager = new GameStateManager();
+            manager.TryCreate(DefaultChannelId, out currentGame);
+            messageStore = new MessageStore();
+            ICommandContext commandContext = CreateCommandContext(
+                messageStore, existingUserIds, channelId, userId);
+            handler = new BotCommandHandler(commandContext, manager, currentGame);
         }
 
-        private async Task<MockCommandContextWrapper> RunWithAdmin(
-            Func<BotCommandHandler, ICommandContextWrapper, Task> asyncAction)
+        private static ICommandContext CreateCommandContext(
+            MessageStore messageStore, HashSet<ulong> existingUserIds, ulong channelId, ulong userId)
         {
-            GameState existingState = new GameState();
-            existingState.ReaderId = DefaultReaderId;
+            Mock<ICommandContext> mockCommandContext = new Mock<ICommandContext>();
 
-            ConfigOptions options = new ConfigOptions()
-            {
-                AdminIds = new string[] { DefaultAdminId.ToString() }
-            };
+            Mock<IMessageChannel> mockMessageChannel = new Mock<IMessageChannel>();
+            Mock<IUserMessage> mockUserMessage = new Mock<IUserMessage>();
+            mockMessageChannel
+                .Setup(channel => channel.Id)
+                .Returns(channelId);
+            mockMessageChannel
+                .Setup(channel => channel.SendMessageAsync(It.IsAny<string>(), false, null, It.IsAny<RequestOptions>()))
+                .Returns<string, bool, Embed, RequestOptions>((message, isTTS, embed, options) =>
+                {
+                    messageStore.ChannelMessages.Add(message);
+                    return Task.FromResult(mockUserMessage.Object);
+                });
+            mockMessageChannel
+                .Setup(channel => channel.SendMessageAsync(null, false, It.IsAny<Embed>(), It.IsAny<RequestOptions>()))
+                .Returns<string, bool, Embed, RequestOptions>((message, isTTS, embed, options) =>
+                {
+                    messageStore.ChannelEmbeds.Add(GetMockEmbedText(embed));
+                    return Task.FromResult(mockUserMessage.Object);
+                });
 
-            MockCommandContextWrapper context = new MockCommandContextWrapper()
-            {
-                ExistingUserIds = GetDefaultIds(),
-                State = existingState,
-                UserId = DefaultAdminId,
-                Options = options,
-                CanPerformReaderActions = true
-            };
+            Mock<IGuild> mockGuild = new Mock<IGuild>();
+            mockGuild
+                .Setup(guild => guild.GetUserAsync(It.IsAny<ulong>(), It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
+                .Returns<ulong, CacheMode, RequestOptions>((id, cacheMode, requestOptions) =>
+                {
+                    if (existingUserIds?.Contains(id) == true)
+                    {
+                        return Task.FromResult(CreateGuildUser(id));
+                    }
 
-            BotCommandHandler handler = new BotCommandHandler();
-            await asyncAction(handler, context);
-            return context;
+                    return Task.FromResult<IGuildUser>(null);
+                });
+
+            mockCommandContext
+                .Setup(context => context.User)
+                .Returns(CreateGuildUser(userId));
+            mockCommandContext
+                .Setup(context => context.Channel)
+                .Returns(mockMessageChannel.Object);
+            mockCommandContext
+                .Setup(context => context.Guild)
+                .Returns(mockGuild.Object);
+
+            return mockCommandContext.Object;
         }
 
-        private async Task<MockCommandContextWrapper> RunWithUnprivilegedUser(
-            Func<BotCommandHandler, ICommandContextWrapper, Task> asyncAction)
+        private static IGuildUser CreateGuildUser(ulong id)
         {
-            GameState existingState = new GameState();
-            existingState.ReaderId = DefaultReaderId;
-
-            HashSet<ulong> existingIds = GetDefaultIds();
-            ulong userId = existingIds.Except(new ulong[] { DefaultReaderId }).First();
-
-            MockCommandContextWrapper context = new MockCommandContextWrapper()
-            {
-                ExistingUserIds = GetDefaultIds(),
-                State = existingState,
-                UserId = userId,
-                CanPerformReaderActions = false
-            };
-
-            BotCommandHandler handler = new BotCommandHandler();
-            await asyncAction(handler, context);
-            return context;
-        }
-
-        private static HashSet<ulong> GetDefaultIds()
-        {
-            return new HashSet<ulong>(DefaultIds);
+            Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
+            mockUser
+                .Setup(user => user.Id)
+                .Returns(id);
+            mockUser
+                .Setup(user => user.Mention)
+                .Returns($"@User_{id}");
+            mockUser
+                .Setup(user => user.Username)
+                .Returns($"User_{id}");
+            return mockUser.Object;
         }
 
         private static ulong GetExistingNonReaderUserId(ulong readerId = DefaultReaderId)
         {
             return DefaultIds.Except(new ulong[] { readerId }).First();
+        }
+
+        private static string GetMockEmbedText(IEmbed embed)
+        {
+            return GetMockEmbedText(
+                embed.Title, embed.Description, embed.Fields.ToDictionary(field => field.Name, field => field.Value));
+        }
+
+        private static string GetMockEmbedText(string title, string description, IDictionary<string, string> fields = null)
+        {
+            string fieldsText = string.Empty;
+            if (fields != null)
+            {
+                fieldsText = string.Join(
+                    Environment.NewLine, fields.Select(field => $"{field.Key}: {field.Value}"));
+            }
+            string embedText = fieldsText.Length > 0 ?
+                $"{title}{Environment.NewLine}{description}{Environment.NewLine}{fieldsText}" :
+                $"{title}{Environment.NewLine}{description}";
+            return embedText;
         }
 
         private static ulong GetNonexistentUserId()
