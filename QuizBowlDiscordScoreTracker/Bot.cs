@@ -86,7 +86,7 @@ namespace QuizBowlDiscordScoreTracker
             {
                 return Console.Out.WriteLineAsync($"[{message.Severity}] Discord.Net message: {message.Message}");
             }
-            
+
             return Task.CompletedTask;
         }
 
@@ -242,7 +242,7 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             // Player has withdrawn
-            if (message.Content.Equals("wd", StringComparison.CurrentCultureIgnoreCase) && 
+            if (message.Content.Equals("wd", StringComparison.CurrentCultureIgnoreCase) &&
                 state.WithdrawPlayer(message.Author.Id))
             {
                 if (state.TryGetNextPlayer(out ulong nextPlayerId))
@@ -317,8 +317,17 @@ namespace QuizBowlDiscordScoreTracker
                         {
                             KeyValuePair<ulong, GameState> pair = readingGames[i];
                             pair.Value.ClearAll();
-                            sendResetTasks[i] = (newUser.Guild.GetTextChannel(pair.Key)).SendMessageAsync(
-                                $"Reader {newUser.Mention} has left. Ending the game.");
+                            SocketTextChannel textChannel = newUser.Guild?.GetTextChannel(pair.Key);
+                            if (textChannel != null)
+                            {
+                                sendResetTasks[i] = (newUser.Guild.GetTextChannel(pair.Key)).SendMessageAsync(
+                                    $"Reader {newUser.Mention} has left. Ending the game.");
+                            }
+                            else
+                            {
+                                // There's no channel, so return null
+                                sendResetTasks[i] = Task.FromResult<RestUserMessage>(null);
+                            }
                         }
 
                         await Task.WhenAll(sendResetTasks);
