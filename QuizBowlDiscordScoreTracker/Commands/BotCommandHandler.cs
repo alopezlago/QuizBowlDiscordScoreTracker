@@ -41,7 +41,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            state.ReaderId = context.User.Id;
+            state.ReaderId = this.context.User.Id;
             await this.context.Channel.SendMessageAsync($"{this.context.User.Mention} is the reader.");
         }
 
@@ -72,7 +72,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         {
             if (this.currentGame != null && this.manager.TryRemove(this.context.Channel.Id))
             {
-                currentGame.ClearAll();
+                this.currentGame.ClearAll();
                 await this.context.Channel.SendMessageAsync($"Reading over. All stats cleared.");
             }
         }
@@ -81,7 +81,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         {
             if (this.currentGame?.ReaderId != null)
             {
-                IEnumerable<KeyValuePair<ulong, int>> scores = currentGame.GetScores();
+                IEnumerable<KeyValuePair<ulong, int>> scores = this.currentGame.GetScores();
 
                 EmbedBuilder builder = new EmbedBuilder();
                 builder.Title = scores.Take(checked(GameState.ScoresListLimit + 1)).Count() > GameState.ScoresListLimit ?

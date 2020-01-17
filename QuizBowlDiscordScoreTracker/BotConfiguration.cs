@@ -51,7 +51,7 @@ namespace QuizBowlDiscordScoreTracker
                 return true;
             }
 
-            // TODO: We may want to convert supportedChannels into a Dictionary in the constructor so we can do these
+            // We could convert supportedChannels into a Dictionary in the constructor so we can do these
             // lookups more efficiently. In general there shouldn't be too many supported channels per guild so
             // this shouldn't be bad performance-wise.
             return this.SupportedChannels.TryGetValue(guildName, out ChannelPair[] supportedChannels) &&
@@ -66,7 +66,7 @@ namespace QuizBowlDiscordScoreTracker
                 return false;
             }
 
-            ChannelPair channelPair =  supportedChannels.FirstOrDefault(pair => pair.Text == textChannelName);
+            ChannelPair channelPair = supportedChannels.FirstOrDefault(pair => pair.Text == textChannelName);
             voiceChannelName = channelPair.Voice;
             return voiceChannelName != null;
         }

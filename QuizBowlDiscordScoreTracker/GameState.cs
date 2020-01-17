@@ -6,19 +6,17 @@ namespace QuizBowlDiscordScoreTracker
 {
     public partial class GameState
     {
-        // Note: this needs to be under 25 if we plan on sticking with Embeds.
+        // Note: this needs to be under 25 if we plan on sticking with Embeds. Alternatively, we have to send out
+        // multiple embeds.
         public const int ScoresListLimit = 10;
 
         private readonly LinkedList<PhaseState> phases;
-        
+
         private ulong? readerId;
         private KeyValuePair<ulong, int>[] cachedScore;
-        // TODO: We may want to add a set of people who have retrieved the score to prevent spamming. May be better
-        // at the controller/bot level.
 
-        // TODO: Investigate whether we really need phasesLock if the PhaseState has locks on its own collection.
-        private object phasesLock = new object();
-        private object readerLock = new object();
+        private readonly object phasesLock = new object();
+        private readonly object readerLock = new object();
 
         public GameState()
         {
@@ -60,7 +58,7 @@ namespace QuizBowlDiscordScoreTracker
             {
                 this.SetupInitialPhases();
             }
-            
+
             this.ReaderId = null;
         }
 
@@ -112,10 +110,9 @@ namespace QuizBowlDiscordScoreTracker
         {
             lock (this.phasesLock)
             {
-                // TODO: Investigate the performance of this approach.
-                //     - Quick test on my machine shows that even with 1 million phases it takes ~35 ms. That's still
-                //       not great, but it's about the same as looping through with a for loop. The caching should help mitigate
-                //       any expensive computations
+                // This has the potential to be slow. However, a quick test on my machine shows that even with
+                // 1 million phases it takes ~35 ms. That's still not great, but it's about the same as looping through
+                // with a for loop. The caching should help mitigate any expensive computations
                 // This gets all of the score pairs from the phases, groups them together, sums the values in the
                 // grouping, and then sorts it.
                 if (this.cachedScore == null)

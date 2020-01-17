@@ -1,17 +1,16 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
     public class GameStateManager
     {
-        // TODO: Make this a concurrent dictionary?
-        private readonly IDictionary<ulong, GameState> gamesInChannel;
+        private readonly ConcurrentDictionary<ulong, GameState> gamesInChannel;
 
         public GameStateManager()
         {
-            this.gamesInChannel = new Dictionary<ulong, GameState>();
+            this.gamesInChannel = new ConcurrentDictionary<ulong, GameState>();
         }
 
         public IEnumerable<KeyValuePair<ulong, GameState>> GetGameChannelPairs()
@@ -19,7 +18,6 @@ namespace QuizBowlDiscordScoreTracker
             return ImmutableList<KeyValuePair<ulong, GameState>>.Empty.AddRange(this.gamesInChannel);
         }
 
-        // Add, Get, Remove
         public bool TryCreate(ulong channelId, out GameState gameState)
         {
             gameState = new GameState();
@@ -34,7 +32,7 @@ namespace QuizBowlDiscordScoreTracker
 
         public bool TryRemove(ulong channelId)
         {
-            return this.gamesInChannel.Remove(channelId);
+            return this.gamesInChannel.TryRemove(channelId, out _);
         }
 
         public bool TryGet(ulong channelId, out GameState gameState)
