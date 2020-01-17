@@ -1,10 +1,4 @@
-﻿using Discord;
-using Discord.Commands;
-using Discord.Net;
-using Discord.Rest;
-using Discord.WebSocket;
-using Microsoft.Extensions.DependencyInjection;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -13,6 +7,12 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Discord;
+using Discord.Commands;
+using Discord.Net;
+using Discord.Rest;
+using Discord.WebSocket;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -29,11 +29,11 @@ namespace QuizBowlDiscordScoreTracker
         private readonly IServiceProvider serviceProvider;
         private readonly IEnumerable<Regex> buzzEmojisRegex;
 
-        [SuppressMessage("Code Quality", "IDE0069:Disposable fields should be disposed", Justification = "Dispose method is inaccessible")]
+        [SuppressMessage("Code Quality", "CA2213:Disposable fields should be disposed", Justification = "Dispose method is inaccessible")]
         private readonly CommandService commandService;
 
-        private Dictionary<IGuildUser, bool> readerRejoinedMap;
-        private object readerRejoinedMapLock = new object();
+        private readonly Dictionary<IGuildUser, bool> readerRejoinedMap;
+        private readonly object readerRejoinedMapLock = new object();
 
         public Bot(BotConfiguration options)
         {
@@ -177,7 +177,7 @@ namespace QuizBowlDiscordScoreTracker
                 {
                     // We want to run this on a separate thread and not block the event handler
 #pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
-                    Task.Run(() => UnmuteReaderAfterDelay(voiceChannelReaderPair.Item1, voiceChannelReaderPair.Item2));
+                    Task.Run(() => this.UnmuteReaderAfterDelay(voiceChannelReaderPair.Item1, voiceChannelReaderPair.Item2));
 #pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
                 }
             }
@@ -219,11 +219,11 @@ namespace QuizBowlDiscordScoreTracker
                     case "15":
                     case "20":
                         state.ScorePlayer(int.Parse(message.Content, CultureInfo.InvariantCulture));
-                        await PromptNextPlayer(state, channel);
+                        await this.PromptNextPlayer(state, channel);
                         return;
                     case "no penalty":
                         state.ScorePlayer(0);
-                        await PromptNextPlayer(state, channel);
+                        await this.PromptNextPlayer(state, channel);
                         return;
                     default:
                         return;
@@ -235,7 +235,7 @@ namespace QuizBowlDiscordScoreTracker
             {
                 if (state.TryGetNextPlayer(out ulong nextPlayerId) && nextPlayerId == message.Author.Id)
                 {
-                    await PromptNextPlayer(state, channel);
+                    await this.PromptNextPlayer(state, channel);
                 }
 
                 return;
@@ -250,7 +250,7 @@ namespace QuizBowlDiscordScoreTracker
                     // If the player withdrawing is at the top of the queue, prompt the next player
                     if (nextPlayerId == message.Author.Id)
                     {
-                        await PromptNextPlayer(state, channel);
+                        await this.PromptNextPlayer(state, channel);
                     }
                 }
                 else
