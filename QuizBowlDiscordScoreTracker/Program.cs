@@ -4,7 +4,7 @@ using Newtonsoft.Json;
 
 namespace QuizBowlDiscordScoreTracker
 {
-    public class Program
+    public static class Program
     {
         // Following the example from https://dsharpplus.emzi0767.com/articles/first_bot.html
         public static void Main()

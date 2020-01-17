@@ -29,7 +29,7 @@ namespace QuizBowlDiscordScoreTracker
         private readonly IServiceProvider serviceProvider;
         private readonly IEnumerable<Regex> buzzEmojisRegex;
 
-        [SuppressMessage("Code Quality", "IDE0069:Disposable fields should be disposed", Justification = "Dispose method is inaccessible")]
+        [SuppressMessage("Code Quality", "CA2213:Disposable fields should be disposed", Justification = "Dispose method is inaccessible")]
         private readonly CommandService commandService;
 
         private readonly Dictionary<IGuildUser, bool> readerRejoinedMap;
