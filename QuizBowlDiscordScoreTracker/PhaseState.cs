@@ -11,7 +11,7 @@ namespace QuizBowlDiscordScoreTracker
         private readonly Dictionary<ulong, int> scores;
 
         // We may be able to get rid of this lock, if we rely on the host keeping it consistent.
-        private object collectionLock = new object();
+        private readonly object collectionLock = new object();
 
         public PhaseState()
         {
@@ -32,7 +32,7 @@ namespace QuizBowlDiscordScoreTracker
 
         public bool AddBuzz(Buzz player)
         {
-            lock (collectionLock)
+            lock (this.collectionLock)
             {
                 if (player == null || this.alreadyBuzzedPlayers.Contains(player.UserId))
                 {
@@ -48,7 +48,7 @@ namespace QuizBowlDiscordScoreTracker
 
         public void Clear()
         {
-            lock (collectionLock)
+            lock (this.collectionLock)
             {
                 this.actions.Clear();
                 this.alreadyBuzzedPlayers.Clear();
@@ -85,7 +85,7 @@ namespace QuizBowlDiscordScoreTracker
         public bool TryGetNextPlayer(out ulong nextPlayerId)
         {
             Buzz next = null;
-            lock (collectionLock)
+            lock (this.collectionLock)
             {
                 // Only get the next player if there hasn't been a buzz that was correct.
                 if (!this.actions.TryPeek(out ScoreAction action) || action.Score <= 0)
@@ -107,9 +107,9 @@ namespace QuizBowlDiscordScoreTracker
         public bool WithdrawPlayer(ulong userId)
         {
             int count = 0;
-            lock (collectionLock)
+            lock (this.collectionLock)
             {
-                if (alreadyBuzzedPlayers.Remove(userId))
+                if (this.alreadyBuzzedPlayers.Remove(userId))
                 {
                     // Unless we change Buzz's Equals to only take the User into account then we have to go through the
                     // whole set to withdraw.

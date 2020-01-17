@@ -66,7 +66,7 @@ namespace QuizBowlDiscordScoreTracker
                 return false;
             }
 
-            ChannelPair channelPair =  supportedChannels.FirstOrDefault(pair => pair.Text == textChannelName);
+            ChannelPair channelPair = supportedChannels.FirstOrDefault(pair => pair.Text == textChannelName);
             voiceChannelName = channelPair.Voice;
             return voiceChannelName != null;
         }

@@ -11,12 +11,12 @@ namespace QuizBowlDiscordScoreTracker
         public const int ScoresListLimit = 10;
 
         private readonly LinkedList<PhaseState> phases;
-        
+
         private ulong? readerId;
         private KeyValuePair<ulong, int>[] cachedScore;
 
-        private object phasesLock = new object();
-        private object readerLock = new object();
+        private readonly object phasesLock = new object();
+        private readonly object readerLock = new object();
 
         public GameState()
         {
@@ -58,7 +58,7 @@ namespace QuizBowlDiscordScoreTracker
             {
                 this.SetupInitialPhases();
             }
-            
+
             this.ReaderId = null;
         }
 

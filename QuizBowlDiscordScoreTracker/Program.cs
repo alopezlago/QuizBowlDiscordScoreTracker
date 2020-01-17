@@ -1,12 +1,10 @@
-﻿using Newtonsoft.Json;
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
+﻿using System.IO;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 
 namespace QuizBowlDiscordScoreTracker
 {
-    class Program
+    public class Program
     {
         // Following the example from https://dsharpplus.emzi0767.com/articles/first_bot.html
         public static void Main()
@@ -26,7 +24,7 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        static async Task<BotConfiguration> GetConfigOptions()
+        private static async Task<BotConfiguration> GetConfigOptions()
         {
             // TODO: Get the token from an encrypted file. This could be done by using DPAPI and writing a tool to help
             // convert the user access token into a token file using DPAPI. The additional entropy could be a config

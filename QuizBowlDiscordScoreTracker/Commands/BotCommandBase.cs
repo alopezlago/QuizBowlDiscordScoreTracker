@@ -1,6 +1,6 @@
-﻿using Discord.Commands;
-using System;
+﻿using System;
 using System.Threading.Tasks;
+using Discord.Commands;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
