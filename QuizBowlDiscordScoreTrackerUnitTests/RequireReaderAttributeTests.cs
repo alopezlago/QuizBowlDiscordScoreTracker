@@ -1,12 +1,12 @@
-﻿using Discord;
+﻿using System;
+using System.Threading.Tasks;
+using Discord;
 using Discord.Commands;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Commands;
-using System;
-using System.Threading.Tasks;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
@@ -71,7 +71,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsFalse(result.IsSuccess, "Check should have failed.");
         }
 
-        private async Task TestUser(ulong userId, bool acceptanceExpected)
+        private static async Task TestUser(ulong userId, bool acceptanceExpected)
         {
             RequireReaderAttribute attribute = new RequireReaderAttribute();
             ICommandContext context = CreateCommandContext(DefaultChannelId, userId);

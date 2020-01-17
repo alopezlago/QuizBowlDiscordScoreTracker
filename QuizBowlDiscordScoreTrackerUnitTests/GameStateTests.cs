@@ -1,7 +1,7 @@
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using QuizBowlDiscordScoreTracker;
-using System.Collections.Generic;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
@@ -21,7 +21,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             GameState gameState = new GameState();
             Assert.IsFalse(
-                gameState.TryGetNextPlayer(out ulong nextPlayerId), 
+                gameState.TryGetNextPlayer(out ulong nextPlayerId),
                 "There should be no next player if no one was added to the queue.");
         }
 
@@ -95,10 +95,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong id = 1234;
             GameState gameState = new GameState();
 
-            ulong nextPlayerId;
             Assert.IsTrue(gameState.AddPlayer(id), "Adding the player should succeed.");
             Assert.IsTrue(
-                gameState.TryGetNextPlayer(out nextPlayerId),
+                gameState.TryGetNextPlayer(out ulong nextPlayerId),
                 "There should be a player in the queue.");
             Assert.AreEqual(id, nextPlayerId, "Id of the next player should be ours.");
             Assert.IsTrue(gameState.WithdrawPlayer(id), "Withdrawing the same player should succeed.");
@@ -115,14 +114,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong thirdId = 333;
             GameState gameState = new GameState();
 
-            ulong nextPlayerId;
             Assert.IsTrue(gameState.AddPlayer(firstId), "Adding the first player should succeed.");
             Assert.IsTrue(gameState.AddPlayer(secondId), "Adding the second player should succeed.");
             Assert.IsTrue(gameState.AddPlayer(thirdId), "Adding the third player should succeed.");
             Assert.IsTrue(gameState.WithdrawPlayer(secondId), "Withdrawing the second player should succeed.");
             Assert.IsTrue(gameState.WithdrawPlayer(firstId), "Withdrawing the first player should succeed.");
             Assert.IsTrue(
-                gameState.TryGetNextPlayer(out nextPlayerId),
+                gameState.TryGetNextPlayer(out ulong nextPlayerId),
                 "There should be a player in the queue.");
             Assert.AreEqual(thirdId, nextPlayerId, "Id of the next player should be the third player's.");
         }
@@ -284,7 +282,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 if (point <= 0)
                 {
                     gameState.ClearCurrentRound();
-                }                
+                }
             }
 
             IEnumerable<KeyValuePair<ulong, int>> scores = gameState.GetScores();
