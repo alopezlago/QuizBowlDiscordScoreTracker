@@ -1,22 +1,6 @@
 ﻿### Quiz Bowl Discord Score Tracker
 This is a Discord bot which keeps track of who buzzed in, as well as each player's score.
 
-#### Requirements:
-- [.Net Core 2.1 SDK](https://www.microsoft.com/net/download/dotnet-core/2.1#sdk-2.1.300)
-  - If using Visual Studio, you need Visual Studio 2017.5
-  - I still need to test it on Community edition
-- Discord.Net Nuget packages
-  - These may be automatically downloaded. If not, you can get them by Managing your Nuget references in the solution.
-  - You will need to visit a link like this to register your bot user: https://discordapp.com/oauth2/authorize?client_id=CLIENTID&scope=bot
-    - For the main bot, the link you need to visit to add the bot to the server is https://discordapp.com/oauth2/authorize?client_id=469025702885326849&scope=bot
-
-#### Needs:
-- Support Mono. Likely requires using [this](https://dsharpplus.emzi0767.com/articles/alt_ws.html), or the library needs to support .Net Core 2.1.
-- Add unit tests for the event handlers in Bot.cs. This will require further refactoring similar to what was done with BotCommand/BotCommandHandler.
-- Consider adding support for tournaments
-  - This requires lots more work, including persisting stats in case of a crash, and determining which rooms belong to the tournament, etc.
-- Allow teams to be created. This should be something the reader can set up.
-
 #### Instructions:
 - If you want to be the reader, type in !read
 - Read questions. Buzz in with "buzz", or near equivalents like "bzz", "buzzzz", etc.
@@ -28,4 +12,32 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 - If you want to change readers, use !setnewreader @NewReadersMention
 - When you're done reading, type !end
 
-This bot was built with [DSharpPlus](https://dsharpplus.emzi0767.com/articles/first_bot.html)
+#### Development Requirements:
+- [.Net Core 3.1 SDK](https://dotnet.microsoft.com/download/dotnet-core/3.1)
+  - If using Visual Studio, you need Visual Studio 2017.5
+- Libraries from Nuget:
+  - Discord.Net
+  - Moq
+  - These may be automatically downloaded. If not, you can get them by Managing your Nuget references in the Visual Studio solution.
+- You will need to create your own Discord bot at https://discordapp.com/developers. Follow the steps around creating your bot in Discord mentioned in the "Running the bot on your own machine" section.
+    
+#### Runnig the bot on your own machine
+- Install [.Net Core Runtime 3.1](https://dotnet.microsoft.com/download/dotnet-core/3.1)  
+- Unzip the release
+- Go to https://discordapp.com/developers to register your instance of the bot
+  - Update token.txt with the client secret from your registered Discord bot
+  - Visit this site (with your bot's client ID) to add the bot to your channel
+    - https://discordapp.com/oauth2/authorize?client_id=CLIENTID&scope=bot
+- Run the .exe file
+- Grant your bot the following permissions:
+  - Read Text Channels & See Voice Messages
+  - Send Messages
+  - Mute Members
+  
+#### Running the bot on the author's machine
+- Contact the author. Tell him the server name and the text and voice channel names used for packets
+- Visit this site to add the bot to your server: https://discordapp.com/oauth2/authorize?client_id=469025702885326849&scope=bot
+- Grant your bot the following permissions:
+  - Read Text Channels & See Voice Messages
+  - Send Messages
+  - Mute Members
