@@ -246,8 +246,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public async Task GetScoreTitleShowsLimitWhenApplicable()
         {
-            GameState existingState = new GameState();
-            existingState.ReaderId = 0;
+            GameState existingState = new GameState
+            {
+                ReaderId = 0
+            };
 
             HashSet<ulong> existingIds = new HashSet<ulong>();
             const ulong lastId = GameState.ScoresListLimit + 1;
@@ -313,8 +315,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public async Task GetScoreShowsNoMoreThanLimit()
         {
-            GameState existingState = new GameState();
-            existingState.ReaderId = 0;
+            GameState existingState = new GameState
+            {
+                ReaderId = 0
+            };
 
             HashSet<ulong> existingIds = new HashSet<ulong>();
             const ulong lastId = GameState.ScoresListLimit + 1;

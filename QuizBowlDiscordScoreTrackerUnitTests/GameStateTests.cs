@@ -28,8 +28,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public void CannotAddReaderToQueue()
         {
-            GameState gameState = new GameState();
-            gameState.ReaderId = 123;
+            GameState gameState = new GameState
+            {
+                ReaderId = 123
+            };
             Assert.IsFalse(
                 gameState.AddPlayer(gameState.ReaderId.Value),
                 "Adding the reader to the queue should not be possible.");
@@ -39,8 +41,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public void ReaderIdPersists()
         {
             const ulong readerId = 123;
-            GameState gameState = new GameState();
-            gameState.ReaderId = readerId;
+            GameState gameState = new GameState
+            {
+                ReaderId = readerId
+            };
             Assert.AreEqual(readerId, gameState.ReaderId, "Reader Id is not persisted.");
         }
 
@@ -160,8 +164,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong id = 1234;
             const ulong readerId = 12345;
-            GameState gameState = new GameState();
-            gameState.ReaderId = readerId;
+            GameState gameState = new GameState
+            {
+                ReaderId = readerId
+            };
 
             Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed.");
             gameState.ClearCurrentRound();
@@ -175,8 +181,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong id = 1234;
             const ulong readerId = 12345;
-            GameState gameState = new GameState();
-            gameState.ReaderId = readerId;
+            GameState gameState = new GameState
+            {
+                ReaderId = readerId
+            };
 
             Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed.");
             gameState.ClearAll();
@@ -190,8 +198,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong id = 1234;
             const ulong readerId = 12345;
-            GameState gameState = new GameState();
-            gameState.ReaderId = readerId;
+            GameState gameState = new GameState
+            {
+                ReaderId = readerId
+            };
 
             Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed.");
             gameState.ScorePlayer(-5);
