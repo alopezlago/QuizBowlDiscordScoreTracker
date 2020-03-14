@@ -6,6 +6,8 @@ namespace QuizBowlDiscordScoreTracker
     {
         public ulong UserId { get; set; }
 
+        public ulong? TeamId { get; set; }
+
         public DateTime Timestamp { get; set; }
 
         public int CompareTo(Buzz other)
@@ -20,14 +22,16 @@ namespace QuizBowlDiscordScoreTracker
 
         public override int GetHashCode()
         {
-            return this.UserId.GetHashCode() ^ this.Timestamp.GetHashCode();
+            return this.UserId.GetHashCode() ^ this.Timestamp.GetHashCode() ^ (this.TeamId?.GetHashCode() ?? 0);
         }
 
         public override bool Equals(object obj)
         {
             if (obj is Buzz entry)
             {
-                return this.UserId == entry.UserId && this.Timestamp.Equals(entry.Timestamp);
+                return this.UserId == entry.UserId &&
+                    this.Timestamp.Equals(entry.Timestamp) &&
+                    this.TeamId == entry.TeamId;
             }
 
             return false;

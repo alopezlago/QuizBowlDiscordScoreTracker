@@ -321,7 +321,7 @@ namespace QuizBowlDiscordScoreTracker
                             if (textChannel != null)
                             {
                                 sendResetTasks[i] = (newUser.Guild.GetTextChannel(pair.Key)).SendMessageAsync(
-                                    $"Reader {newUser.Mention} has left. Ending the game.");
+                                    $"Reader {newUser.Nickname ?? newUser.Username} has left. Ending the game.");
                             }
                             else
                             {
