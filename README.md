@@ -24,6 +24,7 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 #### Runnig the bot on your own machine
 - Install [.Net Core Runtime 3.1](https://dotnet.microsoft.com/download/dotnet-core/3.1)  
 - Unzip the release
+- Create your own config file, with the name of your server and packet channels, and any custom emojis that can represent a buzz. Use the sampleConfig.txt file as an example. Your file should be called config.txt.
 - Go to https://discordapp.com/developers to register your instance of the bot
   - Update token.txt with the client secret from your registered Discord bot
   - Visit this site (with your bot's client ID) to add the bot to your channel
