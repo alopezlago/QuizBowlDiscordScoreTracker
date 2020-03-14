@@ -3,6 +3,11 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.1</TargetFramework>
+    <Version>1.0.1</Version>
+    <Authors>Alejandro Lopez-Lago</Authors>
+    <Company />
+    <Product>Quiz Bowl Discord Score Tracker</Product>
+    <Copyright>(c) 2020 Alejandro Lopez-Lago</Copyright>
   </PropertyGroup>
 
   <ItemGroup>
