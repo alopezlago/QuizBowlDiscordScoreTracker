@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Commands;
+using Serilog;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
@@ -152,7 +153,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             MessageStore messageStore = new MessageStore();
             ICommandContext commandContext = CreateCommandContext(
                 messageStore, DefaultIds, DefaultChannelId, DefaultReaderId);
-            BotCommandHandler handler = new BotCommandHandler(commandContext, manager, currentGame);
+            BotCommandHandler handler = new BotCommandHandler(commandContext, manager, currentGame, Mock.Of<ILogger>());
 
             await handler.ClearAll();
 
@@ -371,7 +372,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             messageStore = new MessageStore();
             ICommandContext commandContext = CreateCommandContext(
                 messageStore, existingUserIds, channelId, userId);
-            handler = new BotCommandHandler(commandContext, manager, currentGame);
+            handler = new BotCommandHandler(commandContext, manager, currentGame, Mock.Of<ILogger>());
         }
 
         private static ICommandContext CreateCommandContext(

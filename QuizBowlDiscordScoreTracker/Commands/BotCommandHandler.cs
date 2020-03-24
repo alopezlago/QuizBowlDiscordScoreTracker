@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using Serilog;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
@@ -12,12 +13,14 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private readonly ICommandContext context;
         private readonly GameStateManager manager;
         private readonly GameState currentGame;
+        private readonly ILogger logger;
 
-        public BotCommandHandler(ICommandContext context, GameStateManager manager, GameState currentGame)
+        public BotCommandHandler(ICommandContext context, GameStateManager manager, GameState currentGame, ILogger logger)
         {
             this.context = context;
             this.manager = manager;
             this.currentGame = currentGame;
+            this.logger = logger;
         }
 
         public async Task SetReader()
@@ -42,6 +45,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             state.ReaderId = this.context.User.Id;
+
+            if (this.context.Channel is IGuildChannel guildChannel)
+            {
+                this.logger.Information(
+                     "Game started in guild '{0}' in channel '{1}'", guildChannel.Guild.Name, guildChannel.Name);
+            }
+
             await this.context.Channel.SendMessageAsync($"{this.context.User.Mention} is the reader.");
         }
 
@@ -53,6 +63,15 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 this.currentGame.ReaderId = newReaderId;
                 await this.context.Channel.SendMessageAsync($"{newReader.Mention} is now the reader.");
                 return;
+            }
+
+            if (this.context.Channel is IGuildChannel guildChannel)
+            {
+                this.logger.Information(
+                    "New reader called in guild '{0}' in channel '{1}' with ID that could not be found: {2}",
+                    guildChannel.Guild.Name,
+                    guildChannel.Name,
+                    newReaderId);
             }
 
             await this.context.Channel.SendMessageAsync($"User could not be found. Could not set the new reader.");
@@ -73,6 +92,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
             if (this.currentGame != null && this.manager.TryRemove(this.context.Channel.Id))
             {
                 this.currentGame.ClearAll();
+
+                if (this.context.Channel is IGuildChannel guildChannel)
+                {
+                    this.logger.Information(
+                        "Game ended in guild '{0}' in channel '{0}'", guildChannel.Guild.Name, guildChannel.Name);
+                }
+
                 await this.context.Channel.SendMessageAsync($"Reading over. All stats cleared.");
             }
         }
@@ -83,10 +109,12 @@ namespace QuizBowlDiscordScoreTracker.Commands
             {
                 IEnumerable<KeyValuePair<ulong, int>> scores = this.currentGame.GetScores();
 
-                EmbedBuilder builder = new EmbedBuilder();
-                builder.Title = scores.Take(checked(GameState.ScoresListLimit + 1)).Count() > GameState.ScoresListLimit ?
+                EmbedBuilder builder = new EmbedBuilder
+                {
+                    Title = scores.Take(checked(GameState.ScoresListLimit + 1)).Count() > GameState.ScoresListLimit ?
                     $"Top {GameState.ScoresListLimit} Scores" :
-                    "Scores";
+                    "Scores"
+                };
                 builder.WithColor(Color.Gold);
                 foreach (KeyValuePair<ulong, int> score in scores.Take(GameState.ScoresListLimit))
                 {

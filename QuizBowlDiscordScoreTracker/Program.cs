@@ -1,11 +1,16 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Serilog;
 
 namespace QuizBowlDiscordScoreTracker
 {
     public static class Program
     {
+        // 100 MB file limit
+        private const long maxLogfileSize = 1024 * 1024 * 100;
+
         // Following the example from https://dsharpplus.emzi0767.com/articles/first_bot.html
         public static void Main()
         {
@@ -14,7 +19,25 @@ namespace QuizBowlDiscordScoreTracker
 
         private static async Task MainAsync()
         {
-            BotConfiguration options = await GetConfigOptions();
+            LoggerConfiguration loggerConfiguration = new LoggerConfiguration()
+                .WriteTo.Console()
+                .WriteTo.File(
+                    Path.Combine("logs", "bot.log"),
+                    fileSizeLimitBytes: maxLogfileSize,
+                    retainedFileCountLimit: 10);
+            Log.Logger = loggerConfiguration.CreateLogger();
+
+            BotConfiguration options;
+            try
+            {
+                options = await GetConfigOptions();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to read configuration.");
+                throw;
+            }
+
             using (Bot bot = new Bot(options))
             {
                 await bot.ConnectAsync();

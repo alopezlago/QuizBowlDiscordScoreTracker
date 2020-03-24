@@ -13,6 +13,7 @@ using Discord.Net;
 using Discord.Rest;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -28,12 +29,16 @@ namespace QuizBowlDiscordScoreTracker
         private readonly DiscordSocketClient client;
         private readonly IServiceProvider serviceProvider;
         private readonly IEnumerable<Regex> buzzEmojisRegex;
+        private readonly ILogger logger;
+        private readonly DiscordNetEventLogger discordNetEventLogger;
 
         [SuppressMessage("Code Quality", "CA2213:Disposable fields should be disposed", Justification = "Dispose method is inaccessible")]
         private readonly CommandService commandService;
 
         private readonly Dictionary<IGuildUser, bool> readerRejoinedMap;
         private readonly object readerRejoinedMapLock = new object();
+
+        private bool isDisposed;
 
         public Bot(BotConfiguration options)
         {
@@ -58,14 +63,15 @@ namespace QuizBowlDiscordScoreTracker
             this.commandService = new CommandService(new CommandServiceConfig()
             {
                 CaseSensitiveCommands = false,
-                LogLevel = LogSeverity.Info
+                LogLevel = LogSeverity.Info,
             });
+            this.logger = Log.ForContext(this.GetType());
+            this.discordNetEventLogger = new DiscordNetEventLogger(this.client, this.commandService);
 
             Task.WaitAll(this.commandService.AddModulesAsync(Assembly.GetExecutingAssembly(), this.serviceProvider));
 
             this.client.MessageReceived += this.OnMessageCreated;
             this.client.GuildMemberUpdated += this.OnPresenceUpdated;
-            this.client.Log += this.LogMessageAsync;
         }
 
         public async Task ConnectAsync()
@@ -75,29 +81,16 @@ namespace QuizBowlDiscordScoreTracker
             await this.client.StartAsync();
         }
 
-        private Task LogMessageAsync(LogMessage message)
-        {
-            if (message.Exception != null)
-            {
-                return Console.Error.WriteLineAsync(
-                    $"Exception from Discord.Net: {message.Exception.Message}\nStack trace:\n{message.Exception.StackTrace}");
-            }
-            else if (message.Severity >= LogSeverity.Info)
-            {
-                return Console.Out.WriteLineAsync($"[{message.Severity}] Discord.Net message: {message.Message}");
-            }
-
-            return Task.CompletedTask;
-        }
-
         public void Dispose()
         {
-            if (this.client != null)
+            if (!this.isDisposed)
             {
                 this.client.MessageReceived -= this.OnMessageCreated;
                 this.client.GuildMemberUpdated -= this.OnPresenceUpdated;
-                this.client.Log -= this.LogMessageAsync;
+                this.discordNetEventLogger.Dispose();
                 this.client.Dispose();
+
+                this.isDisposed = true;
             }
         }
 
@@ -123,7 +116,7 @@ namespace QuizBowlDiscordScoreTracker
             return result;
         }
 
-        private static async Task<Tuple<IVoiceChannel, IGuildUser>> MuteReader(
+        private async Task<Tuple<IVoiceChannel, IGuildUser>> MuteReader(
             ITextChannel textChannel, string voiceChannelName, ulong? readerId)
         {
             IGuildUser reader = null;
@@ -149,8 +142,9 @@ namespace QuizBowlDiscordScoreTracker
                 if (ex.HttpCode == System.Net.HttpStatusCode.Forbidden)
                 {
                     // TODO: When we move to using Serilog, log this
-                    Console.Error.WriteLine(
-                        $"Couldn't deafen reader because bot doesn't have Mute permission in guild {voiceChannel.GuildId}.");
+                    this.logger.Error(
+                        $"Couldn't deafen reader because bot doesn't have Mute permission in guild '{0}'",
+                        voiceChannel.Guild.Name);
                 }
 
                 return null;
@@ -167,7 +161,7 @@ namespace QuizBowlDiscordScoreTracker
                 if (this.options.TryGetVoiceChannelName(
                     textChannel.Guild.Name, textChannel.Name, out string voiceChannelName))
                 {
-                    voiceChannelReaderPair = await MuteReader(textChannel, voiceChannelName, state.ReaderId);
+                    voiceChannelReaderPair = await this.MuteReader(textChannel, voiceChannelName, state.ReaderId);
                 }
 
                 IGuildUser user = await textChannel.Guild.GetUserAsync(userId);
@@ -320,6 +314,10 @@ namespace QuizBowlDiscordScoreTracker
                             SocketTextChannel textChannel = newUser.Guild?.GetTextChannel(pair.Key);
                             if (textChannel != null)
                             {
+                                this.logger.Verbose(
+                                    "Reader left game in guild '{0}' in channel '{1}'. Ending game",
+                                    textChannel.Guild.Name,
+                                    textChannel.Name);
                                 sendResetTasks[i] = (newUser.Guild.GetTextChannel(pair.Key)).SendMessageAsync(
                                     $"Reader {newUser.Nickname ?? newUser.Username} has left. Ending the game.");
                             }
