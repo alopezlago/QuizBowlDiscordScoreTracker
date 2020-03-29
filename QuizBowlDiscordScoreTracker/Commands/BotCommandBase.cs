@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using Discord.Commands;
+using Microsoft.Extensions.Options;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker.Commands
@@ -11,9 +12,9 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private static readonly ILogger Logger = Log.ForContext(typeof(BotCommandHandler));
 
         private readonly GameStateManager manager;
-        private readonly BotConfiguration options;
+        private readonly IOptionsMonitor<BotConfiguration> options;
 
-        public BotCommandBase(GameStateManager manager, BotConfiguration options)
+        public BotCommandBase(GameStateManager manager, IOptionsMonitor<BotConfiguration> options)
         {
             this.manager = manager;
             this.options = options;
@@ -22,7 +23,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         protected Task HandleCommandAsync(Func<BotCommandHandler, Task> handleCommandFunction)
         {
             // If we're not in a supported channel, we should exit early
-            if (!this.options.IsTextSupportedChannel(this.Context.Guild.Name, this.Context.Channel.Name))
+            if (!this.options.CurrentValue.IsTextSupportedChannel(this.Context.Guild.Name, this.Context.Channel.Name))
             {
                 return Task.CompletedTask;
             }

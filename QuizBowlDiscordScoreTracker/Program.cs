@@ -1,7 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker
@@ -11,6 +15,9 @@ namespace QuizBowlDiscordScoreTracker
         // 100 MB file limit
         private const long maxLogfileSize = 1024 * 1024 * 100;
 
+        // 30 seconds
+        private const int configFileReloadDelayMs = 30 * 1000;
+
         // Following the example from https://dsharpplus.emzi0767.com/articles/first_bot.html
         public static void Main()
         {
@@ -19,58 +26,57 @@ namespace QuizBowlDiscordScoreTracker
 
         private static async Task MainAsync()
         {
-            LoggerConfiguration loggerConfiguration = new LoggerConfiguration()
-                .WriteTo.Console()
-                .WriteTo.File(
-                    Path.Combine("logs", "bot.log"),
-                    fileSizeLimitBytes: maxLogfileSize,
-                    retainedFileCountLimit: 10);
-            Log.Logger = loggerConfiguration.CreateLogger();
-
-            BotConfiguration options;
-            try
-            {
-                options = await GetConfigOptions();
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Failed to read configuration.");
-                throw;
-            }
-
-            using (Bot bot = new Bot(options))
-            {
-                await bot.ConnectAsync();
-
-                // Never leave.
-                await Task.Delay(-1);
-            }
-        }
-
-        private static async Task<BotConfiguration> GetConfigOptions()
-        {
-            // TODO: Get the token from an encrypted file. This could be done by using DPAPI and writing a tool to help
-            // convert the user access token into a token file using DPAPI. The additional entropy could be a config
-            // option.
-            // In preparation for this work the token is still taken from a separate file.
-            string botToken = await File.ReadAllTextAsync("discordToken.txt");
-
-            if (File.Exists("config.txt"))
-            {
-                string jsonOptions = await File.ReadAllTextAsync("config.txt");
-                BotConfiguration options = JsonConvert.DeserializeObject<BotConfiguration>(jsonOptions);
-                options.BotToken = botToken;
-                return options;
-            }
-            else
-            {
-                return new BotConfiguration()
+            IHost host = new HostBuilder()
+                .ConfigureAppConfiguration(configBuilder =>
                 {
-                    WaitForRejoinMs = 10000,
-                    MuteDelayMs = 500,
-                    BotToken = botToken
-                };
-            }
+                    // TODO: Get the token from an encrypted file. This could be done by using DPAPI and writing a tool to help
+                    // convert the user access token into a token file using DPAPI. The additional entropy could be a config
+                    // option.
+                    // In preparation for this work the token is still taken from a separate file.
+                    string botToken = File.ReadAllText("discordToken.txt");
+
+                    configBuilder
+                        .SetBasePath(Path.GetDirectoryName(Assembly.GetEntryAssembly().Location))
+                        .AddJsonFile(jsonConfiguration =>
+                        {
+                            jsonConfiguration.Path = "config.txt";
+                            jsonConfiguration.ReloadOnChange = true;
+                            jsonConfiguration.ReloadDelay = configFileReloadDelayMs;
+                            jsonConfiguration.Optional = false;
+                            jsonConfiguration.OnLoadException = fileLoadExceptionContext =>
+                            {
+                                Console.Error.WriteLine("Failed to load configuration file.");
+                                Console.Error.WriteLine(fileLoadExceptionContext.Exception);
+                                Environment.Exit(2);
+                            };
+                        })
+                        .AddInMemoryCollection(new KeyValuePair<string, string>[]
+                        {
+                            // TODO: Harden this. We shouldn't have the token living in the configuration for a long time
+                            new KeyValuePair<string, string>(BotConfiguration.TokenKey, botToken)
+                        });
+                })
+                .ConfigureServices((hostContext, serviceCollection) =>
+                {
+                    serviceCollection.AddHostedService<Bot>();
+                    serviceCollection.AddOptions<BotConfiguration>();
+                    serviceCollection.Configure<BotConfiguration>(hostContext.Configuration);
+                })
+                .ConfigureLogging(loggingBuilder =>
+                {
+                    // We use Serilog, not the built-in logging framework
+                    LoggerConfiguration loggerConfiguration = new LoggerConfiguration()
+                        .WriteTo.Console()
+                        .WriteTo.File(
+                            Path.Combine("logs", "bot.log"),
+                            fileSizeLimitBytes: maxLogfileSize,
+                            retainedFileCountLimit: 10);
+                    Log.Logger = loggerConfiguration.CreateLogger();
+                })
+                .UseConsoleLifetime()
+                .Build();
+
+            await host.RunAsync();
         }
     }
 }

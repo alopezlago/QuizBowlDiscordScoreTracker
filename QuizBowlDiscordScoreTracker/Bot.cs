@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
@@ -13,24 +14,27 @@ using Discord.Net;
 using Discord.Rest;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker
 {
     // TODO: Refactor this so that most of the methods are in a separate class that is easily testable.
-    public sealed class Bot : IDisposable
+    public sealed class Bot : BackgroundService
     {
         private static readonly Regex BuzzRegex = new Regex("^bu?z+$", RegexOptions.IgnoreCase);
 
         // TODO: We may need a lock for this, and this lock would need to be accessible form BotCommands. We could wrap
         // this in an object which would do the locking for us.
         private readonly GameStateManager gameStateManager;
-        private readonly BotConfiguration options;
+        private readonly IOptionsMonitor<BotConfiguration> options;
         private readonly DiscordSocketClient client;
         private readonly IServiceProvider serviceProvider;
         private readonly IEnumerable<Regex> buzzEmojisRegex;
         private readonly ILogger logger;
         private readonly DiscordNetEventLogger discordNetEventLogger;
+        private readonly IDisposable configurationChangeCallback;
 
         [SuppressMessage("Code Quality", "CA2213:Disposable fields should be disposed", Justification = "Dispose method is inaccessible")]
         private readonly CommandService commandService;
@@ -40,12 +44,20 @@ namespace QuizBowlDiscordScoreTracker
 
         private bool isDisposed;
 
-        public Bot(BotConfiguration options)
+        public Bot(IOptionsMonitor<BotConfiguration> options)
         {
-            // this.gamesInChannel = new Dictionary<ulong, GameState>();
+            if (options == null)
+            {
+                throw new ArgumentNullException(nameof(options));
+            }
+
             this.gameStateManager = new GameStateManager();
-            this.options = options ?? new BotConfiguration();
-            this.buzzEmojisRegex = BuildBuzzEmojiRegexes(this.options);
+            this.options = options;
+
+            // TODO: Rewrite this so that
+            // #1: buzz emojis are server-dependent, since emojis are
+            // #2: This can be updated if the config file is refreshed.
+            this.buzzEmojisRegex = BuildBuzzEmojiRegexes(this.options.CurrentValue);
             this.readerRejoinedMap = new Dictionary<IGuildUser, bool>();
 
             DiscordSocketConfig clientConfig = new DiscordSocketConfig()
@@ -57,7 +69,7 @@ namespace QuizBowlDiscordScoreTracker
             IServiceCollection serviceCollection = new ServiceCollection();
             serviceCollection.AddSingleton(this.client);
             serviceCollection.AddSingleton(this.gameStateManager);
-            serviceCollection.AddSingleton(options);
+            serviceCollection.AddSingleton(this.options);
             this.serviceProvider = serviceCollection.BuildServiceProvider();
 
             this.commandService = new CommandService(new CommandServiceConfig()
@@ -72,26 +84,26 @@ namespace QuizBowlDiscordScoreTracker
 
             this.client.MessageReceived += this.OnMessageCreated;
             this.client.GuildMemberUpdated += this.OnPresenceUpdated;
-        }
 
-        public async Task ConnectAsync()
-        {
-            string token = this.options.BotToken;
-            await this.client.LoginAsync(TokenType.Bot, token);
-            await this.client.StartAsync();
-        }
-
-        public void Dispose()
-        {
-            if (!this.isDisposed)
+            this.configurationChangeCallback = this.options.OnChange((configuration, value) =>
             {
-                this.client.MessageReceived -= this.OnMessageCreated;
-                this.client.GuildMemberUpdated -= this.OnPresenceUpdated;
-                this.discordNetEventLogger.Dispose();
-                this.client.Dispose();
+                this.logger.Information("Configuration has been reloaded");
+            });
+        }
 
-                this.isDisposed = true;
+        public override void Dispose()
+        {
+            if (this.isDisposed)
+            {
+                return;
             }
+
+            this.isDisposed = true;
+            this.client.MessageReceived -= this.OnMessageCreated;
+            this.client.GuildMemberUpdated -= this.OnPresenceUpdated;
+            this.discordNetEventLogger.Dispose();
+            this.configurationChangeCallback.Dispose();
+            this.client.Dispose();
         }
 
         private static IEnumerable<Regex> BuildBuzzEmojiRegexes(BotConfiguration options)
@@ -114,6 +126,21 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             return result;
+        }
+
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            // TODO: If we go to a more proper service architecture, move more of the initialization logic from the
+            // constructor to here, since we could start/stop the client multiple times.
+            string token = this.options.CurrentValue.BotToken;
+            await this.client.LoginAsync(TokenType.Bot, token);
+            await this.client.StartAsync();
+        }
+
+        public override Task StopAsync(CancellationToken cancellationToken)
+        {
+            this.Dispose();
+            return base.StopAsync(cancellationToken);
         }
 
         private async Task<Tuple<IVoiceChannel, IGuildUser>> MuteReader(
@@ -158,7 +185,7 @@ namespace QuizBowlDiscordScoreTracker
             if (state.TryGetNextPlayer(out ulong userId))
             {
                 Tuple<IVoiceChannel, IGuildUser> voiceChannelReaderPair = null;
-                if (this.options.TryGetVoiceChannelName(
+                if (this.options.CurrentValue.TryGetVoiceChannelName(
                     textChannel.Guild.Name, textChannel.Name, out string voiceChannelName))
                 {
                     voiceChannelReaderPair = await this.MuteReader(textChannel, voiceChannelName, state.ReaderId);
@@ -193,7 +220,7 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            if (!this.options.IsTextSupportedChannel(channel.Guild.Name, channel.Name))
+            if (!this.options.CurrentValue.IsTextSupportedChannel(channel.Guild.Name, channel.Name))
             {
                 return;
             }
@@ -296,7 +323,7 @@ namespace QuizBowlDiscordScoreTracker
                 // We should only be here if the first condition was true
                 Task t = new Task(async () =>
                 {
-                    await Task.Delay(this.options.WaitForRejoinMs);
+                    await Task.Delay(this.options.CurrentValue.WaitForRejoinMs);
                     bool rejoined = false;
                     lock (this.readerRejoinedMapLock)
                     {
@@ -348,7 +375,7 @@ namespace QuizBowlDiscordScoreTracker
 
         private async Task UnmuteReaderAfterDelay(IVoiceChannel voiceChannel, IGuildUser reader)
         {
-            await Task.Delay(this.options.MuteDelayMs);
+            await Task.Delay(this.options.CurrentValue.MuteDelayMs);
 
             // Make sure the reader didn't mute themselves or leave the voice channel
             if (!reader.IsSelfMuted && reader.VoiceChannel?.Id == voiceChannel.Id)
