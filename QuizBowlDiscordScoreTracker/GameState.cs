@@ -44,13 +44,7 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        private PhaseState CurrentPhase
-        {
-            get
-            {
-                return this.phases.Last.Value;
-            }
-        }
+        private PhaseState CurrentPhase => this.phases.Last.Value;
 
         public void ClearAll()
         {

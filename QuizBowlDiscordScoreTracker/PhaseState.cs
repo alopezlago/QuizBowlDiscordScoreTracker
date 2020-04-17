@@ -22,13 +22,7 @@ namespace QuizBowlDiscordScoreTracker
         }
 
         // We don't need to order them here.
-        public IEnumerable<KeyValuePair<ulong, int>> Scores
-        {
-            get
-            {
-                return this.scores;
-            }
-        }
+        public IEnumerable<KeyValuePair<ulong, int>> Scores => this.scores;
 
         public bool AddBuzz(Buzz player)
         {

@@ -1,11 +1,13 @@
 ﻿using System.Threading.Tasks;
 using Discord.Commands;
+using Microsoft.Extensions.Options;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
     public class GeneralCommands : BotCommandBase
     {
-        public GeneralCommands(GameStateManager manager, BotConfiguration options) : base(manager, options)
+        public GeneralCommands(GameStateManager manager, IOptionsMonitor<BotConfiguration> options)
+            : base(manager, options)
         {
         }
 

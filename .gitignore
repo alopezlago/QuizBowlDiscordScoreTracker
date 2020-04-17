@@ -263,3 +263,6 @@ __pycache__/
 # Tokens and Configuration
 QuizBowlDiscordScoreTracker/discordToken.txt
 QuizBowlDiscordScoreTracker/config.txt
+/QuizBowlDiscordScoreTracker/prodDiscordToken.txt
+/QuizBowlDiscordScoreTracker/devConfig.txt
+/QuizBowlDiscordScoreTracker/prodConfig.txt

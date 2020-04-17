@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
@@ -6,18 +7,29 @@ namespace QuizBowlDiscordScoreTracker
 {
     public class BotConfiguration
     {
+        public const string TokenKey = "BotToken";
+
         // File with this should look like:
         // {
         //    "waitForRejoinMs": 10000,
         //    "muteDelayMs": 500,
         //    "buzzEmojis": [":buzz:"],
         //    "supportedChannels": {
-        //        "server1": [{ text: "channel1", voice: "Voice Channel" }],
-        //        "server2": [{ text: "packet", voice: "Packet Voice" }, { text: "channel2" }],
+        //        "server1": [{ "text": "channel1", "voice": "Voice Channel" }],
+        //        "server2": [{ "text": "packet", "voice": "Packet Voice" }, { text: "channel2" }],
         //    }
         // }
         // Token currently comes from a separate file, since it should eventually be encrypted and not included with
         // the config file.
+        public BotConfiguration()
+        {
+            // Use defaults
+            this.WaitForRejoinMs = 1000;
+            this.MuteDelayMs = 500;
+            this.BuzzEmojis = Array.Empty<string>();
+            this.SupportedChannels = new Dictionary<string, ChannelPair[]>();
+            this.BotToken = string.Empty;
+        }
 
         /// <summary>
         /// The amount of time, in milliseconds, to wait for a reader to come back online before removing them and stopping
@@ -39,8 +51,11 @@ namespace QuizBowlDiscordScoreTracker
         /// The emojis which represent buzzes. They should be of the form ":buzz:", which is the emoji text the user
         /// types.
         /// </summary>
-        // public string[] BuzzEmojis { get; set; }
-        public IEnumerable<string> BuzzEmojis { get; set; }
+        // This has to be a string array because IOptionsMonitor doesn't parse the JSON array as an IEnumerable or
+        // IReadonlyCollection
+#pragma warning disable CA1819 // Properties should not return arrays
+        public string[] BuzzEmojis { get; set; }
+#pragma warning restore CA1819 // Properties should not return arrays
 
         public string BotToken { get; set; }
 
