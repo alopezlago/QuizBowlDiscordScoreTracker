@@ -232,22 +232,17 @@ namespace QuizBowlDiscordScoreTracker
 
             if (state.ReaderId == message.Author.Id)
             {
-                switch (message.Content)
+                if (int.TryParse(message.Content, out int points))
                 {
-                    case "-5":
-                    case "0":
-                    case "10":
-                    case "15":
-                    case "20":
-                        state.ScorePlayer(int.Parse(message.Content, CultureInfo.InvariantCulture));
-                        await this.PromptNextPlayer(state, channel);
-                        return;
-                    case "no penalty":
-                        state.ScorePlayer(0);
-                        await this.PromptNextPlayer(state, channel);
-                        return;
-                    default:
-                        return;
+                    state.ScorePlayer(points);
+                    await this.PromptNextPlayer(state, channel);
+                    return;
+                }
+                else if (message.Content.Trim() == "no penalty")
+                {
+                    state.ScorePlayer(0);
+                    await this.PromptNextPlayer(state, channel);
+                    return;
                 }
             }
 
