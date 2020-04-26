@@ -206,8 +206,8 @@ namespace QuizBowlDiscordScoreTracker
 
         private async Task OnMessageCreated(SocketMessage message)
         {
-            if (message.Author.Id == this.client.CurrentUser.Id ||
-                !(message is IUserMessage userMessage && userMessage.Channel is ITextChannel channel))
+            // Help in DM needs this fixed
+            if (message.Author.Id == this.client.CurrentUser.Id || !(message is IUserMessage userMessage))
             {
                 return;
             }
@@ -220,34 +220,28 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            if (!this.options.CurrentValue.IsTextSupportedChannel(channel.Guild.Name, channel.Name))
-            {
-                return;
-            }
-
-            if (!this.gameStateManager.TryGet(channel.Id, out GameState state))
+            // Some commands may need to be taken in DM channels. Everything for handling buzzes and scoring should be
+            // on the main channel 
+            if (!(userMessage.Channel is ITextChannel channel &&
+                this.options.CurrentValue.IsTextSupportedChannel(channel.Guild.Name, channel.Name) &&
+                this.gameStateManager.TryGet(channel.Id, out GameState state)))
             {
                 return;
             }
 
             if (state.ReaderId == message.Author.Id)
             {
-                switch (message.Content)
+                if (int.TryParse(message.Content, out int points))
                 {
-                    case "-5":
-                    case "0":
-                    case "10":
-                    case "15":
-                    case "20":
-                        state.ScorePlayer(int.Parse(message.Content, CultureInfo.InvariantCulture));
-                        await this.PromptNextPlayer(state, channel);
-                        return;
-                    case "no penalty":
-                        state.ScorePlayer(0);
-                        await this.PromptNextPlayer(state, channel);
-                        return;
-                    default:
-                        return;
+                    state.ScorePlayer(points);
+                    await this.PromptNextPlayer(state, channel);
+                    return;
+                }
+                else if (message.Content.Trim() == "no penalty")
+                {
+                    state.ScorePlayer(0);
+                    await this.PromptNextPlayer(state, channel);
+                    return;
                 }
             }
 
