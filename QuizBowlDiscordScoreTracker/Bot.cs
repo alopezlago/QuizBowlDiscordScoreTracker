@@ -206,8 +206,8 @@ namespace QuizBowlDiscordScoreTracker
 
         private async Task OnMessageCreated(SocketMessage message)
         {
-            if (message.Author.Id == this.client.CurrentUser.Id ||
-                !(message is IUserMessage userMessage && userMessage.Channel is ITextChannel channel))
+            // Help in DM needs this fixed
+            if (message.Author.Id == this.client.CurrentUser.Id || !(message is IUserMessage userMessage))
             {
                 return;
             }
@@ -220,12 +220,11 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            if (!this.options.CurrentValue.IsTextSupportedChannel(channel.Guild.Name, channel.Name))
-            {
-                return;
-            }
-
-            if (!this.gameStateManager.TryGet(channel.Id, out GameState state))
+            // Some commands may need to be taken in DM channels. Everything for handling buzzes and scoring should be
+            // on the main channel 
+            if (!(userMessage.Channel is ITextChannel channel &&
+                this.options.CurrentValue.IsTextSupportedChannel(channel.Guild.Name, channel.Name) &&
+                this.gameStateManager.TryGet(channel.Id, out GameState state)))
             {
                 return;
             }
