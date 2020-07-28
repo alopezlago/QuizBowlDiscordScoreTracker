@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>QuizBowlDiscordScoreTracker</title>
+    </head>
+    <body>
+        <style>
+            body {
+                background-color: green;
+            }
+
+            h1 {
+              position: fixed;
+              top: 50%;
+              left: 50%;
+              color: white;
+            }
+
+            #interactBarrier {
+                height: 100vh;
+                width: 100vw;
+                position: fixed;
+                top: 0;
+                left: 0;
+                background-color: black;
+            }
+        </style>
+        <h1 id="name"></h1>
+
+
+        <div id="interactBarrier" onclick="removeBarrier()"><h1>Click me to enter.</h1></div>
+
+        <audio src="sounds/beep.mp3" autostart="false" width="0" height="0" id="sound1" enablejavascript="true">
+        <script src="js/vendor/signalr/dist/browser/signalr.js"></script>
+        <script src="js/vendor/main.js"></script>
+    </body>
+</html>

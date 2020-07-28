@@ -5,7 +5,10 @@ using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.SignalR;
+using QuizBowlDiscordScoreTracker.Web;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker
@@ -61,6 +64,11 @@ namespace QuizBowlDiscordScoreTracker
                     serviceCollection.AddHostedService<Bot>();
                     serviceCollection.AddOptions<BotConfiguration>();
                     serviceCollection.Configure<BotConfiguration>(hostContext.Configuration);
+                })
+                .ConfigureWebHostDefaults(webBuilder =>
+                {
+                    webBuilder.UseContentRoot(Directory.GetCurrentDirectory() + "/Web")
+                              .UseStartup<Startup>();
                 })
                 .ConfigureLogging(loggingBuilder =>
                 {
