@@ -14,10 +14,10 @@ using Discord.Net;
 using Discord.Rest;
 using Discord.WebSocket;
 using Microsoft.AspNetCore.SignalR;
-using QuizBowlDiscordScoreTracker.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using QuizBowlDiscordScoreTracker.Web;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker
@@ -208,7 +208,9 @@ namespace QuizBowlDiscordScoreTracker
                     Task.Run(() => this.UnmuteReaderAfterDelay(voiceChannelReaderPair.Item1, voiceChannelReaderPair.Item2));
 #pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
                 }
-            } else {
+            }
+            else
+            {
                 await hubContext.Clients.Group(textChannel.Id.ToString()).SendAsync("Clear");
             }
         }
