@@ -198,7 +198,7 @@ namespace QuizBowlDiscordScoreTracker
 
                 IGuildUser user = await textChannel.Guild.GetUserAsync(userId);
                 await textChannel.SendMessageAsync(user.Mention);
-                await hubContext.Clients.Group(textChannel.Id.ToString())
+                await hubContext.Clients.Group(textChannel.Id.ToString(CultureInfo.InvariantCulture))
                     .SendAsync("PlayerBuzz", user.Nickname ?? user.Username);
 
                 if (voiceChannelReaderPair != null)
@@ -211,7 +211,7 @@ namespace QuizBowlDiscordScoreTracker
             }
             else
             {
-                await hubContext.Clients.Group(textChannel.Id.ToString()).SendAsync("Clear");
+                await hubContext.Clients.Group(textChannel.Id.ToString(CultureInfo.InvariantCulture)).SendAsync("Clear");
             }
         }
 
