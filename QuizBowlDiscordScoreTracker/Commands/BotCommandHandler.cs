@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using Microsoft.Extensions.Options;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker.Commands
@@ -14,13 +15,15 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private readonly GameStateManager manager;
         private readonly GameState currentGame;
         private readonly ILogger logger;
+        private readonly IOptionsMonitor<BotConfiguration> options;
 
-        public BotCommandHandler(ICommandContext context, GameStateManager manager, GameState currentGame, ILogger logger)
+        public BotCommandHandler(ICommandContext context, GameStateManager manager, GameState currentGame, ILogger logger, IOptionsMonitor<BotConfiguration> options)
         {
             this.context = context;
             this.manager = manager;
             this.currentGame = currentGame;
             this.logger = logger;
+            this.options = options;
         }
 
         public async Task SetReader()
@@ -52,7 +55,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                      "Game started in guild '{0}' in channel '{1}'", guildChannel.Guild.Name, guildChannel.Name);
             }
 
-            await this.context.Channel.SendMessageAsync($"{this.context.User.Mention} is the reader.");
+            await this.context.Channel.SendMessageAsync($"{this.context.User.Mention} is the reader. Please visit {options.CurrentValue.webBaseURL}?{this.context.Channel.Id} to hear buzzes.");
         }
 
         public async Task SetNewReader(ulong newReaderId)

@@ -37,7 +37,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             // tournament lock may block certain commands, and other commands are just long-running (like !start).
             // To work around this (and to keep the command handler unblocked), we have to run the task in a separate
             // thread, which requires us running it through Task.Run.
-            BotCommandHandler commandHandler = new BotCommandHandler(this.Context, this.manager, gameState, Logger);
+            BotCommandHandler commandHandler = new BotCommandHandler(this.Context, this.manager, gameState, Logger, options);
             Task.Run(async () =>
             {
                 try
