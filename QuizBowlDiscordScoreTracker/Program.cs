@@ -4,7 +4,6 @@ using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -22,14 +21,14 @@ namespace QuizBowlDiscordScoreTracker
         private const int configFileReloadDelayMs = 30 * 1000;
 
         // Following the example from https://dsharpplus.emzi0767.com/articles/first_bot.html
-        public static void Main()
+        public static void Main(string[] args)
         {
-            MainAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            MainAsync(args).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
-        private static async Task MainAsync()
+        private static async Task MainAsync(string[] args)
         {
-            IHost host = new HostBuilder()
+            IHost host = Host.CreateDefaultBuilder(args)
                 .ConfigureAppConfiguration(configBuilder =>
                 {
                     // TODO: Get the token from an encrypted file. This could be done by using DPAPI and writing a tool to help
