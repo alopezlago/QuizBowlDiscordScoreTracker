@@ -2,7 +2,7 @@
 
 var connection = new signalR.HubConnectionBuilder().withUrl("/hub").build();
 var nameDisplay = document.getElementById("name");
-var sound1 = document.getElementById("sound1");
+var buzzSound = document.getElementById("buzzSound");
 
 var shouldEmitSound = true;
 
@@ -15,7 +15,7 @@ connection.on("PlayerBuzz", function (name) {
     nameDisplay.textContent = name;
 
     if (shouldEmitSound) {
-        sound1.play();
+        buzzSound.play();
     }
 
     shouldEmitSound = false;
