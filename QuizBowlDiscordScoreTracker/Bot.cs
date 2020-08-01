@@ -198,7 +198,7 @@ namespace QuizBowlDiscordScoreTracker
 
                 IGuildUser user = await textChannel.Guild.GetUserAsync(userId);
                 await textChannel.SendMessageAsync(user.Mention);
-                await hubContext.Clients.Group(groupFromChannel(textChannel))
+                await hubContext.Clients.Group(GroupFromChannel(textChannel))
                     .SendAsync("PlayerBuzz", user.Nickname ?? user.Username);
 
                 if (voiceChannelReaderPair != null)
@@ -211,7 +211,7 @@ namespace QuizBowlDiscordScoreTracker
             }
             else
             {
-                await hubContext.Clients.Group(groupFromChannel(textChannel)).SendAsync("Clear");
+                await hubContext.Clients.Group(GroupFromChannel(textChannel)).SendAsync("Clear");
             }
         }
 
@@ -389,7 +389,7 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public static string groupFromChannel(ITextChannel channel) {
+        public static string GroupFromChannel(ITextChannel channel) {
             return channel.Id.ToString(CultureInfo.InvariantCulture);
         }
     }
