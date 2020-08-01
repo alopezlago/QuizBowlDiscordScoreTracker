@@ -13,9 +13,11 @@ using Discord.Commands;
 using Discord.Net;
 using Discord.Rest;
 using Discord.WebSocket;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using QuizBowlDiscordScoreTracker.Web;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker
@@ -39,18 +41,21 @@ namespace QuizBowlDiscordScoreTracker
         [SuppressMessage("Code Quality", "CA2213:Disposable fields should be disposed", Justification = "Dispose method is inaccessible")]
         private readonly CommandService commandService;
 
+        private readonly IHubContext<MonitorHub> hubContext;
+
         private readonly Dictionary<IGuildUser, bool> readerRejoinedMap;
         private readonly object readerRejoinedMapLock = new object();
 
         private bool isDisposed;
 
-        public Bot(IOptionsMonitor<BotConfiguration> options)
+        public Bot(IOptionsMonitor<BotConfiguration> options, IHubContext<MonitorHub> hubContext)
         {
             if (options == null)
             {
                 throw new ArgumentNullException(nameof(options));
             }
 
+            this.hubContext = hubContext;
             this.gameStateManager = new GameStateManager();
             this.options = options;
 
@@ -193,6 +198,8 @@ namespace QuizBowlDiscordScoreTracker
 
                 IGuildUser user = await textChannel.Guild.GetUserAsync(userId);
                 await textChannel.SendMessageAsync(user.Mention);
+                await hubContext.Clients.Group(GroupFromChannel(textChannel))
+                    .SendAsync("PlayerBuzz", user.Nickname ?? user.Username);
 
                 if (voiceChannelReaderPair != null)
                 {
@@ -201,6 +208,10 @@ namespace QuizBowlDiscordScoreTracker
                     Task.Run(() => this.UnmuteReaderAfterDelay(voiceChannelReaderPair.Item1, voiceChannelReaderPair.Item2));
 #pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
                 }
+            }
+            else
+            {
+                await hubContext.Clients.Group(GroupFromChannel(textChannel)).SendAsync("Clear");
             }
         }
 
@@ -376,6 +387,10 @@ namespace QuizBowlDiscordScoreTracker
             {
                 await reader.ModifyAsync(properties => properties.Mute = false);
             }
+        }
+
+        public static string GroupFromChannel(ITextChannel channel) {
+            return channel.Id.ToString(CultureInfo.InvariantCulture);
         }
     }
 }

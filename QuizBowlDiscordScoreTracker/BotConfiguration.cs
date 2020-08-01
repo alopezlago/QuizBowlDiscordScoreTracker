@@ -58,6 +58,7 @@ namespace QuizBowlDiscordScoreTracker
 #pragma warning restore CA1819 // Properties should not return arrays
 
         public string BotToken { get; set; }
+        public Uri WebBaseURL { get; set; }
 
         public bool IsTextSupportedChannel(string guildName, string channelName)
         {

@@ -5,5 +5,6 @@
     "supportedChannels": {
         "My Quizbowl Server Name": [{text: "general", voice: "Voice Channel"}],
         "Multiple Rooms": [{text: "packet", voice: "Packet reading"}, {text: "packet2", voice: "Packet reading 2"}],
-    }
+    },
+    "WebBaseURL": "http://localhost:5000/"
 }
