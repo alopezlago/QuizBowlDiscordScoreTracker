@@ -173,10 +173,8 @@ namespace QuizBowlDiscordScoreTracker
             {
                 if (ex.HttpCode == System.Net.HttpStatusCode.Forbidden)
                 {
-                    // TODO: When we move to using Serilog, log this
                     this.logger.Error(
-                        $"Couldn't deafen reader because bot doesn't have Mute permission in guild '{0}'",
-                        voiceChannel.Guild.Name);
+                        $"Couldn't deafen reader because bot doesn't have Mute permission in guild '{voiceChannel.Guild.Name}'");
                 }
 
                 return null;
@@ -198,7 +196,7 @@ namespace QuizBowlDiscordScoreTracker
 
                 IGuildUser user = await textChannel.Guild.GetUserAsync(userId);
                 await textChannel.SendMessageAsync(user.Mention);
-                await hubContext.Clients.Group(GroupFromChannel(textChannel))
+                await this.hubContext.Clients.Group(GroupFromChannel(textChannel))
                     .SendAsync("PlayerBuzz", user.Nickname ?? user.Username);
 
                 if (voiceChannelReaderPair != null)
@@ -211,7 +209,7 @@ namespace QuizBowlDiscordScoreTracker
             }
             else
             {
-                await hubContext.Clients.Group(GroupFromChannel(textChannel)).SendAsync("Clear");
+                await this.hubContext.Clients.Group(GroupFromChannel(textChannel)).SendAsync("Clear");
             }
         }
 
@@ -389,7 +387,8 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public static string GroupFromChannel(ITextChannel channel) {
+        private static string GroupFromChannel(ITextChannel channel)
+        {
             return channel.Id.ToString(CultureInfo.InvariantCulture);
         }
     }

@@ -8,7 +8,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
     [RequireReader]
     public class ReaderCommands : BotCommandBase
     {
-        public ReaderCommands(GameStateManager manager, IOptionsMonitor<BotConfiguration> options) 
+        public ReaderCommands(GameStateManager manager, IOptionsMonitor<BotConfiguration> options)
             : base(manager, options)
         {
         }

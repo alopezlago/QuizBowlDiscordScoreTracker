@@ -14,6 +14,7 @@ namespace QuizBowlDiscordScoreTracker
         //    "waitForRejoinMs": 10000,
         //    "muteDelayMs": 500,
         //    "buzzEmojis": [":buzz:"],
+        //    "webBaseUrl": "https://localhost:8080/index.html"
         //    "supportedChannels": {
         //        "server1": [{ "text": "channel1", "voice": "Voice Channel" }],
         //        "server2": [{ "text": "packet", "voice": "Packet Voice" }, { text: "channel2" }],
@@ -29,6 +30,7 @@ namespace QuizBowlDiscordScoreTracker
             this.BuzzEmojis = Array.Empty<string>();
             this.SupportedChannels = new Dictionary<string, ChannelPair[]>();
             this.BotToken = string.Empty;
+            this.WebBaseURL = null;
         }
 
         /// <summary>

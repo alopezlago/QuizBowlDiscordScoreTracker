@@ -268,3 +268,5 @@ QuizBowlDiscordScoreTracker/config.txt
 /QuizBowlDiscordScoreTracker/prodConfig.txt
 
 vendor/
+
+/QuizBowlDiscordScoreTracker/Properties/launchsettings.json
