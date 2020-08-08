@@ -67,7 +67,7 @@ namespace QuizBowlDiscordScoreTracker
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
                     webBuilder.UseContentRoot(Directory.GetCurrentDirectory() + "/Web")
-                              .UseStartup<Startup>();
+                        .UseStartup<Startup>();
                 })
                 .ConfigureLogging(loggingBuilder =>
                 {

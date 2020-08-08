@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -12,22 +10,50 @@ namespace QuizBowlDiscordScoreTracker.Web
 {
     public class Startup
     {
+        private const string UrlSetting = "webBaseUrl";
+
         public Startup(IConfiguration configuration)
         {
-            Configuration = configuration;
+            this.Configuration = configuration;
         }
 
         public IConfiguration Configuration { get; }
 
-        // This method gets called by the runtime. Use this method to add services to the container.
+        [SuppressMessage(
+            "Performance",
+            "CA1822:Mark members as static",
+            Justification = "Used by ASP.Net Core, and must be an instance method")]
         public void ConfigureServices(IServiceCollection services)
         {
+            // TODO: See if there's a way we can avoid initializing SignalR if the url setting isn't set. I suspect
+            // it's not possible, since we pass in the IHubContext to the Bot constructor, and it probably needs a
+            // registered type for the interface
             services.AddSignalR();
+
+            string url = this.GetUrl();
+            if (!IsUrlValid(url, out Uri uri))
+            {
+                // Nothing to configure, since we're not setting up the site
+                return;
+            }
+
+            if (uri.Scheme == Uri.UriSchemeHttps)
+            {
+                services.AddHsts(options =>
+                {
+                    options.IncludeSubDomains = true;
+                    options.MaxAge = TimeSpan.FromDays(60);
+                });
+            }
         }
 
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+        [SuppressMessage(
+            "Performance",
+            "CA1822:Mark members as static",
+            Justification = "Used by ASP.Net Core, and must be an instance method")]
         public void Configure(IApplicationBuilder app, IHostEnvironment env)
         {
+            // TODO: See if there's a way we can avoid initializing SignalR if the url setting isn't set
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
@@ -35,7 +61,6 @@ namespace QuizBowlDiscordScoreTracker.Web
             else
             {
                 app.UseExceptionHandler("/Error");
-                // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
             }
 
             app.UseFileServer();
@@ -46,6 +71,17 @@ namespace QuizBowlDiscordScoreTracker.Web
             {
                 endpoints.MapHub<MonitorHub>("/hub");
             });
+        }
+
+        private string GetUrl()
+        {
+            return this.Configuration.GetValue(UrlSetting, string.Empty);
+        }
+
+        private static bool IsUrlValid(string url, out Uri uri)
+        {
+            uri = null;
+            return string.IsNullOrEmpty(url) && Uri.TryCreate(url, UriKind.Absolute, out uri);
         }
     }
 }

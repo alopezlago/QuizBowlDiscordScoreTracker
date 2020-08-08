@@ -18,7 +18,9 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 - Libraries from Nuget:
   - Discord.Net
   - Moq
-  - These may be automatically downloaded. If not, you can get them by Managing your Nuget references in the Visual Studio solution.
+  - These may be automatically downloaded. If not, you can get them by Managing your Nuget references in the
+ Visual Studio solution.
+- Install [Libman](https://docs.microsoft.com/en-us/aspnet/core/client-side/libman/libman-cli), and run `libman restore` in the Web directory
 - You will need to create your own Discord bot at https://discordapp.com/developers. Follow the steps around creating your bot in Discord mentioned in the "Running the bot on your own machine" section.
     
 #### Runnig the bot on your own machine

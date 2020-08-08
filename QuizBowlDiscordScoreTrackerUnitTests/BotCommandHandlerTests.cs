@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using QuizBowlDiscordScoreTracker;
@@ -153,7 +154,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             MessageStore messageStore = new MessageStore();
             ICommandContext commandContext = CreateCommandContext(
                 messageStore, DefaultIds, DefaultChannelId, DefaultReaderId);
-            BotCommandHandler handler = new BotCommandHandler(commandContext, manager, currentGame, Mock.Of<ILogger>());
+
+
+            BotCommandHandler handler = new BotCommandHandler(
+                commandContext, manager, currentGame, Mock.Of<ILogger>(), CreateConfigurationOptionsMonitor());
 
             await handler.ClearAll();
 
@@ -372,7 +376,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             messageStore = new MessageStore();
             ICommandContext commandContext = CreateCommandContext(
                 messageStore, existingUserIds, channelId, userId);
-            handler = new BotCommandHandler(commandContext, manager, currentGame, Mock.Of<ILogger>());
+            handler = new BotCommandHandler(
+                commandContext, manager, currentGame, Mock.Of<ILogger>(), CreateConfigurationOptionsMonitor());
         }
 
         private static ICommandContext CreateCommandContext(
@@ -439,6 +444,16 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 .Setup(user => user.Username)
                 .Returns($"User_{id}");
             return mockUser.Object;
+        }
+
+        private static IOptionsMonitor<BotConfiguration> CreateConfigurationOptionsMonitor()
+        {
+            Mock<IOptionsMonitor<BotConfiguration>> mockOptionsMonitor = new Mock<IOptionsMonitor<BotConfiguration>>();
+            Mock<BotConfiguration> mockConfiguration = new Mock<BotConfiguration>();
+
+            // We can't set the WebURL directly without making it virtual or adding an interface for BotConfiguration
+            mockOptionsMonitor.Setup(options => options.CurrentValue).Returns(mockConfiguration.Object);
+            return mockOptionsMonitor.Object;
         }
 
         private static ulong GetExistingNonReaderUserId(ulong readerId = DefaultReaderId)

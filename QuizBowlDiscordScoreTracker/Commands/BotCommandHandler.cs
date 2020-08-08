@@ -55,7 +55,10 @@ namespace QuizBowlDiscordScoreTracker.Commands
                      "Game started in guild '{0}' in channel '{1}'", guildChannel.Guild.Name, guildChannel.Name);
             }
 
-            await this.context.Channel.SendMessageAsync($"{this.context.User.Mention} is the reader. Please visit {options.CurrentValue.WebBaseURL}?{this.context.Channel.Id} to hear buzzes.");
+            string message = this.options.CurrentValue.WebBaseURL == null ?
+                $"{this.context.User.Mention} is the reader." :
+                $"{this.context.User.Mention} is the reader. Please visit {this.options.CurrentValue.WebBaseURL}?{this.context.Channel.Id} to hear buzzes.";
+            await this.context.Channel.SendMessageAsync(message);
         }
 
         public async Task SetNewReader(ulong newReaderId)

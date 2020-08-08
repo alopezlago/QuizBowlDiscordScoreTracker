@@ -7,9 +7,9 @@ namespace QuizBowlDiscordScoreTracker.Web
     {
         public async Task AddToChannel(string channelId)
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, channelId);
+            await this.Groups.AddToGroupAsync(this.Context.ConnectionId, channelId);
 
-            await Clients.Client(Context.ConnectionId).SendAsync("JoinSuccess", channelId);
+            await this.Clients.Client(this.Context.ConnectionId).SendAsync("JoinSuccess", channelId);
         }
     }
 }
