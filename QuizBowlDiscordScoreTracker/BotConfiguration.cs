@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -15,10 +14,6 @@ namespace QuizBowlDiscordScoreTracker
         //    "muteDelayMs": 500,
         //    "buzzEmojis": [":buzz:"],
         //    "webBaseUrl": "https://localhost:8080/index.html"
-        //    "supportedChannels": {
-        //        "server1": [{ "text": "channel1", "voice": "Voice Channel" }],
-        //        "server2": [{ "text": "packet", "voice": "Packet Voice" }, { text: "channel2" }],
-        //    }
         // }
         // Token currently comes from a separate file, since it should eventually be encrypted and not included with
         // the config file.
@@ -27,8 +22,8 @@ namespace QuizBowlDiscordScoreTracker
             // Use defaults
             this.WaitForRejoinMs = 1000;
             this.MuteDelayMs = 500;
+            this.DatabaseDataSource = null;
             this.BuzzEmojis = Array.Empty<string>();
-            this.SupportedChannels = new Dictionary<string, ChannelPair[]>();
             this.BotToken = string.Empty;
             this.WebBaseURL = null;
         }
@@ -39,17 +34,26 @@ namespace QuizBowlDiscordScoreTracker
         /// </summary>
         public int WaitForRejoinMs { get; set; }
 
+        /// <summary>
+        /// The amount of time, in milliseconds, to mute the reader after a buzz occurs.
+        /// </summary>
         public int MuteDelayMs { get; set; }
 
         /// <summary>
-        /// The channels which the bot will listen to. It maps guild/server names to channels supported on that server.
+        /// The DataSource to use for the database storing guild-specific settings. This is generally a file path, but
+        /// it can be ":memory:" if you don't want to store anything on disk. If this isn't defined, use the default
+        /// data source location.
+        /// </summary>
+        public virtual string DatabaseDataSource { get; set; }
+
+        // TODO: Add an upgrade script with the normal bot, so teams will have their channels paired automatically.
+        /// <summary>
+        /// DEPRECATED. The channels which the bot will listen to. It maps guild/server names to channels supported on that server.
         /// If this is null, then every channel is supported.
-        /// A version which uses guild/channel IDs instead may be supported later.
         /// </summary>
         [SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "Needed for deserializer")]
+        [Obsolete("Users should use the !pairChannels/!unpairChannel commands instead")]
         public IDictionary<string, ChannelPair[]> SupportedChannels { get; set; }
-
-        /// <summary>
         /// The emojis which represent buzzes. They should be of the form ":buzz:", which is the emoji text the user
         /// types.
         /// </summary>
@@ -61,32 +65,5 @@ namespace QuizBowlDiscordScoreTracker
 
         public string BotToken { get; set; }
         public Uri WebBaseURL { get; set; }
-
-        public bool IsTextSupportedChannel(string guildName, string channelName)
-        {
-            if (this.SupportedChannels == null)
-            {
-                return true;
-            }
-
-            // We could convert supportedChannels into a Dictionary in the constructor so we can do these
-            // lookups more efficiently. In general there shouldn't be too many supported channels per guild so
-            // this shouldn't be bad performance-wise.
-            return this.SupportedChannels.TryGetValue(guildName, out ChannelPair[] supportedChannels) &&
-                supportedChannels.Select(pair => pair.Text).Contains(channelName);
-        }
-
-        public bool TryGetVoiceChannelName(string guildName, string textChannelName, out string voiceChannelName)
-        {
-            if (!this.SupportedChannels.TryGetValue(guildName, out ChannelPair[] supportedChannels))
-            {
-                voiceChannelName = null;
-                return false;
-            }
-
-            ChannelPair channelPair = supportedChannels.FirstOrDefault(pair => pair.Text == textChannelName);
-            voiceChannelName = channelPair.Voice;
-            return voiceChannelName != null;
-        }
     }
 }

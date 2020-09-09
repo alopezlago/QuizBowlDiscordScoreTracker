@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
@@ -17,6 +18,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.Web;
 using Serilog;
 
@@ -25,7 +27,7 @@ namespace QuizBowlDiscordScoreTracker
     // TODO: Refactor this so that most of the methods are in a separate class that is easily testable.
     public sealed class Bot : BackgroundService
     {
-        private static readonly Regex BuzzRegex = new Regex("^bu?z+$", RegexOptions.IgnoreCase);
+        private static readonly Regex BuzzRegex = new Regex("^\\s*bu?z+\\s*$", RegexOptions.IgnoreCase);
 
         // TODO: We may need a lock for this, and this lock would need to be accessible form BotCommands. We could wrap
         // this in an object which would do the locking for us.
@@ -37,6 +39,7 @@ namespace QuizBowlDiscordScoreTracker
         private readonly ILogger logger;
         private readonly DiscordNetEventLogger discordNetEventLogger;
         private readonly IDisposable configurationChangeCallback;
+        private readonly IDatabaseActionFactory dbActionFactory;
 
         [SuppressMessage("Code Quality", "CA2213:Disposable fields should be disposed", Justification = "Dispose method is inaccessible")]
         private readonly CommandService commandService;
@@ -58,6 +61,7 @@ namespace QuizBowlDiscordScoreTracker
             this.hubContext = hubContext;
             this.gameStateManager = new GameStateManager();
             this.options = options;
+            this.dbActionFactory = new SqliteDatabaseActionFactory(this.options.CurrentValue.DatabaseDataSource);
 
             // TODO: Rewrite this so that
             // #1: buzz emojis are server-dependent, since emojis are
@@ -75,6 +79,7 @@ namespace QuizBowlDiscordScoreTracker
             serviceCollection.AddSingleton(this.client);
             serviceCollection.AddSingleton(this.gameStateManager);
             serviceCollection.AddSingleton(this.options);
+            serviceCollection.AddSingleton(this.dbActionFactory);
             this.serviceProvider = serviceCollection.BuildServiceProvider();
 
             this.commandService = new CommandService(new CommandServiceConfig()
@@ -109,6 +114,7 @@ namespace QuizBowlDiscordScoreTracker
             this.discordNetEventLogger.Dispose();
             this.configurationChangeCallback.Dispose();
             this.client.Dispose();
+            base.Dispose();
         }
 
         private static IEnumerable<Regex> BuildBuzzEmojiRegexes(BotConfiguration options)
@@ -135,10 +141,19 @@ namespace QuizBowlDiscordScoreTracker
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            // Make sure the database exists
+            using (DatabaseAction action = this.dbActionFactory.Create())
+            {
+                await action.MigrateAsync();
+            }
+
+            stoppingToken.ThrowIfCancellationRequested();
+
             // TODO: If we go to a more proper service architecture, move more of the initialization logic from the
             // constructor to here, since we could start/stop the client multiple times.
             string token = this.options.CurrentValue.BotToken;
             await this.client.LoginAsync(TokenType.Bot, token);
+            stoppingToken.ThrowIfCancellationRequested();
             await this.client.StartAsync();
         }
 
@@ -148,19 +163,31 @@ namespace QuizBowlDiscordScoreTracker
             return base.StopAsync(cancellationToken);
         }
 
-        private async Task<Tuple<IVoiceChannel, IGuildUser>> MuteReader(
-            ITextChannel textChannel, string voiceChannelName, ulong? readerId)
+        private async Task<Tuple<IVoiceChannel, IGuildUser>> MuteReader(ITextChannel textChannel, ulong? readerId)
         {
-            IGuildUser reader = null;
+            Stopwatch stopwatch = new Stopwatch();
+            stopwatch.Start();
+            ulong? voiceChannelId = null;
+            using (DatabaseAction action = this.dbActionFactory.Create())
+            {
+                voiceChannelId = await action.GetPairedVoiceChannelIdOrNullAsync(textChannel.Id);
+            }
 
-            IReadOnlyCollection<IVoiceChannel> voiceChannels = await textChannel.Guild.GetVoiceChannelsAsync();
-            IVoiceChannel voiceChannel = voiceChannels.FirstOrDefault(channel => channel.Name == voiceChannelName);
+            stopwatch.Stop();
+            this.logger.Verbose($"Time to get paired channel: {stopwatch.ElapsedMilliseconds} ms");
+
+            if (voiceChannelId == null)
+            {
+                return null;
+            }
+
+            IVoiceChannel voiceChannel = await textChannel.Guild.GetVoiceChannelAsync(voiceChannelId.Value);
             if (voiceChannel == null)
             {
                 return null;
             }
 
-            reader = await textChannel.Guild.GetUserAsync(readerId.Value);
+            IGuildUser reader = await textChannel.Guild.GetUserAsync(readerId.Value);
             try
             {
                 // Make sure the reader didn't mute themselves or leave the voice channel
@@ -187,18 +214,15 @@ namespace QuizBowlDiscordScoreTracker
         {
             if (state.TryGetNextPlayer(out ulong userId))
             {
-                Tuple<IVoiceChannel, IGuildUser> voiceChannelReaderPair = null;
-                if (this.options.CurrentValue.TryGetVoiceChannelName(
-                    textChannel.Guild.Name, textChannel.Name, out string voiceChannelName))
-                {
-                    voiceChannelReaderPair = await this.MuteReader(textChannel, voiceChannelName, state.ReaderId);
-                }
-
                 IGuildUser user = await textChannel.Guild.GetUserAsync(userId);
-                await textChannel.SendMessageAsync(user.Mention);
-                await this.hubContext.Clients.Group(GroupFromChannel(textChannel))
+                Task<Tuple<IVoiceChannel, IGuildUser>> getVoiceChannelReaderPair = this.MuteReader(
+                    textChannel, state.ReaderId);
+                Task sendMessage = textChannel.SendMessageAsync(user.Mention);
+                Task alertWebSocket = this.hubContext.Clients.Group(GroupFromChannel(textChannel))
                     .SendAsync("PlayerBuzz", user.Nickname ?? user.Username);
+                await Task.WhenAll(getVoiceChannelReaderPair, sendMessage, alertWebSocket);
 
+                Tuple<IVoiceChannel, IGuildUser> voiceChannelReaderPair = getVoiceChannelReaderPair.Result;
                 if (voiceChannelReaderPair != null)
                 {
                     // We want to run this on a separate thread and not block the event handler
@@ -232,7 +256,6 @@ namespace QuizBowlDiscordScoreTracker
             // Some commands may need to be taken in DM channels. Everything for handling buzzes and scoring should be
             // on the main channel 
             if (!(userMessage.Channel is ITextChannel channel &&
-                this.options.CurrentValue.IsTextSupportedChannel(channel.Guild.Name, channel.Name) &&
                 this.gameStateManager.TryGet(channel.Id, out GameState state)))
             {
                 return;
