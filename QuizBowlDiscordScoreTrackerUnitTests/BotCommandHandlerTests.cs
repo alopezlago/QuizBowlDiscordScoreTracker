@@ -492,6 +492,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 DefaultChannelId,
                 voiceChannelId,
                 voiceChannelName,
+                DefaultReaderId,
                 out BotCommandHandler handler,
                 out MessageStore messageStore,
                 out IGuildTextChannel textChannel);
@@ -527,6 +528,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 DefaultChannelId,
                 voiceChannelId,
                 voiceChannelName,
+                DefaultReaderId,
                 out BotCommandHandler handler,
                 out MessageStore messageStore,
                 out IGuildTextChannel textChannel);
@@ -581,6 +583,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ulong textChannelId,
             ulong voiceChannelId,
             string voiceChannelName,
+            ulong userId,
             out BotCommandHandler handler,
             out MessageStore messageStore,
             out IGuildTextChannel textChannel)
@@ -636,6 +639,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             textChannel = mockMessageChannel.Object;
 
+            mockCommandContext
+                .Setup(context => context.User)
+                .Returns(CreateGuildUser(userId));
             mockCommandContext
                 .Setup(context => context.Channel)
                 .Returns(mockMessageChannel.Object);

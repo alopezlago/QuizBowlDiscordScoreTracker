@@ -217,7 +217,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 await action.PairChannelsAsync(this.context.Guild.Id, textChannel.Id, voiceChannel.Id);
             }
 
-            this.logger.Information($"Channels {textChannel.Id} and {voiceChannel.Id} paired successfully");
+            this.logger.Information(
+                $"Channels {textChannel.Id} and {voiceChannel.Id} paired successfully by user {this.context.User.Id}");
             await this.context.Channel.SendMessageAsync("Text and voice channel paired successfully");
         }
 
@@ -234,7 +235,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 await action.UnpairChannelAsync(textChannel.Id);
             }
 
-            this.logger.Information($"Channel {textChannel.Id} unpaired successfully");
+            this.logger.Information($"Channel {textChannel.Id} unpaired successfully by user {this.context.User.Id}");
             await this.context.Channel.SendMessageAsync("Text and voice channel unpaired successfully");
         }
 
@@ -245,7 +246,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 await action.ClearTeamRolePrefixAsync(this.context.Guild.Id);
             }
 
-            this.logger.Information($"Team prefix cleared in guild {this.context.Guild.Id}");
+            this.logger.Information($"Team prefix cleared in guild {this.context.Guild.Id} by user {this.context.User.Id}");
             await this.context.Channel.SendMessageAsync("Prefix unset. Roles no longer determine who is on a team.");
         }
 
@@ -268,7 +269,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 await action.SetTeamRolePrefixAsync(this.context.Guild.Id, prefix);
             }
 
-            this.logger.Information($"Team prefix set in guild {this.context.Guild.Id}");
+            this.logger.Information($"Team prefix set in guild {this.context.Guild.Id} by user {this.context.User.Id}");
             await this.context.Channel.SendMessageAsync(
                 @$"Prefix set. Players who have the same role starting with ""{prefix}"" will be on the same team.");
         }
