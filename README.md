@@ -17,16 +17,18 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
   - If using Visual Studio, you need Visual Studio 2017.5
 - Libraries from Nuget:
   - Discord.Net
+  - Microsoft.EntityFrameworkCore (Design, Tools, and Sqlite)
+  - Microsoft.Extensions (Hosting, Configuration, Configuration.Json)
+  - Serilog
   - Moq
-  - These may be automatically downloaded. If not, you can get them by Managing your Nuget references in the
- Visual Studio solution.
+  - These may be automatically downloaded. If not, you can get them by Managing your Nuget references in the Visual Studio solution.
 - Install [Libman](https://docs.microsoft.com/en-us/aspnet/core/client-side/libman/libman-cli), and run `libman restore` in the Web directory
 - You will need to create your own Discord bot at https://discordapp.com/developers. Follow the steps around creating your bot in Discord mentioned in the "Running the bot on your own machine" section.
     
 #### Runnig the bot on your own machine
 - Install [.Net Core Runtime 3.1](https://dotnet.microsoft.com/download/dotnet-core/3.1)  
 - Unzip the release
-- Create your own config file, with the name of your server and packet channels, and any custom emojis that can represent a buzz. Use the sampleConfig.txt file as an example. Your file should be called config.txt.
+- Create your own config file. Use the sampleConfig.txt file as an example. Your file should be called config.txt.
 - Go to https://discordapp.com/developers to register your instance of the bot
   - Update token.txt with the client secret from your registered Discord bot
   - Visit this site (with your bot's client ID) to add the bot to your channel
@@ -34,13 +36,14 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 - Run the .exe file
 - Grant your bot the following permissions:
   - Read Text Channels & See Voice Messages
+  - Embed Links
   - Send Messages
   - Mute Members
   
 #### Running the bot on the author's machine
-- Contact the author. Tell him the server name and the text and voice channel names used for packets
 - Visit this site to add the bot to your server: https://discordapp.com/oauth2/authorize?client_id=469025702885326849&scope=bot
 - Grant your bot the following permissions:
   - Read Text Channels & See Voice Messages
+  - Embed Links
   - Send Messages
   - Mute Members

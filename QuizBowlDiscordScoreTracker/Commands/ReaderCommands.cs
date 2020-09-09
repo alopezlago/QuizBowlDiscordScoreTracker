@@ -2,14 +2,18 @@
 using Discord;
 using Discord.Commands;
 using Microsoft.Extensions.Options;
+using QuizBowlDiscordScoreTracker.Database;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
     [RequireReader]
     public class ReaderCommands : BotCommandBase
     {
-        public ReaderCommands(GameStateManager manager, IOptionsMonitor<BotConfiguration> options)
-            : base(manager, options)
+        public ReaderCommands(
+            GameStateManager manager,
+            IOptionsMonitor<BotConfiguration> options,
+            IDatabaseActionFactory dbActionFactory)
+            : base(manager, options, dbActionFactory)
         {
         }
 

@@ -5,27 +5,50 @@ using System.Linq;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Commands;
+using QuizBowlDiscordScoreTracker.Database;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
     [TestClass]
-    public class BotCommandHandlerTests
+    public sealed class BotCommandHandlerTests : IDisposable
     {
         private const ulong DefaultReaderId = 1;
         private static readonly HashSet<ulong> DefaultIds = new HashSet<ulong>(new ulong[] { 1, 2, 3 });
 
         private const ulong DefaultChannelId = 11;
+        private const ulong DefaultGuildId = 9;
+
+        private InMemoryBotConfigurationContextFactory botConfigurationfactory;
+
+        [TestInitialize]
+        public void InitializeTest()
+        {
+            this.botConfigurationfactory = new InMemoryBotConfigurationContextFactory();
+
+            // Make sure the database is initialized before running the test
+            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            {
+                context.Database.Migrate();
+            }
+        }
+
+        [TestCleanup]
+        public void Dispose()
+        {
+            this.botConfigurationfactory.Dispose();
+        }
 
         [TestMethod]
         public async Task CanSetReaderToExistingUser()
         {
-            CreateHandler(
+            this.CreateHandler(
                 DefaultIds,
                 DefaultChannelId,
                 DefaultReaderId,
@@ -46,7 +69,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             // This will fail, but in our use case this would be impossible.
             ulong readerId = GetNonexistentUserId();
-            CreateHandler(
+            this.CreateHandler(
                 DefaultIds,
                 DefaultChannelId,
                 readerId,
@@ -64,7 +87,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong existingReaderId = 1;
             const ulong newReaderId = 2;
 
-            CreateHandler(
+            this.CreateHandler(
                 DefaultIds,
                 DefaultChannelId,
                 newReaderId,
@@ -82,7 +105,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task CanSetExistingUserAsNewReader()
         {
             ulong newReaderId = GetExistingNonReaderUserId();
-            CreateHandler(
+            this.CreateHandler(
                 DefaultIds,
                 DefaultChannelId,
                 DefaultReaderId,
@@ -106,7 +129,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task CannotSetNewReaderWhenReaderChoosesNonexistentUser()
         {
             ulong newReaderId = GetNonexistentUserId();
-            CreateHandler(
+            this.CreateHandler(
                 DefaultIds,
                 DefaultChannelId,
                 DefaultReaderId,
@@ -131,7 +154,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task ClearEmptiesQueue()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            CreateHandler(
+            this.CreateHandler(
                 DefaultIds,
                 DefaultChannelId,
                 DefaultReaderId,
@@ -157,7 +180,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
 
             BotCommandHandler handler = new BotCommandHandler(
-                commandContext, manager, currentGame, Mock.Of<ILogger>(), CreateConfigurationOptionsMonitor());
+                commandContext,
+                manager,
+                currentGame,
+                Mock.Of<ILogger>(),
+                CreateConfigurationOptionsMonitor(),
+                this.CreateDatabaseActionFactory());
 
             await handler.ClearAll();
 
@@ -171,7 +199,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task NextQuestionClears()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            CreateHandler(
+            this.CreateHandler(
                 DefaultIds,
                 DefaultChannelId,
                 DefaultReaderId,
@@ -190,7 +218,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task CanUndoWithReader()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            CreateHandler(
+            this.CreateHandler(
                 DefaultIds,
                 DefaultChannelId,
                 DefaultReaderId,
@@ -222,7 +250,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             // Unprivileged users should be able to get the score.
             ulong buzzer = GetExistingNonReaderUserId();
-            CreateHandler(
+            this.CreateHandler(
                 DefaultIds,
                 DefaultChannelId,
                 DefaultReaderId,
@@ -263,7 +291,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 existingIds.Add(i);
             }
 
-            CreateHandler(
+            this.CreateHandler(
                 existingIds,
                 DefaultChannelId,
                 DefaultReaderId,
@@ -320,11 +348,6 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public async Task GetScoreShowsNoMoreThanLimit()
         {
-            GameState existingState = new GameState
-            {
-                ReaderId = 0
-            };
-
             HashSet<ulong> existingIds = new HashSet<ulong>();
             const ulong lastId = GameState.ScoresListLimit + 1;
             for (ulong i = 1; i <= lastId; i++)
@@ -332,7 +355,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 existingIds.Add(i);
             }
 
-            CreateHandler(
+            this.CreateHandler(
                 existingIds,
                 DefaultChannelId,
                 0,
@@ -363,7 +386,176 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 $"Number of scorers shown is not the same as the scoring limit.");
         }
 
-        private static void CreateHandler(
+        [TestMethod]
+        public async Task SetTeamRole()
+        {
+            const string prefix = "Team #";
+            const string newPrefix = "New Team #";
+            this.CreateHandler(
+                DefaultIds,
+                DefaultChannelId,
+                0,
+                out BotCommandHandler handler,
+                out GameState _,
+                out MessageStore messageStore);
+
+            await handler.SetTeamRolePrefix(prefix);
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+            string setMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                setMessage.Contains(prefix, StringComparison.InvariantCulture),
+                $"Prefix not in message \"{setMessage}\"");
+
+            messageStore.Clear();
+
+            await handler.GetTeamRolePrefix();
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after getting the team role");
+            string getMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                getMessage.Contains(prefix, StringComparison.InvariantCulture),
+                $"Prefix not in message \"{getMessage}\"");
+            Assert.AreNotEqual(setMessage, getMessage, "Get and set messages should be different");
+
+            messageStore.Clear();
+
+            await handler.SetTeamRolePrefix(newPrefix);
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
+            setMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                setMessage.Contains(newPrefix, StringComparison.InvariantCulture),
+                $"Prefix not in message \"{setMessage}\" after update");
+
+            messageStore.Clear();
+
+            await handler.GetTeamRolePrefix();
+            Assert.AreEqual(
+                1,
+                messageStore.ChannelMessages.Count,
+                "Unexpected number of messages when getting the team role after the update");
+            getMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                getMessage.Contains(prefix, StringComparison.InvariantCulture),
+                $"Prefix not in message \"{getMessage}\" after update");
+            Assert.AreNotEqual(setMessage, getMessage, "Get and set messages should be different after update");
+        }
+
+        [TestMethod]
+        public async Task ClearTeamRole()
+        {
+            const string prefix = "Team #";
+            this.CreateHandler(
+                DefaultIds,
+                DefaultChannelId,
+                0,
+                out BotCommandHandler handler,
+                out GameState _,
+                out MessageStore messageStore);
+
+            await handler.SetTeamRolePrefix(prefix);
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+            string setMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                setMessage.Contains(prefix, StringComparison.InvariantCulture),
+                $"Prefix not in message \"{setMessage}\"");
+
+            messageStore.Clear();
+
+            await handler.ClearTeamRolePrefix();
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
+            string clearMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                clearMessage.Contains("unset", StringComparison.InvariantCulture),
+                @$"""unset"" not in message ""{clearMessage}"" after update");
+
+            messageStore.Clear();
+
+            await handler.GetTeamRolePrefix();
+            Assert.AreEqual(
+                1,
+                messageStore.ChannelMessages.Count,
+                "Unexpected number of messages when getting the team role after the update");
+            string getMessage = messageStore.ChannelMessages[0];
+            Assert.AreEqual("No team prefix used", getMessage, $"The team role prefix was not cleared");
+        }
+
+        [TestMethod]
+        public async Task PairChannels()
+        {
+            const string voiceChannelName = "Packet Voice";
+            const ulong voiceChannelId = DefaultChannelId + 10;
+            this.CreateHandler(
+                DefaultChannelId,
+                voiceChannelId,
+                voiceChannelName,
+                out BotCommandHandler handler,
+                out MessageStore messageStore,
+                out IGuildTextChannel textChannel);
+
+            await handler.PairChannels(textChannel, voiceChannelName);
+
+            // TODO: Check the exact string once this issue is fixed:
+            // https://github.com/alopezlago/QuizBowlDiscordScoreTracker/issues/23
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
+            string setMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                setMessage.Contains("success", StringComparison.InvariantCulture),
+                @$"Pairing message doesn't mention ""success"". Message: {setMessage}");
+            messageStore.Clear();
+
+            await handler.GetPairedChannel(textChannel);
+
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
+            string getMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                getMessage.Contains(voiceChannelName, StringComparison.InvariantCulture),
+                $"Voice channel name not found in get message. Message: {getMessage}");
+        }
+
+        [TestMethod]
+        public async Task UnpairChannel()
+        {
+            const string voiceChannelName = "Packet Voice";
+            const ulong voiceChannelId = DefaultChannelId + 10;
+            this.CreateHandler(
+                DefaultChannelId,
+                voiceChannelId,
+                voiceChannelName,
+                out BotCommandHandler handler,
+                out MessageStore messageStore,
+                out IGuildTextChannel textChannel);
+
+            await handler.PairChannels(textChannel, voiceChannelName);
+
+            // TODO: Check the exact string once this issue is fixed:
+            // https://github.com/alopezlago/QuizBowlDiscordScoreTracker/issues/23
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
+            string setMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                setMessage.Contains("success", StringComparison.InvariantCultureIgnoreCase),
+                @$"Pairing message doesn't mention ""success"". Message: {setMessage}");
+            messageStore.Clear();
+
+            await handler.UnpairChannel(textChannel);
+
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
+            string getMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                getMessage.Contains("unpair", StringComparison.InvariantCultureIgnoreCase),
+                @$"Unpairing message doesn't mention ""unpaired"". Message: {getMessage}");
+        }
+
+        // TODO: Verify perf isn't bad for DBAction actions
+
+        private void CreateHandler(
             HashSet<ulong> existingUserIds,
             ulong channelId,
             ulong userId,
@@ -377,7 +569,88 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ICommandContext commandContext = CreateCommandContext(
                 messageStore, existingUserIds, channelId, userId);
             handler = new BotCommandHandler(
-                commandContext, manager, currentGame, Mock.Of<ILogger>(), CreateConfigurationOptionsMonitor());
+                commandContext,
+                manager,
+                currentGame,
+                Mock.Of<ILogger>(),
+                CreateConfigurationOptionsMonitor(),
+                this.CreateDatabaseActionFactory());
+        }
+
+        private void CreateHandler(
+            ulong textChannelId,
+            ulong voiceChannelId,
+            string voiceChannelName,
+            out BotCommandHandler handler,
+            out MessageStore messageStore,
+            out IGuildTextChannel textChannel)
+        {
+            // We need a local copy for the mocked methods
+            MessageStore localMessageStore = new MessageStore();
+            messageStore = localMessageStore;
+
+            Mock<ICommandContext> mockCommandContext = new Mock<ICommandContext>();
+            Mock<IGuild> mockGuild = new Mock<IGuild>();
+            mockGuild.Setup(guild => guild.Id).Returns(777);
+
+            Mock<IVoiceChannel> mockVoiceChannel = new Mock<IVoiceChannel>();
+            mockVoiceChannel.Setup(voiceChannel => voiceChannel.Id).Returns(voiceChannelId);
+            mockVoiceChannel.Setup(voiceChannel => voiceChannel.Name).Returns(voiceChannelName);
+            mockGuild
+                .Setup(guild => guild.GetVoiceChannelAsync(It.IsAny<ulong>(), It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
+                .Returns(Task.FromResult(mockVoiceChannel.Object));
+
+            List<IVoiceChannel> voiceChannels = new List<IVoiceChannel>()
+            {
+                mockVoiceChannel.Object
+            };
+            mockGuild
+                .Setup(guild => guild.GetVoiceChannelsAsync(It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
+                .Returns(Task.FromResult<IReadOnlyCollection<IVoiceChannel>>(voiceChannels));
+
+            Mock<IUserMessage> mockUserMessage = new Mock<IUserMessage>();
+            Mock<IGuildTextChannel> mockMessageChannel = new Mock<IGuildTextChannel>();
+            mockMessageChannel
+                .Setup(channel => channel.Id)
+                .Returns(textChannelId);
+            mockMessageChannel
+                .Setup(channel => channel.SendMessageAsync(It.IsAny<string>(), false, null, It.IsAny<RequestOptions>()))
+                .Returns<string, bool, Embed, RequestOptions>((message, isTTS, embed, options) =>
+                {
+                    localMessageStore.ChannelMessages.Add(message);
+                    return Task.FromResult(mockUserMessage.Object);
+                });
+            mockMessageChannel
+                .Setup(channel => channel.SendMessageAsync(null, false, It.IsAny<Embed>(), It.IsAny<RequestOptions>()))
+                .Returns<string, bool, Embed, RequestOptions>((message, isTTS, embed, options) =>
+                {
+                    localMessageStore.ChannelEmbeds.Add(GetMockEmbedText(embed));
+                    return Task.FromResult(mockUserMessage.Object);
+                });
+            mockMessageChannel
+                .Setup(channel => channel.Name)
+                .Returns("gameChannel");
+            mockMessageChannel
+                .Setup(channel => channel.Guild)
+                .Returns(mockGuild.Object);
+
+            textChannel = mockMessageChannel.Object;
+
+            mockCommandContext
+                .Setup(context => context.Channel)
+                .Returns(mockMessageChannel.Object);
+            mockCommandContext
+                .Setup(context => context.Guild)
+                .Returns(mockGuild.Object);
+
+            GameStateManager manager = new GameStateManager();
+            handler = new BotCommandHandler(
+                mockCommandContext.Object,
+                manager,
+                null,
+                Mock.Of<ILogger>(),
+                CreateConfigurationOptionsMonitor(),
+                this.CreateDatabaseActionFactory());
         }
 
         private static ICommandContext CreateCommandContext(
@@ -385,7 +658,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             Mock<ICommandContext> mockCommandContext = new Mock<ICommandContext>();
 
-            Mock<IMessageChannel> mockMessageChannel = new Mock<IMessageChannel>();
+            Mock<IGuildTextChannel> mockMessageChannel = new Mock<IGuildTextChannel>();
             Mock<IUserMessage> mockUserMessage = new Mock<IUserMessage>();
             mockMessageChannel
                 .Setup(channel => channel.Id)
@@ -404,6 +677,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     messageStore.ChannelEmbeds.Add(GetMockEmbedText(embed));
                     return Task.FromResult(mockUserMessage.Object);
                 });
+            mockMessageChannel
+                .Setup(channel => channel.Name)
+                .Returns("gameChannel");
 
             Mock<IGuild> mockGuild = new Mock<IGuild>();
             mockGuild
@@ -417,6 +693,19 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
                     return Task.FromResult<IGuildUser>(null);
                 });
+            mockGuild.Setup(guild => guild.Id).Returns(DefaultGuildId);
+
+            Mock<IGuildUser> mockBotUser = new Mock<IGuildUser>();
+            mockBotUser
+                .Setup(user => user.GetPermissions(It.IsAny<IGuildChannel>()))
+                .Returns(new ChannelPermissions(viewChannel: true, sendMessages: true, embedLinks: true));
+            mockGuild
+                .Setup(guild => guild.GetCurrentUserAsync(It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
+                .Returns(Task.FromResult(mockBotUser.Object));
+
+            mockMessageChannel
+                .Setup(channel => channel.Guild)
+                .Returns(mockGuild.Object);
 
             mockCommandContext
                 .Setup(context => context.User)
@@ -450,10 +739,27 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             Mock<IOptionsMonitor<BotConfiguration>> mockOptionsMonitor = new Mock<IOptionsMonitor<BotConfiguration>>();
             Mock<BotConfiguration> mockConfiguration = new Mock<BotConfiguration>();
+            mockConfiguration
+                .Setup(config => config.DatabaseDataSource)
+                .Returns("memory&cached=true");
 
             // We can't set the WebURL directly without making it virtual or adding an interface for BotConfiguration
             mockOptionsMonitor.Setup(options => options.CurrentValue).Returns(mockConfiguration.Object);
             return mockOptionsMonitor.Object;
+        }
+
+        private IDatabaseActionFactory CreateDatabaseActionFactory()
+        {
+            // TODO: See how we can dispose this correctly
+
+            Mock<IDatabaseActionFactory> mockDbActionFactory = new Mock<IDatabaseActionFactory>();
+            mockDbActionFactory
+                .Setup(dbActionFactory => dbActionFactory.Create())
+                .Returns(() =>
+                {
+                    return new DatabaseAction(this.botConfigurationfactory.Create());
+                });
+            return mockDbActionFactory.Object;
         }
 
         private static ulong GetExistingNonReaderUserId(ulong readerId = DefaultReaderId)

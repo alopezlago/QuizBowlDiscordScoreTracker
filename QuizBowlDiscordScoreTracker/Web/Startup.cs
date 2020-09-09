@@ -25,6 +25,9 @@ namespace QuizBowlDiscordScoreTracker.Web
             Justification = "Used by ASP.Net Core, and must be an instance method")]
         public void ConfigureServices(IServiceCollection services)
         {
+            // TODO: Initialize the BotConfigurationContext here with AddDbContext. You need a service scope to use it,
+            // and we'd need to move away from using Program.cs and making this a proper IHostedService. See
+            // https://stackoverflow.com/questions/51618406/cannot-consume-scoped-service-mydbcontext-from-singleton-microsoft-aspnetcore
             // TODO: See if there's a way we can avoid initializing SignalR if the url setting isn't set. I suspect
             // it's not possible, since we pass in the IHubContext to the Bot constructor, and it probably needs a
             // registered type for the interface

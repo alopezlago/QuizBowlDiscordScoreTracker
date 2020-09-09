@@ -2,6 +2,7 @@
 using System.Threading.Tasks;
 using Discord.Commands;
 using Microsoft.Extensions.Options;
+using QuizBowlDiscordScoreTracker.Database;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker.Commands
@@ -13,21 +14,20 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         private readonly GameStateManager manager;
         private readonly IOptionsMonitor<BotConfiguration> options;
+        private readonly IDatabaseActionFactory databaseActionFactory;
 
-        public BotCommandBase(GameStateManager manager, IOptionsMonitor<BotConfiguration> options)
+        public BotCommandBase(
+            GameStateManager manager,
+            IOptionsMonitor<BotConfiguration> options,
+           IDatabaseActionFactory dbActionFactory)
         {
             this.manager = manager;
             this.options = options;
+            this.databaseActionFactory = dbActionFactory;
         }
 
         protected Task HandleCommandAsync(Func<BotCommandHandler, Task> handleCommandFunction)
         {
-            // If we're not in a supported channel, we should exit early
-            if (!this.options.CurrentValue.IsTextSupportedChannel(this.Context.Guild.Name, this.Context.Channel.Name))
-            {
-                return Task.CompletedTask;
-            }
-
             if (!this.manager.TryGet(this.Context.Channel.Id, out GameState gameState))
             {
                 gameState = null;
@@ -37,7 +37,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
             // tournament lock may block certain commands, and other commands are just long-running (like !start).
             // To work around this (and to keep the command handler unblocked), we have to run the task in a separate
             // thread, which requires us running it through Task.Run.
-            BotCommandHandler commandHandler = new BotCommandHandler(this.Context, this.manager, gameState, Logger, this.options);
+            BotCommandHandler commandHandler = new BotCommandHandler(
+                this.Context, this.manager, gameState, Logger, this.options, this.databaseActionFactory);
             Task.Run(async () =>
             {
                 try
