@@ -19,9 +19,9 @@ namespace QuizBowlDiscordScoreTracker.Commands
         [Command("mapConfigToDatabase")]
         [Summary("Maps configuration information from config.txt to the database, so users can control their own " +
             "guild-specific settings.")]
-        public Task MapConfigToDatabase()
+        public Task MapConfigToDatabaseAsync()
         {
-            return this.HandleCommandAsync(handler => handler.MapConfigToDatabase());
+            return this.HandleCommandAsync(handler => handler.MapConfigToDatabaseAsync());
         }
     }
 }

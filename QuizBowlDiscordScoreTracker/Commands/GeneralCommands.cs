@@ -17,16 +17,16 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         [Command("read")]
         [Summary("Set yourself as the reader.")]
-        public Task SetReader()
+        public Task SetReaderAsync()
         {
-            return this.HandleCommandAsync(handler => handler.SetReader());
+            return this.HandleCommandAsync(handler => handler.SetReaderAsync());
         }
 
         [Command("score")]
         [Summary("Get the top scores in the current game.")]
-        public Task GetScore()
+        public Task GetScoreAsync()
         {
-            return this.HandleCommandAsync(handler => handler.GetScore());
+            return this.HandleCommandAsync(handler => handler.GetScoreAsync());
         }
     }
 }

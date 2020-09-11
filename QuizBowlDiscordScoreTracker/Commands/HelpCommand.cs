@@ -22,19 +22,19 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         [Command("help")]
         [Summary("Lists available commands and how to use them.")]
-        public Task Help()
+        public Task HelpAsync()
         {
-            return this.SendHelpInformation();
+            return this.SendHelpInformationAsync();
         }
 
         [Command("help")]
         [Summary("Lists available commands and how to use them.")]
-        public Task Help([Remainder][Summary("Command name")] string rawCommandName)
+        public Task HelpAsync([Remainder][Summary("Command name")] string rawCommandName)
         {
-            return this.SendHelpInformation(rawCommandName);
+            return this.SendHelpInformationAsync(rawCommandName);
         }
 
-        private async Task SendHelpInformation(string rawCommandName = null)
+        private async Task SendHelpInformationAsync(string rawCommandName = null)
         {
             EmbedBuilder embedBuilder = new EmbedBuilder();
             IEnumerable<CommandInfo> commands = this.commandService.Commands

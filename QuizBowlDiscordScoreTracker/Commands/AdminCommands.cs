@@ -19,60 +19,60 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         [Command("checkPermissions")]
         [Summary("Checks if the bot has all the required permissions.")]
-        public Task CheckPermissions()
+        public Task CheckPermissionsAsync()
         {
-            return this.HandleCommandAsync(handler => handler.CheckPermissions());
+            return this.HandleCommandAsync(handler => handler.CheckPermissionsAsync());
         }
 
         [Command("clearTeamRolePrefix")]
         [Summary("Disables pairing players together based on sharing a role with the same prefix. Only server " +
             "admins can invoke this.")]
-        public Task ClearTeamRolePrefix()
+        public Task ClearTeamRolePrefixAsync()
         {
-            return this.HandleCommandAsync(handler => handler.ClearTeamRolePrefix());
+            return this.HandleCommandAsync(handler => handler.ClearTeamRolePrefixAsync());
         }
 
         [Command("getPairedChannel")]
         [Summary("Gets the name of the paired voice channel, if it exists. Only server admins can invoke this.")]
-        public Task GetPairedChannel([Summary("Text channel mention (#textChannelName)")] ITextChannel textChannel)
+        public Task GetPairedChannelAsync([Summary("Text channel mention (#textChannelName)")] ITextChannel textChannel)
         {
-            return this.HandleCommandAsync(handler => handler.GetPairedChannel(textChannel));
+            return this.HandleCommandAsync(handler => handler.GetPairedChannelAsync(textChannel));
         }
 
         [Command("getTeamRolePrefix")]
         [Summary("Posts the prefix for the role name used to assign teams, if it exists. Only server admins can " +
             "invoke this.")]
-        public Task GetTeamRolePrefix()
+        public Task GetTeamRolePrefixAsync()
         {
-            return this.HandleCommandAsync(handler => handler.GetTeamRolePrefix());
+            return this.HandleCommandAsync(handler => handler.GetTeamRolePrefixAsync());
         }
 
         [Command("pairChannels")]
         [Summary("Pairs a text channel with a voice channel, so buzzes will mute the reader. Only server admins can" +
             "invoke this.")]
-        public Task PairChannels(
+        public Task PairChannelsAsync(
             [Summary("Text channel mention (#textChannelName)")] ITextChannel textChannel,
             [Remainder][Summary("Name of the voice channel (no # included)")] string voiceChannel)
         {
-            return this.HandleCommandAsync(handler => handler.PairChannels(textChannel, voiceChannel));
+            return this.HandleCommandAsync(handler => handler.PairChannelsAsync(textChannel, voiceChannel));
         }
 
         [Command("setTeamRolePrefix")]
         [Summary("Players who have a role whose name shares the specified prefix will be on the same team. For " +
             @"example, if a user has the role ""Team Alpha"", and the prefix is set to ""Team"", then the player " +
             @"will be on a team with everyone else who has the role ""Team Alpha"". Only server admins can invoke this.")]
-        public Task SetTeamRolePrefix(
+        public Task SetTeamRolePrefixAsync(
             [Remainder][Summary("Prefix for roles that are used to group players into teams")] string prefix)
         {
-            return this.HandleCommandAsync(handler => handler.SetTeamRolePrefix(prefix));
+            return this.HandleCommandAsync(handler => handler.SetTeamRolePrefixAsync(prefix));
         }
 
         [Command("unpairChannel")]
         [Summary("Unpairs a text channel with its voice channel. Only server admins can invoke this.")]
-        public Task UnpairChannel(
+        public Task UnpairChannelAsync(
             [Summary("Text channel mention (#textChannelName)")] ITextChannel textChannel)
         {
-            return this.HandleCommandAsync(handler => handler.UnpairChannel(textChannel));
+            return this.HandleCommandAsync(handler => handler.UnpairChannelAsync(textChannel));
         }
     }
 }

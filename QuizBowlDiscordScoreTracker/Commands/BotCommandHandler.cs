@@ -38,7 +38,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             this.dbActionFactory = dbActionFactory;
         }
 
-        public async Task CheckPermissions()
+        public async Task CheckPermissionsAsync()
         {
             if (!(this.context.Channel is IGuildChannel guildChannel))
             {
@@ -110,7 +110,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         }
 
         // This converts the channel pair mappings in the config file into database entries
-        public async Task MapConfigToDatabase()
+        public async Task MapConfigToDatabaseAsync()
         {
 #pragma warning disable CS0618 // Type or member is obsolete. This method is used to help users move away from this obsolete setting
             IDictionary<string, ChannelPair[]> guildChannelPairs = this.options.CurrentValue.SupportedChannels;
@@ -165,7 +165,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.context.Channel.SendMessageAsync("Configurations mapped for all servers the bot is in.");
         }
 
-        public async Task GetPairedChannel(ITextChannel textChannel)
+        public async Task GetPairedChannelAsync(ITextChannel textChannel)
         {
             if (textChannel == null)
             {
@@ -192,7 +192,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.context.Channel.SendMessageAsync(message);
         }
 
-        public async Task PairChannels(ITextChannel textChannel, string voiceChannelName)
+        public async Task PairChannelsAsync(ITextChannel textChannel, string voiceChannelName)
         {
             if (textChannel == null || voiceChannelName == null)
             {
@@ -221,7 +221,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.context.Channel.SendMessageAsync("Text and voice channel paired successfully");
         }
 
-        public async Task UnpairChannel(ITextChannel textChannel)
+        public async Task UnpairChannelAsync(ITextChannel textChannel)
         {
             if (textChannel == null)
             {
@@ -238,7 +238,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.context.Channel.SendMessageAsync("Text and voice channel unpaired successfully");
         }
 
-        public async Task ClearTeamRolePrefix()
+        public async Task ClearTeamRolePrefixAsync()
         {
             using (DatabaseAction action = this.dbActionFactory.Create())
             {
@@ -249,7 +249,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.context.Channel.SendMessageAsync("Prefix unset. Roles no longer determine who is on a team.");
         }
 
-        public async Task GetTeamRolePrefix()
+        public async Task GetTeamRolePrefixAsync()
         {
             string prefix;
             using (DatabaseAction action = this.dbActionFactory.Create())
@@ -261,7 +261,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.context.Channel.SendMessageAsync(message);
         }
 
-        public async Task SetTeamRolePrefix(string prefix)
+        public async Task SetTeamRolePrefixAsync(string prefix)
         {
             using (DatabaseAction action = this.dbActionFactory.Create())
             {
@@ -273,7 +273,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 @$"Prefix set. Players who have the same role starting with ""{prefix}"" will be on the same team.");
         }
 
-        public async Task SetReader()
+        public async Task SetReaderAsync()
         {
             IGuildUser user = await this.context.Guild.GetUserAsync(this.context.User.Id);
             if (user == null)
@@ -318,7 +318,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.context.Channel.SendMessageAsync(message);
         }
 
-        public async Task SetNewReader(ulong newReaderId)
+        public async Task SetNewReaderAsync(ulong newReaderId)
         {
             IGuildUser newReader = await this.context.Guild.GetUserAsync(newReaderId);
             if (newReader != null)
@@ -340,7 +340,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.context.Channel.SendMessageAsync($"User could not be found. Could not set the new reader.");
         }
 
-        public Task Clear()
+        public Task ClearAsync()
         {
             if (this.currentGame != null)
             {
@@ -350,7 +350,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return Task.CompletedTask;
         }
 
-        public async Task ClearAll()
+        public async Task ClearAllAsync()
         {
             if (this.currentGame != null && this.manager.TryRemove(this.context.Channel.Id))
             {
@@ -366,7 +366,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
         }
 
-        public async Task GetScore()
+        public async Task GetScoreAsync()
         {
             if (this.currentGame?.ReaderId == null || !(this.context.Channel is IGuildChannel guildChannel))
             {
@@ -498,7 +498,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return Task.CompletedTask;
         }
 
-        public async Task Undo()
+        public async Task UndoAsync()
         {
             if (this.currentGame != null && this.currentGame.Undo(out ulong userId))
             {

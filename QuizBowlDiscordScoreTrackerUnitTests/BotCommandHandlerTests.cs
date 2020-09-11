@@ -56,7 +56,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out BotCommandHandler handler,
                 out GameState currentGame,
                 out MessageStore messageStore);
-            await handler.SetReader();
+            await handler.SetReaderAsync();
 
             Assert.AreEqual(DefaultReaderId, currentGame.ReaderId, "Reader ID was not set properly.");
             Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
@@ -77,7 +77,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out BotCommandHandler handler,
                 out GameState currentGame,
                 out MessageStore _);
-            await handler.SetReader();
+            await handler.SetReaderAsync();
 
             Assert.IsNull(currentGame.ReaderId, "Reader should not be set for nonexistent user.");
         }
@@ -96,7 +96,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out GameState currentGame,
                 out MessageStore messageStore);
             currentGame.ReaderId = existingReaderId;
-            await handler.SetReader();
+            await handler.SetReaderAsync();
 
             Assert.AreEqual(existingReaderId, currentGame.ReaderId, "Reader ID was not overwritten.");
             Assert.AreEqual(0, messageStore.ChannelMessages.Count, "No messages should be sent.");
@@ -115,7 +115,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out MessageStore messageStore);
             currentGame.ReaderId = 0;
 
-            await handler.SetNewReader(newReaderId);
+            await handler.SetNewReaderAsync(newReaderId);
 
             Assert.AreEqual(newReaderId, currentGame.ReaderId, "Reader ID was not set correctly.");
             Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
@@ -137,10 +137,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out BotCommandHandler handler,
                 out GameState currentGame,
                 out MessageStore messageStore);
-            await handler.SetReader();
+            await handler.SetReaderAsync();
             messageStore.Clear();
 
-            await handler.SetNewReader(newReaderId);
+            await handler.SetNewReaderAsync(newReaderId);
 
             Assert.AreEqual(DefaultReaderId, currentGame.ReaderId, "Reader ID should not have been reset.");
             Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
@@ -164,7 +164,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out MessageStore _);
 
             currentGame.AddPlayer(buzzer, "Player");
-            await handler.Clear();
+            await handler.ClearAsync();
 
             Assert.IsFalse(currentGame.TryGetNextPlayer(out ulong _), "Queue should've been cleared.");
             Assert.IsTrue(currentGame.AddPlayer(buzzer, "Player"), "We should be able to add the buzzer again.");
@@ -188,7 +188,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 CreateConfigurationOptionsMonitor(),
                 this.CreateDatabaseActionFactory());
 
-            await handler.ClearAll();
+            await handler.ClearAllAsync();
 
             Assert.IsFalse(
                 manager.TryGet(DefaultChannelId, out GameState game),
@@ -230,7 +230,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             currentGame.ReaderId = 0;
             currentGame.AddPlayer(buzzer, "Player");
             currentGame.ScorePlayer(10);
-            await handler.Undo();
+            await handler.UndoAsync();
 
             Assert.IsTrue(
                 currentGame.TryGetNextPlayer(out ulong nextPlayerId),
@@ -262,7 +262,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             currentGame.ReaderId = 0;
             currentGame.AddPlayer(buzzer, $"User_{buzzer}");
             currentGame.ScorePlayer(points);
-            await handler.GetScore();
+            await handler.GetScoreAsync();
 
             Assert.AreEqual(0, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
             Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
@@ -304,7 +304,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 }
             }
 
-            await handler.GetScore();
+            await handler.GetScoreAsync();
             messageStore.VerifyChannelMessages();
             Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
@@ -320,7 +320,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 currentGame.ScorePlayer(score);
             }
 
-            await handler.GetScore();
+            await handler.GetScoreAsync();
             messageStore.VerifyChannelMessages();
             Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
@@ -336,7 +336,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 currentGame.ScorePlayer(score);
             }
 
-            await handler.GetScore();
+            await handler.GetScoreAsync();
             messageStore.VerifyChannelMessages();
             Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
@@ -363,7 +363,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             currentGame.AddPlayer(buzzer, "Player");
             currentGame.ScorePlayer(20);
 
-            await handler.GetScore();
+            await handler.GetScoreAsync();
             messageStore.VerifyChannelMessages();
             Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
@@ -390,7 +390,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             currentGame.AddPlayer(buzzer, "Player");
             currentGame.ScorePlayer(10);
 
-            await handler.GetScore();
+            await handler.GetScoreAsync();
             messageStore.VerifyChannelMessages();
             Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
@@ -402,7 +402,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             currentGame.AddPlayer(buzzer, "Player");
             currentGame.ScorePlayer(0);
-            await handler.GetScore();
+            await handler.GetScoreAsync();
             messageStore.VerifyChannelMessages();
             Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
@@ -431,7 +431,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             currentGame.AddPlayer(buzzer, oldPlayerName);
             currentGame.ScorePlayer(10);
 
-            await handler.GetScore();
+            await handler.GetScoreAsync();
             messageStore.VerifyChannelMessages();
             Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
@@ -443,7 +443,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             currentGame.AddPlayer(buzzer, newPlayerName);
             currentGame.ScorePlayer(0);
-            await handler.GetScore();
+            await handler.GetScoreAsync();
             messageStore.VerifyChannelMessages();
             Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
@@ -475,7 +475,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out MessageStore messageStore);
 
             currentGame.ReaderId = 0;
-            await handler.GetScore();
+            await handler.GetScoreAsync();
 
             // There should be no embeds if no one has scored yet.
             messageStore.VerifyChannelEmbeds();
@@ -491,7 +491,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 currentGame.ScorePlayer(10);
             }
 
-            await handler.GetScore();
+            await handler.GetScoreAsync();
             int embedCount = (GameState.ScoresListLimit + 1) / MaxFieldsInEmbed;
             Assert.AreEqual(
                 embedCount, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent after first GetScore.");
@@ -510,7 +510,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             messageStore.Clear();
 
-            await handler.GetScore();
+            await handler.GetScoreAsync();
             Assert.AreEqual(
                 embedCount, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent after second GetScore.");
             embed = messageStore.ChannelEmbeds.Last();
@@ -551,7 +551,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 currentGame.ScorePlayer(10);
             }
 
-            await handler.GetScore();
+            await handler.GetScoreAsync();
             int embedCount = (GameState.ScoresListLimit + 1) / MaxFieldsInEmbed;
             Assert.AreEqual(
                 embedCount,
@@ -580,7 +580,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out GameState _,
                 out MessageStore messageStore);
 
-            await handler.SetTeamRolePrefix(prefix);
+            await handler.SetTeamRolePrefixAsync(prefix);
             Assert.AreEqual(
                 1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
             string setMessage = messageStore.ChannelMessages[0];
@@ -590,7 +590,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             messageStore.Clear();
 
-            await handler.GetTeamRolePrefix();
+            await handler.GetTeamRolePrefixAsync();
             Assert.AreEqual(
                 1, messageStore.ChannelMessages.Count, "Unexpected number of messages after getting the team role");
             string getMessage = messageStore.ChannelMessages[0];
@@ -601,7 +601,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             messageStore.Clear();
 
-            await handler.SetTeamRolePrefix(newPrefix);
+            await handler.SetTeamRolePrefixAsync(newPrefix);
             Assert.AreEqual(
                 1, messageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
             setMessage = messageStore.ChannelMessages[0];
@@ -611,7 +611,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             messageStore.Clear();
 
-            await handler.GetTeamRolePrefix();
+            await handler.GetTeamRolePrefixAsync();
             Assert.AreEqual(
                 1,
                 messageStore.ChannelMessages.Count,
@@ -635,7 +635,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out GameState _,
                 out MessageStore messageStore);
 
-            await handler.SetTeamRolePrefix(prefix);
+            await handler.SetTeamRolePrefixAsync(prefix);
             Assert.AreEqual(
                 1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
             string setMessage = messageStore.ChannelMessages[0];
@@ -645,7 +645,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             messageStore.Clear();
 
-            await handler.ClearTeamRolePrefix();
+            await handler.ClearTeamRolePrefixAsync();
             Assert.AreEqual(
                 1, messageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
             string clearMessage = messageStore.ChannelMessages[0];
@@ -655,7 +655,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             messageStore.Clear();
 
-            await handler.GetTeamRolePrefix();
+            await handler.GetTeamRolePrefixAsync();
             Assert.AreEqual(
                 1,
                 messageStore.ChannelMessages.Count,
@@ -678,7 +678,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out MessageStore messageStore,
                 out IGuildTextChannel textChannel);
 
-            await handler.PairChannels(textChannel, voiceChannelName);
+            await handler.PairChannelsAsync(textChannel, voiceChannelName);
 
             // TODO: Check the exact string once this issue is fixed:
             // https://github.com/alopezlago/QuizBowlDiscordScoreTracker/issues/23
@@ -690,7 +690,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 @$"Pairing message doesn't mention ""success"". Message: {setMessage}");
             messageStore.Clear();
 
-            await handler.GetPairedChannel(textChannel);
+            await handler.GetPairedChannelAsync(textChannel);
 
             Assert.AreEqual(
                 1, messageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
@@ -714,7 +714,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out MessageStore messageStore,
                 out IGuildTextChannel textChannel);
 
-            await handler.PairChannels(textChannel, voiceChannelName);
+            await handler.PairChannelsAsync(textChannel, voiceChannelName);
 
             // TODO: Check the exact string once this issue is fixed:
             // https://github.com/alopezlago/QuizBowlDiscordScoreTracker/issues/23
@@ -726,7 +726,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 @$"Pairing message doesn't mention ""success"". Message: {setMessage}");
             messageStore.Clear();
 
-            await handler.UnpairChannel(textChannel);
+            await handler.UnpairChannelAsync(textChannel);
 
             Assert.AreEqual(
                 1, messageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");

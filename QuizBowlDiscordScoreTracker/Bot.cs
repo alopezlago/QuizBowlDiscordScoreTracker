@@ -210,7 +210,7 @@ namespace QuizBowlDiscordScoreTracker
             return new Tuple<IVoiceChannel, IGuildUser>(voiceChannel, reader);
         }
 
-        private async Task PromptNextPlayer(GameState state, ITextChannel textChannel)
+        private async Task PromptNextPlayerAsync(GameState state, ITextChannel textChannel)
         {
             if (state.TryGetNextPlayer(out ulong userId))
             {
@@ -227,7 +227,7 @@ namespace QuizBowlDiscordScoreTracker
                 {
                     // We want to run this on a separate thread and not block the event handler
 #pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
-                    Task.Run(() => this.UnmuteReaderAfterDelay(voiceChannelReaderPair.Item1, voiceChannelReaderPair.Item2));
+                    Task.Run(() => this.UnmuteReaderAfterDelayAsync(voiceChannelReaderPair.Item1, voiceChannelReaderPair.Item2));
 #pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
                 }
             }
@@ -274,7 +274,7 @@ namespace QuizBowlDiscordScoreTracker
                         case 15:
                         case 20:
                             state.ScorePlayer(points);
-                            await this.PromptNextPlayer(state, channel);
+                            await this.PromptNextPlayerAsync(state, channel);
                             return;
                         default:
                             break;
@@ -283,7 +283,7 @@ namespace QuizBowlDiscordScoreTracker
                 else if (message.Content.Trim() == "no penalty")
                 {
                     state.ScorePlayer(0);
-                    await this.PromptNextPlayer(state, channel);
+                    await this.PromptNextPlayerAsync(state, channel);
                     return;
                 }
             }
@@ -296,7 +296,7 @@ namespace QuizBowlDiscordScoreTracker
             {
                 if (state.TryGetNextPlayer(out ulong nextPlayerId) && nextPlayerId == message.Author.Id)
                 {
-                    await this.PromptNextPlayer(state, channel);
+                    await this.PromptNextPlayerAsync(state, channel);
                 }
 
                 return;
@@ -311,7 +311,7 @@ namespace QuizBowlDiscordScoreTracker
                     // If the player withdrawing is at the top of the queue, prompt the next player
                     if (nextPlayerId == message.Author.Id)
                     {
-                        await this.PromptNextPlayer(state, channel);
+                        await this.PromptNextPlayerAsync(state, channel);
                     }
                 }
                 else
@@ -413,7 +413,7 @@ namespace QuizBowlDiscordScoreTracker
             return BuzzRegex.IsMatch(buzzText) || this.buzzEmojisRegex.Any(regex => regex.IsMatch(buzzText));
         }
 
-        private async Task UnmuteReaderAfterDelay(IVoiceChannel voiceChannel, IGuildUser reader)
+        private async Task UnmuteReaderAfterDelayAsync(IVoiceChannel voiceChannel, IGuildUser reader)
         {
             await Task.Delay(this.options.CurrentValue.MuteDelayMs);
 

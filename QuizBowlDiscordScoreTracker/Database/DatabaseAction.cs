@@ -29,7 +29,7 @@ namespace QuizBowlDiscordScoreTracker.Database
             }
 
             guild.TeamRolePrefix = null;
-            await this.RemoveGuildIfEmpty(guild);
+            await this.RemoveGuildIfEmptyAsync(guild);
             await this.Context.SaveChangesAsync();
         }
 
@@ -105,7 +105,7 @@ namespace QuizBowlDiscordScoreTracker.Database
             }
 
             textChannel.VoiceChannelId = null;
-            await this.RemoveTextChannelIfEmpty(textChannel);
+            await this.RemoveTextChannelIfEmptyAsync(textChannel);
             await this.Context.SaveChangesAsync();
         }
 
@@ -149,7 +149,7 @@ namespace QuizBowlDiscordScoreTracker.Database
             return guild;
         }
 
-        private async Task RemoveGuildIfEmpty(GuildSetting guild)
+        private async Task RemoveGuildIfEmptyAsync(GuildSetting guild)
         {
             if (guild.TeamRolePrefix != null)
             {
@@ -166,7 +166,7 @@ namespace QuizBowlDiscordScoreTracker.Database
             }
         }
 
-        private async Task RemoveTextChannelIfEmpty(TextChannelSetting textChannel)
+        private async Task RemoveTextChannelIfEmptyAsync(TextChannelSetting textChannel)
         {
             if (textChannel.TeamMessageId != null || textChannel.VoiceChannelId != null)
             {
@@ -185,7 +185,7 @@ namespace QuizBowlDiscordScoreTracker.Database
             }
 
             await this.Context.SaveChangesAsync();
-            await this.RemoveGuildIfEmpty(guild);
+            await this.RemoveGuildIfEmptyAsync(guild);
         }
     }
 }
