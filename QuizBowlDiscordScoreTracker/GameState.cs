@@ -6,14 +6,12 @@ namespace QuizBowlDiscordScoreTracker
 {
     public partial class GameState
     {
-        // Note: this needs to be under 25 if we plan on sticking with Embeds. Alternatively, we have to send out
-        // multiple embeds.
-        public const int ScoresListLimit = 10;
+        public const int ScoresListLimit = 200;
 
         private readonly LinkedList<PhaseState> phases;
 
         private ulong? readerId;
-        private KeyValuePair<ulong, int>[] cachedScore;
+        private IGrouping<ulong, ScoreAction>[] cachedScore;
 
         private readonly object phasesLock = new object();
         private readonly object readerLock = new object();
@@ -65,7 +63,7 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public bool AddPlayer(ulong userId)
+        public bool AddPlayer(ulong userId, string playerDisplayName)
         {
             // readers cannot add themselves
             if (userId == this.ReaderId)
@@ -77,7 +75,8 @@ namespace QuizBowlDiscordScoreTracker
             {
                 // TODO: Consider taking this from the message. This would require passing in another parameter.
                 Timestamp = DateTime.Now,
-                UserId = userId
+                UserId = userId,
+                PlayerDisplayName = playerDisplayName
             };
 
             lock (this.phasesLock)
@@ -100,7 +99,7 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public IEnumerable<KeyValuePair<ulong, int>> GetScores()
+        public IEnumerable<IGrouping<ulong, ScoreAction>> GetScoringActions()
         {
             lock (this.phasesLock)
             {
@@ -114,8 +113,7 @@ namespace QuizBowlDiscordScoreTracker
                     this.cachedScore = this.phases
                         .SelectMany(phase => phase.Scores)
                         .GroupBy(kvp => kvp.Key, kvp => kvp.Value)
-                        .Select(grouping => new KeyValuePair<ulong, int>(grouping.Key, grouping.Sum()))
-                        .OrderByDescending(kvp => kvp.Value)
+                        .OrderByDescending(grouping => grouping.Select(scoreAction => scoreAction.Score).Sum())
                         .ToArray();
                 }
 

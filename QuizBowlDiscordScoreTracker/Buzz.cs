@@ -6,6 +6,9 @@ namespace QuizBowlDiscordScoreTracker
     {
         public ulong UserId { get; set; }
 
+        // We don't use name for equality, just UserId.
+        public string PlayerDisplayName { get; set; }
+
         public ulong? TeamId { get; set; }
 
         public DateTime Timestamp { get; set; }

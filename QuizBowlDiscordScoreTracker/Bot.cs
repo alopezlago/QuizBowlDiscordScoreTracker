@@ -265,9 +265,20 @@ namespace QuizBowlDiscordScoreTracker
             {
                 if (int.TryParse(message.Content, out int points))
                 {
-                    state.ScorePlayer(points);
-                    await this.PromptNextPlayer(state, channel);
-                    return;
+                    // Go back to only accepting -5/0/10/15/20, since we need to track splits now
+                    switch (points)
+                    {
+                        case -5:
+                        case 0:
+                        case 10:
+                        case 15:
+                        case 20:
+                            state.ScorePlayer(points);
+                            await this.PromptNextPlayer(state, channel);
+                            return;
+                        default:
+                            break;
+                    }
                 }
                 else if (message.Content.Trim() == "no penalty")
                 {
@@ -278,7 +289,10 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             // Player has buzzed in
-            if (this.IsBuzz(message.Content) && state.AddPlayer(message.Author.Id))
+            string playerDisplayName = userMessage.Author is IGuildUser guildUser ?
+                guildUser.Nickname ?? guildUser.Username :
+                userMessage.Author.Username;
+            if (this.IsBuzz(message.Content) && state.AddPlayer(message.Author.Id, playerDisplayName))
             {
                 if (state.TryGetNextPlayer(out ulong nextPlayerId) && nextPlayerId == message.Author.Id)
                 {

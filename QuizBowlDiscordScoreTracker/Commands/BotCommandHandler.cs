@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -369,42 +368,123 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         public async Task GetScore()
         {
-            if (this.currentGame?.ReaderId != null)
+            if (this.currentGame?.ReaderId == null || !(this.context.Channel is IGuildChannel guildChannel))
             {
-                if (!(this.context.Channel is IGuildChannel guildChannel))
+                return;
+            }
+
+            IGuildUser guildBotUser = await this.context.Guild.GetCurrentUserAsync();
+            ChannelPermissions channelPermissions = guildBotUser.GetPermissions(guildChannel);
+            if (!channelPermissions.EmbedLinks)
+            {
+                await this.context.Channel.SendMessageAsync(
+                    "This bot must have \"Embed Links\" permissions to show the score");
+                return;
+            }
+
+            IEnumerable<IGrouping<ulong, ScoreAction>> scoreActions = this.currentGame.GetScoringActions();
+            IEnumerable<IGrouping<ulong, ScoreAction>> topScores = scoreActions.Take(GameState.ScoresListLimit);
+
+            bool hasSuperpowers = false;
+            bool hasPowers = false;
+            foreach (IGrouping<ulong, ScoreAction> scoreAction in scoreActions)
+            {
+                if (!hasSuperpowers && scoreAction.Any(action => action.Score == 20))
                 {
-                    return;
+                    // super-powers implies there are powers.
+                    hasSuperpowers = true;
+                    hasPowers = true;
+                    break;
                 }
 
-                IGuildUser guildBotUser = await this.context.Guild.GetCurrentUserAsync();
-                ChannelPermissions channelPermissions = guildBotUser.GetPermissions(guildChannel);
-                if (!channelPermissions.EmbedLinks)
+                if (!hasPowers && scoreAction.Any(action => action.Score == 15))
                 {
-                    await this.context.Channel.SendMessageAsync(
-                        "This bot must have \"Embed Links\" permissions to show the score");
-                    return;
+                    hasPowers = true;
                 }
+            }
 
-                IEnumerable<KeyValuePair<ulong, int>> scores = this.currentGame.GetScores();
-
-                EmbedBuilder builder = new EmbedBuilder
+            // We could have more than the embed limit, so split them up if necessary
+            int embedsSentCount = await this.context.Channel.SendAllEmbeds(
+                topScores,
+                () =>
                 {
-                    Title = scores.Take(checked(GameState.ScoresListLimit + 1)).Count() > GameState.ScoresListLimit ?
-                    $"Top {GameState.ScoresListLimit} Scores" :
-                    "Scores"
-                };
-                builder.WithColor(Color.Gold);
-                foreach (KeyValuePair<ulong, int> score in scores.Take(GameState.ScoresListLimit))
+                    return new EmbedBuilder
+                    {
+                        Title = scoreActions.Take(checked(GameState.ScoresListLimit + 1)).Count() > GameState.ScoresListLimit ?
+                            $"Top {GameState.ScoresListLimit} Scores" :
+                            "Scores",
+                        Color = Color.Gold
+                    };
+                },
+                (scoringGroup, index) =>
                 {
-                    // TODO: Look into moving away from using await in the foreach loop. Maybe use AsyncEnumerable
-                    // and do 2-3 lookups at once? The problem is we need the values added in order.
-                    IGuildUser user = await this.context.Guild.GetUserAsync(score.Key);
-                    string name = user == null ? "<Unknown>" : user.Nickname ?? user.Username;
-                    builder.AddField(name, score.Value.ToString(CultureInfo.InvariantCulture));
-                }
+                    StringBuilder valueBuilder = new StringBuilder();
+                    string name = scoringGroup.LastOrDefault()?.Buzz.PlayerDisplayName ?? "<Unknown>";
 
-                Embed embed = builder.Build();
-                await this.context.Channel.SendMessageAsync(embed: embed);
+                    // TODO: Give the top 3 by score the following: 🥇 🥈 🥉
+                    // We need to take ties into account, which means tracking who 1st-3rd is manually
+                    int negs = 0;
+                    int noPenalties = 0;
+                    int gets = 0;
+                    int powers = 0;
+                    int superPowers = 0;
+                    foreach (ScoreAction action in scoringGroup)
+                    {
+                        switch (action.Score)
+                        {
+                            case -5:
+                                negs++;
+                                break;
+                            case 0:
+                                noPenalties++;
+                                break;
+                            case 10:
+                                gets++;
+                                break;
+                            case 15:
+                                powers++;
+                                break;
+                            case 20:
+                                superPowers++;
+                                break;
+                            default:
+                                this.logger.Warning($"Unknown point value found computing score: {action.Score}");
+                                break;
+                        }
+                    }
+
+                    int totalPoints = scoringGroup.Sum(action => action.Score);
+                    valueBuilder.Append("**");
+                    valueBuilder.Append(totalPoints);
+                    valueBuilder.Append("** (");
+                    if (hasSuperpowers)
+                    {
+                        valueBuilder.Append(superPowers);
+                        valueBuilder.Append('/');
+                    }
+
+                    if (hasPowers)
+                    {
+                        valueBuilder.Append(powers);
+                        valueBuilder.Append('/');
+                    }
+
+                    valueBuilder.Append($"{gets}/{negs})");
+                    if (noPenalties > 0)
+                    {
+                        valueBuilder.Append($" ({noPenalties} no penalty buzz{(noPenalties != 1 ? "es" : "")})");
+                    }
+
+                    return new EmbedFieldBuilder()
+                    {
+                        Name = name,
+                        Value = valueBuilder.ToString()
+                    };
+                });
+
+            if (embedsSentCount == 0)
+            {
+                await this.context.Channel.SendMessageAsync("No one has scored yet");
             }
         }
 
