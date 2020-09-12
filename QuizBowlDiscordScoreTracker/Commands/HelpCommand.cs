@@ -16,10 +16,6 @@ namespace QuizBowlDiscordScoreTracker.Commands
             this.commandService = commandService;
         }
 
-        // Help doesn't use the command handler, because 
-        // 1. CommandService and CommandInfo are not mockable, so you can't unit test them
-        // 2. This should be a quick event to handle.
-
         [Command("help")]
         [Summary("Lists available commands and how to use them.")]
         public Task HelpAsync()

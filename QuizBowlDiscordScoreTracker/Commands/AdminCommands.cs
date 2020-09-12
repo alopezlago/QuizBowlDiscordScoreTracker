@@ -1,27 +1,26 @@
 ﻿using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
-using Microsoft.Extensions.Options;
 using QuizBowlDiscordScoreTracker.Database;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
     [RequireUserPermission(GuildPermission.Administrator)]
-    public class AdminCommands : BotCommandBase
+    [RequireContext(ContextType.Guild)]
+    public class AdminCommands : ModuleBase
     {
-        public AdminCommands(
-            GameStateManager manager,
-            IOptionsMonitor<BotConfiguration> options,
-            IDatabaseActionFactory dbActionFactory)
-            : base(manager, options, dbActionFactory)
+        public AdminCommands(IDatabaseActionFactory dbActionFactory)
         {
+            this.DatabaseActionFactory = dbActionFactory;
         }
+
+        private IDatabaseActionFactory DatabaseActionFactory { get; }
 
         [Command("checkPermissions")]
         [Summary("Checks if the bot has all the required permissions.")]
         public Task CheckPermissionsAsync()
         {
-            return this.HandleCommandAsync(handler => handler.CheckPermissionsAsync());
+            return this.GetHandler().CheckPermissionsAsync();
         }
 
         [Command("clearTeamRolePrefix")]
@@ -29,14 +28,14 @@ namespace QuizBowlDiscordScoreTracker.Commands
             "admins can invoke this.")]
         public Task ClearTeamRolePrefixAsync()
         {
-            return this.HandleCommandAsync(handler => handler.ClearTeamRolePrefixAsync());
+            return this.GetHandler().ClearTeamRolePrefixAsync();
         }
 
         [Command("getPairedChannel")]
         [Summary("Gets the name of the paired voice channel, if it exists. Only server admins can invoke this.")]
         public Task GetPairedChannelAsync([Summary("Text channel mention (#textChannelName)")] ITextChannel textChannel)
         {
-            return this.HandleCommandAsync(handler => handler.GetPairedChannelAsync(textChannel));
+            return this.GetHandler().GetPairedChannelAsync(textChannel);
         }
 
         [Command("getTeamRolePrefix")]
@@ -44,7 +43,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             "invoke this.")]
         public Task GetTeamRolePrefixAsync()
         {
-            return this.HandleCommandAsync(handler => handler.GetTeamRolePrefixAsync());
+            return this.GetHandler().GetTeamRolePrefixAsync();
         }
 
         [Command("pairChannels")]
@@ -52,9 +51,9 @@ namespace QuizBowlDiscordScoreTracker.Commands
             "invoke this.")]
         public Task PairChannelsAsync(
             [Summary("Text channel mention (#textChannelName)")] ITextChannel textChannel,
-            [Remainder][Summary("Name of the voice channel (no # included)")] string voiceChannel)
+            [Remainder][Summary("Name of the voice channel (no # included)")] string voiceChannelName)
         {
-            return this.HandleCommandAsync(handler => handler.PairChannelsAsync(textChannel, voiceChannel));
+            return this.GetHandler().PairChannelsAsync(textChannel, voiceChannelName);
         }
 
         [Command("setTeamRolePrefix")]
@@ -64,7 +63,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         public Task SetTeamRolePrefixAsync(
             [Remainder][Summary("Prefix for roles that are used to group players into teams")] string prefix)
         {
-            return this.HandleCommandAsync(handler => handler.SetTeamRolePrefixAsync(prefix));
+            return this.GetHandler().SetTeamRolePrefixAsync(prefix);
         }
 
         [Command("unpairChannel")]
@@ -72,7 +71,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
         public Task UnpairChannelAsync(
             [Summary("Text channel mention (#textChannelName)")] ITextChannel textChannel)
         {
-            return this.HandleCommandAsync(handler => handler.UnpairChannelAsync(textChannel));
+            return this.GetHandler().UnpairChannelAsync(textChannel);
+        }
+
+        private AdminCommandHandler GetHandler()
+        {
+            // this.Context is null in the constructor, so create the handler in this method
+            return new AdminCommandHandler(this.Context, this.DatabaseActionFactory);
         }
     }
 }

@@ -86,7 +86,10 @@ namespace QuizBowlDiscordScoreTracker
             {
                 CaseSensitiveCommands = false,
                 LogLevel = LogSeverity.Info,
+                DefaultRunMode = RunMode.Async,
             });
+            this.commandService.Log += this.OnLogAsync;
+
             this.logger = Log.ForContext(this.GetType());
             this.discordNetEventLogger = new DiscordNetEventLogger(this.client, this.commandService);
 
@@ -323,6 +326,16 @@ namespace QuizBowlDiscordScoreTracker
 
                 return;
             }
+        }
+
+        private Task OnLogAsync(LogMessage logMessage)
+        {
+            if (logMessage.Exception != null)
+            {
+                this.logger.Error(logMessage.Exception, "Exception occurred in a command");
+            }
+
+            return Task.CompletedTask;
         }
 
         private Task OnPresenceUpdated(SocketGuildUser oldUser, SocketGuildUser newUser)
