@@ -33,7 +33,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 ReaderId = 123
             };
             Assert.IsFalse(
-                gameState.AddPlayer(gameState.ReaderId.Value),
+                gameState.AddPlayer(gameState.ReaderId.Value, "Reader"),
                 "Adding the reader to the queue should not be possible.");
         }
 
@@ -53,8 +53,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong id = 1234;
             GameState gameState = new GameState();
-            Assert.IsTrue(gameState.AddPlayer(id), "Adding the player the first time should succeed.");
-            Assert.IsFalse(gameState.AddPlayer(id), "Adding the player the second time should fail.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Adding the player the first time should succeed.");
+            Assert.IsFalse(gameState.AddPlayer(id, "Player"), "Adding the player the second time should fail.");
         }
 
         [TestMethod]
@@ -63,8 +63,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong firstId = 1;
             const ulong secondId = 2;
             GameState gameState = new GameState();
-            Assert.IsTrue(gameState.AddPlayer(firstId), "Adding the player the first time should succeed.");
-            Assert.IsTrue(gameState.AddPlayer(secondId), "Adding the player the second time should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(firstId, "Player1"), "Adding the player the first time should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(secondId, "Player2"), "Adding the player the second time should succeed.");
             Assert.IsTrue(gameState.TryGetNextPlayer(out ulong nextPlayerId), "There should be a player in the queue.");
             Assert.AreEqual(firstId, nextPlayerId, "The player first in the queue should be the first one added.");
         }
@@ -76,7 +76,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             GameState gameState = new GameState();
             foreach (ulong id in ids)
             {
-                Assert.IsTrue(gameState.AddPlayer(id), $"Should be able to add {id} to the queue.");
+                Assert.IsTrue(gameState.AddPlayer(id, $"Player {id}"), $"Should be able to add {id} to the queue.");
             }
 
             ulong nextPlayerId;
@@ -90,7 +90,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             }
 
             Assert.IsFalse(
-                gameState.TryGetNextPlayer(out nextPlayerId), "No players should be left in the queue.");
+                gameState.TryGetNextPlayer(out _), "No players should be left in the queue.");
         }
 
         [TestMethod]
@@ -99,14 +99,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong id = 1234;
             GameState gameState = new GameState();
 
-            Assert.IsTrue(gameState.AddPlayer(id), "Adding the player should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(id, $"Player {id}"), "Adding the player should succeed.");
             Assert.IsTrue(
                 gameState.TryGetNextPlayer(out ulong nextPlayerId),
                 "There should be a player in the queue.");
             Assert.AreEqual(id, nextPlayerId, "Id of the next player should be ours.");
             Assert.IsTrue(gameState.WithdrawPlayer(id), "Withdrawing the same player should succeed.");
             Assert.IsFalse(
-                gameState.TryGetNextPlayer(out nextPlayerId),
+                gameState.TryGetNextPlayer(out _),
                 "There should be no player in the queue when they withdrew.");
         }
 
@@ -118,9 +118,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong thirdId = 333;
             GameState gameState = new GameState();
 
-            Assert.IsTrue(gameState.AddPlayer(firstId), "Adding the first player should succeed.");
-            Assert.IsTrue(gameState.AddPlayer(secondId), "Adding the second player should succeed.");
-            Assert.IsTrue(gameState.AddPlayer(thirdId), "Adding the third player should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(firstId, "Player1"), "Adding the first player should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(secondId, "Player2"), "Adding the second player should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(thirdId, "Player3"), "Adding the third player should succeed.");
             Assert.IsTrue(gameState.WithdrawPlayer(secondId), "Withdrawing the second player should succeed.");
             Assert.IsTrue(gameState.WithdrawPlayer(firstId), "Withdrawing the first player should succeed.");
             Assert.IsTrue(
@@ -134,7 +134,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong id = 1234;
             GameState gameState = new GameState();
-            gameState.AddPlayer(id);
+            gameState.AddPlayer(id, "Player");
             Assert.IsFalse(gameState.WithdrawPlayer(id + 1), "Should not be able to withdraw player who is not in the queue.");
         }
 
@@ -143,7 +143,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong id = 1234;
             GameState gameState = new GameState();
-            Assert.IsTrue(gameState.AddPlayer(id), "Adding player should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Adding player should succeed.");
             Assert.IsTrue(gameState.WithdrawPlayer(id), "First withdrawal should succeed.");
             Assert.IsFalse(gameState.WithdrawPlayer(id), "Second withdrawal should fail.");
         }
@@ -153,9 +153,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong id = 1234;
             GameState gameState = new GameState();
-            Assert.IsTrue(gameState.AddPlayer(id), "First add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "First add should succeed.");
             Assert.IsTrue(gameState.WithdrawPlayer(id), "First withdrawal should succeed.");
-            Assert.IsTrue(gameState.AddPlayer(id), "Second add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Second add should succeed.");
             Assert.IsTrue(gameState.WithdrawPlayer(id), "Second withdrawal should succeed.");
         }
 
@@ -169,10 +169,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 ReaderId = readerId
             };
 
-            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed.");
             gameState.ClearCurrentRound();
-            Assert.IsFalse(gameState.TryGetNextPlayer(out ulong nextPlayerId), "Queue should have been cleared.");
-            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed after clear.");
+            Assert.IsFalse(gameState.TryGetNextPlayer(out _), "Queue should have been cleared.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed after clear.");
             Assert.AreEqual(readerId, gameState.ReaderId, "Reader should remain the same.");
         }
 
@@ -186,10 +186,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 ReaderId = readerId
             };
 
-            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed.");
             gameState.ClearAll();
-            Assert.IsFalse(gameState.TryGetNextPlayer(out ulong nextPlayerId), "Queue should have been cleared.");
-            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed after clear.");
+            Assert.IsFalse(gameState.TryGetNextPlayer(out ulong _), "Queue should have been cleared.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed after clear.");
             Assert.IsNull(gameState.ReaderId, "Reader should be cleared.");
         }
 
@@ -203,17 +203,18 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 ReaderId = readerId
             };
 
-            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed.");
             gameState.ScorePlayer(-5);
             gameState.NextQuestion();
-            Assert.IsFalse(gameState.TryGetNextPlayer(out ulong nextPlayerId), "Queue should have been cleared.");
-            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed after clear.");
+            Assert.IsFalse(gameState.TryGetNextPlayer(out ulong _), "Queue should have been cleared.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed after clear.");
             Assert.AreEqual(readerId, gameState.ReaderId, "Reader should remain the same.");
-            IEnumerable<KeyValuePair<ulong, int>> scores = gameState.GetScores();
-            Assert.AreEqual(1, scores.Count(), "Unexpected number of scores.");
-            KeyValuePair<ulong, int> score = scores.First();
-            Assert.AreEqual(id, score.Key, "Unexpected ID for the score.");
-            Assert.AreEqual(-5, score.Value, "Unexpected point total for the score.");
+            IDictionary<ulong, ScoringSplitOnScoreAction> lastSplits = gameState.GetLastScoringSplits();
+            Assert.AreEqual(1, lastSplits.Count, "Unexpected number of scores.");
+
+            KeyValuePair<ulong, ScoringSplitOnScoreAction> splitPair = lastSplits.First();
+            Assert.AreEqual(id, splitPair.Key, "Unexpected ID for the score.");
+            Assert.AreEqual(-5, splitPair.Value.Split.Points, "Unexpected point total for the score.");
         }
 
         [TestMethod]
@@ -221,10 +222,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong id = 1;
             GameState gameState = new GameState();
-            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed.");
             gameState.ScorePlayer(-5);
-            Assert.IsFalse(gameState.TryGetNextPlayer(out ulong nextPlayerId), "Queue should have been cleared.");
-            Assert.IsFalse(gameState.AddPlayer(id), "Add should fail after a neg.");
+            Assert.IsFalse(gameState.TryGetNextPlayer(out ulong _), "Queue should have been cleared.");
+            Assert.IsFalse(gameState.AddPlayer(id, "Player"), "Add should fail after a neg.");
         }
 
         [TestMethod]
@@ -232,10 +233,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong id = 1;
             GameState gameState = new GameState();
-            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed.");
             gameState.ScorePlayer(0);
-            Assert.IsFalse(gameState.TryGetNextPlayer(out ulong nextPlayerId), "Queue should have been cleared.");
-            Assert.IsFalse(gameState.AddPlayer(id), "Add should fail after a no penalty buzz.");
+            Assert.IsFalse(gameState.TryGetNextPlayer(out ulong _), "Queue should have been cleared.");
+            Assert.IsFalse(gameState.AddPlayer(id, "Player"), "Add should fail after a no penalty buzz.");
         }
 
         [TestMethod]
@@ -243,10 +244,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong id = 1;
             GameState gameState = new GameState();
-            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed.");
             gameState.ScorePlayer(10);
-            Assert.IsFalse(gameState.TryGetNextPlayer(out ulong nextPlayerId), "Queue should have been cleared.");
-            Assert.IsTrue(gameState.AddPlayer(id), "Add should suceed after correct buzz.");
+            Assert.IsFalse(gameState.TryGetNextPlayer(out ulong _), "Queue should have been cleared.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should suceed after correct buzz.");
         }
 
         [TestMethod]
@@ -254,14 +255,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong id = 123;
             GameState gameState = new GameState();
-            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed.");
             gameState.ScorePlayer(-5);
-            IEnumerable<KeyValuePair<ulong, int>> scores = gameState.GetScores();
-            Assert.AreEqual(1, scores.Count(), "Only one player should have a score.");
-            KeyValuePair<ulong, int> scorePair = scores.First();
+            IDictionary<ulong, ScoringSplitOnScoreAction> lastSplits = gameState.GetLastScoringSplits();
+            Assert.AreEqual(1, lastSplits.Count, "Only one player should have a score.");
+            KeyValuePair<ulong, ScoringSplitOnScoreAction> splitPair = lastSplits.First();
 
-            Assert.AreEqual(id, scorePair.Key, "Unexpected ID.");
-            Assert.AreEqual(-5, scorePair.Value, "Unexpected score.");
+            Assert.AreEqual(id, splitPair.Key, "Unexpected ID.");
+            Assert.AreEqual(-5, splitPair.Value.Split.Points, "Unexpected score.");
         }
 
         [TestMethod]
@@ -269,14 +270,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong id = 123;
             GameState gameState = new GameState();
-            Assert.IsTrue(gameState.AddPlayer(id), "Add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed.");
             gameState.ScorePlayer(10);
-            IEnumerable<KeyValuePair<ulong, int>> scores = gameState.GetScores();
-            Assert.AreEqual(1, scores.Count(), "Only one player should have a score.");
-            KeyValuePair<ulong, int> scorePair = scores.First();
+            IDictionary<ulong, ScoringSplitOnScoreAction> lastSplits = gameState.GetLastScoringSplits();
+            Assert.AreEqual(1, lastSplits.Count, "Only one player should have a score.");
+            KeyValuePair<ulong, ScoringSplitOnScoreAction> splitPair = lastSplits.First();
 
-            Assert.AreEqual(id, scorePair.Key, "Unexpected ID.");
-            Assert.AreEqual(10, scorePair.Value, "Unexpected score.");
+            Assert.AreEqual(id, splitPair.Key, "Unexpected ID.");
+            Assert.AreEqual(10, splitPair.Value.Split.Points, "Unexpected score.");
         }
 
         [TestMethod]
@@ -287,20 +288,20 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             GameState gameState = new GameState();
             foreach (int point in points)
             {
-                Assert.IsTrue(gameState.AddPlayer(id), $"Add should succeed for point total {point}.");
+                Assert.IsTrue(gameState.AddPlayer(id, "Player"), $"Add should succeed for point total {point}.");
                 gameState.ScorePlayer(point);
                 if (point <= 0)
                 {
-                    gameState.ClearCurrentRound();
+                    gameState.NextQuestion();
                 }
             }
 
-            IEnumerable<KeyValuePair<ulong, int>> scores = gameState.GetScores();
-            Assert.AreEqual(1, scores.Count(), "Only one player should have a score.");
-            KeyValuePair<ulong, int> scorePair = scores.First();
+            IDictionary<ulong, ScoringSplitOnScoreAction> lastSplits = gameState.GetLastScoringSplits();
+            Assert.AreEqual(1, lastSplits.Count, "Only one player should have a score.");
+            KeyValuePair<ulong, ScoringSplitOnScoreAction> splitPair = lastSplits.First();
 
-            Assert.AreEqual(id, scorePair.Key, "Unexpected ID.");
-            Assert.AreEqual(points.Sum(), scorePair.Value, "Unexpected score.");
+            Assert.AreEqual(id, splitPair.Key, "Unexpected ID.");
+            Assert.AreEqual(points.Sum(), splitPair.Value.Split.Points, "Unexpected score.");
         }
 
         [TestMethod]
@@ -310,21 +311,21 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong secondId = 22;
 
             GameState gameState = new GameState();
-            Assert.IsTrue(gameState.AddPlayer(firstId), "Add for first player should succeed.");
-            Assert.IsTrue(gameState.AddPlayer(secondId), "Add for second player should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(firstId, "Player1"), "Add for first player should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(secondId, "Player2"), "Add for second player should succeed.");
             gameState.ScorePlayer(-5);
             gameState.ScorePlayer(10);
 
-            IEnumerable<KeyValuePair<ulong, int>> scores = gameState.GetScores();
-            Assert.AreEqual(2, scores.Count(), "Only one player should have a score.");
+            IDictionary<ulong, ScoringSplitOnScoreAction> lastSplits = gameState.GetLastScoringSplits();
+            Assert.AreEqual(2, lastSplits.Count, "Two players should have scored.");
 
-            KeyValuePair<ulong, int> scorePair = scores.FirstOrDefault(pair => pair.Key == firstId);
-            Assert.IsNotNull(scorePair, "We should have a pair which relates to the first player.");
-            Assert.AreEqual(-5, scorePair.Value, "The first player should have negged.");
+            KeyValuePair<ulong, ScoringSplitOnScoreAction> scoreGrouping = lastSplits.FirstOrDefault(pair => pair.Key == firstId);
+            Assert.IsNotNull(scoreGrouping, "We should have a pair which relates to the first player.");
+            Assert.AreEqual(-5, scoreGrouping.Value.Split.Points, "The first player should have negged.");
 
-            scorePair = scores.FirstOrDefault(pair => pair.Key == secondId);
-            Assert.IsNotNull(scorePair, "We should have a pair which relates to the second player.");
-            Assert.AreEqual(10, scorePair.Value, "The second player should have negged.");
+            scoreGrouping = lastSplits.FirstOrDefault(pair => pair.Key == secondId);
+            Assert.IsNotNull(scoreGrouping, "We should have a pair which relates to the second player.");
+            Assert.AreEqual(10, scoreGrouping.Value.Split.Points, "The second player should have negged.");
         }
 
         [TestMethod]
@@ -333,8 +334,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong firstId = 1;
 
             GameState gameState = new GameState();
-            Assert.IsTrue(gameState.AddPlayer(firstId), "Add should succeed.");
-            Assert.IsFalse(gameState.Undo(out ulong id), "Undo should return false.");
+            Assert.IsTrue(gameState.AddPlayer(firstId, "Player1"), "Add should succeed.");
+            Assert.IsFalse(gameState.Undo(out _), "Undo should return false.");
             Assert.IsTrue(
                 gameState.TryGetNextPlayer(out ulong nextPlayerId),
                 "We should still have a player in the buzz queue.");
@@ -366,11 +367,11 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong secondId = 2;
 
             GameState gameState = new GameState();
-            Assert.IsTrue(gameState.AddPlayer(firstId), "First add should succeed.");
-            Assert.IsTrue(gameState.AddPlayer(secondId), "Second add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(firstId, "Player1"), "First add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(secondId, "Player2"), "Second add should succeed.");
 
             gameState.ScorePlayer(10);
-            Assert.IsTrue(gameState.AddPlayer(firstId), "First add in second question should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(firstId, "Player1"), "First add in second question should succeed.");
             gameState.ScorePlayer(15);
 
             Assert.IsTrue(gameState.Undo(out ulong firstUndoId), "First undo should succeed.");
@@ -391,15 +392,15 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             GameState gameState = new GameState();
             // To make sure we're not just clearing the field, give the first player points
-            Assert.IsTrue(gameState.AddPlayer(firstId), "First add should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(firstId, "Player1"), "First add should succeed.");
             gameState.ScorePlayer(firstPointsFromBuzz);
 
-
-            Assert.IsTrue(gameState.AddPlayer(firstId), "First add in second question should succeed.");
-            Assert.IsTrue(gameState.AddPlayer(secondId), "Second add in second question should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(firstId, "Player1"), "First add in second question should succeed.");
+            Assert.IsTrue(gameState.AddPlayer(secondId, "Player2"), "Second add in second question should succeed.");
 
             gameState.ScorePlayer(pointsFromBuzz);
-            IDictionary<ulong, int> scores = gameState.GetScores().ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            IDictionary<ulong, int> scores = gameState.GetLastScoringSplits()
+                .ToDictionary(lastSplitPair => lastSplitPair.Key, lastSplitPair => lastSplitPair.Value.Split.Points);
             Assert.IsTrue(scores.TryGetValue(firstId, out int score), "Unable to get score for the first player.");
             Assert.AreEqual(pointsFromBuzz + firstPointsFromBuzz, score, "Incorrect score.");
 
@@ -409,17 +410,18 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 "We should still have a player in the buzz queue.");
             Assert.AreEqual(firstId, nextPlayerId, "Next player should be the first one.");
 
-            scores = gameState.GetScores().ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            scores = gameState.GetLastScoringSplits()
+                .ToDictionary(lastSplitPair => lastSplitPair.Key, lastSplitPair => lastSplitPair.Value.Split.Points);
             Assert.IsTrue(
                 scores.TryGetValue(firstId, out int scoreAfterUndo),
                 "Unable to get score for the first player after undo.");
             Assert.AreEqual(firstPointsFromBuzz, scoreAfterUndo, "Incorrect score after undo.");
 
             Assert.IsFalse(
-                gameState.AddPlayer(firstId),
+                gameState.AddPlayer(firstId, "Player1"),
                 "First player already buzzed, so we shouldn't be able to add them again.");
             Assert.IsFalse(
-                gameState.AddPlayer(secondId),
+                gameState.AddPlayer(secondId, "Player2"),
                 "Second player already buzzed, so we shouldn't be able to add them again.");
 
             gameState.ScorePlayer(0);

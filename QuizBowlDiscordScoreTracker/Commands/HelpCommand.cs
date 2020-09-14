@@ -16,30 +16,23 @@ namespace QuizBowlDiscordScoreTracker.Commands
             this.commandService = commandService;
         }
 
-        // Help doesn't use the command handler, because 
-        // 1. CommandService and CommandInfo are not mockable, so you can't unit test them
-        // 2. This should be a quick event to handle.
-
         [Command("help")]
         [Summary("Lists available commands and how to use them.")]
-        public Task Help()
+        public Task HelpAsync()
         {
-            return this.SendHelpInformation();
+            return this.SendHelpInformationAsync();
         }
 
         [Command("help")]
         [Summary("Lists available commands and how to use them.")]
-        public Task Help([Remainder][Summary("Command name")] string rawCommandName)
+        public Task HelpAsync([Remainder][Summary("Command name")] string rawCommandName)
         {
-            return this.SendHelpInformation(rawCommandName);
+            return this.SendHelpInformationAsync(rawCommandName);
         }
 
-        private async Task SendHelpInformation(string rawCommandName = null)
+        private async Task SendHelpInformationAsync(string rawCommandName = null)
         {
-            EmbedBuilder embedBuilder = new EmbedBuilder();
-            IEnumerable<CommandInfo> commands = this.commandService.Commands
-                .Where(command => command.Name != "help");
-
+            IEnumerable<CommandInfo> commands = this.commandService.Commands.Where(command => command.Name != "help");
             if (rawCommandName != null)
             {
                 string commandName = rawCommandName.Trim();
@@ -47,35 +40,59 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     .Where(command => command.Name.Equals(commandName, StringComparison.CurrentCultureIgnoreCase));
             }
 
-            EmbedFieldBuilder[] embedFields = await Task.WhenAll(commands
-                .Select(commandInfo => this.GetEmbedFieldOrNull(commandInfo)));
-            foreach (EmbedFieldBuilder embedField in embedFields.Where(field => field != null))
+            bool userIsBotOwner = this.Context.User.Id == (await this.Context.Client.GetApplicationInfoAsync()).Owner.Id;
+            if (!userIsBotOwner)
             {
-                embedBuilder.AddField(embedField);
+                // Only let owners see owner-only commands
+                commands = commands
+                    .Where(command => !command.Module.Preconditions.Any(attribute => attribute is RequireOwnerAttribute));
             }
 
-            // DM the user, so that we can't spam the channel.
-            await this.Context.User.SendMessageAsync(embed: embedBuilder.Build());
+            commands = commands.OrderBy(command => command.Name);
+
+            // Only send the "how to play" information if the user isn't looking up information for a command
+            if (rawCommandName == null)
+            {
+                // Send two messages: a "how to play", and then the commands
+                EmbedBuilder howToPlayEmbedBuilder = new EmbedBuilder()
+                {
+                    Title = "How to play",
+                    Color = Color.Gold,
+                    Description = "1. The reader should use the !read command.\n" +
+                        "2. When a player wants to buzz in, they should type in \"buzz\" (near equivalents like \"bzz\" are acceptable).\n" +
+                        "3. The reader scores the buzz by typing in the value (-5, 0, 10, 15, 20).\n" +
+                        "4. If someone gets the question correct, the buzz queue is cleared. If no one answers the question, then use the !next command to clear the queue and start the next question.\n" +
+                        "5. If the reader needs to undo a scoring action, they should use the !undo command.\n" +
+                        "6. To see the score, use the !score command.\n" +
+                        "7. Once the packet reading is over, the reader should use !end to end the game."
+                };
+                await this.Context.Channel.SendMessageAsync(embed: howToPlayEmbedBuilder.Build());
+            }
+
+            await this.Context.Channel.SendAllEmbeds(
+                commands,
+                () => new EmbedBuilder()
+                {
+                    Title = "Commands",
+                    Color = Color.Gold
+                },
+                (commandInfo, index) =>
+                {
+                    string parameters = string.Join(' ', commandInfo.Parameters
+                        .Select(parameter => GetParameterFieldName(parameter)));
+                    return new EmbedFieldBuilder()
+                    {
+                        Name = $"{commandInfo.Name} {parameters}",
+                        Value = commandInfo.Summary ?? "<undocumented>"
+                    };
+                });
         }
 
-        private async Task<EmbedFieldBuilder> GetEmbedFieldOrNull(CommandInfo commandInfo)
+        private static string GetParameterFieldName(ParameterInfo parameter)
         {
-            // Only show the bot owner commands to the bot owner. Instead of checking each precondition, just cheat and
-            // see if we require the bot owner.
-            if (commandInfo.Module.Preconditions.Any(attribute => attribute is RequireOwnerAttribute) &&
-                this.Context.User.Id != (await this.Context.Client.GetApplicationInfoAsync()).Owner.Id)
-            {
-                return null;
-            }
-
-            // We could try to limit who can see admin commands, but that doesn't work if they ask for help in a DM.
-
-            string parameters = string.Join(' ', commandInfo.Parameters.Select(parameter => $"*{parameter.Name}*"));
-            return new EmbedFieldBuilder()
-            {
-                Name = $"{commandInfo.Name} {parameters}",
-                Value = commandInfo.Summary ?? "<undocumented>"
-            };
+            bool isChannel = parameter.Type.GetInterface(nameof(IGuildChannel)) != null;
+            bool isMention = !isChannel && parameter.Type.GetInterface(nameof(IUser)) != null;
+            return $"*{(isChannel ? "#" : string.Empty)}{(isMention ? "@" : string.Empty)}{parameter.Name}*";
         }
     }
 }

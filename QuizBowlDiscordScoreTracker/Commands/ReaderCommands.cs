@@ -1,62 +1,66 @@
 ﻿using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
-using Microsoft.Extensions.Options;
-using QuizBowlDiscordScoreTracker.Database;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
     [RequireReader]
-    public class ReaderCommands : BotCommandBase
+    [RequireContext(ContextType.Guild)]
+    public class ReaderCommands : ModuleBase
     {
-        public ReaderCommands(
-            GameStateManager manager,
-            IOptionsMonitor<BotConfiguration> options,
-            IDatabaseActionFactory dbActionFactory)
-            : base(manager, options, dbActionFactory)
+        public ReaderCommands(GameStateManager manager)
         {
+            this.Manager = manager;
         }
+
+        private GameStateManager Manager { get; }
 
         [Command("setnewreader")]
         [Summary("Set another user as the reader.")]
-        public Task SetNewReader([Summary("Mention of the new reader")] IGuildUser newReader)
+        public Task SetNewReaderAsync([Summary("Mention of the new reader")] IGuildUser newReader)
         {
-            return this.HandleCommandAsync(handler => handler.SetNewReader(newReader.Id));
+            return this.GetHandler().SetNewReaderAsync(newReader);
         }
 
         [Command("stop")]
         [Summary("Ends the game, clearing the stats and allowing others to read.")]
-        public Task Stop()
+        public Task StopAsync()
         {
-            return this.HandleCommandAsync(handler => handler.ClearAll());
+            return this.GetHandler().ClearAllAsync();
         }
 
         [Command("end")]
         [Summary("Ends the game, clearing the stats and allowing others to read.")]
-        public Task End()
+        public Task EndAsync()
         {
-            return this.HandleCommandAsync(handler => handler.ClearAll());
+            return this.GetHandler().ClearAllAsync();
         }
 
         [Command("clear")]
         [Summary("Clears the player queue and answers from this question, including scores from this question.")]
-        public Task Clear()
+        public Task ClearAsync()
         {
-            return this.HandleCommandAsync(handler => handler.Clear());
+            return this.GetHandler().ClearAsync();
         }
 
         [Command("next")]
         [Summary("Clears the player queue and moves to the next question. Use this if no one answered correctly.")]
-        public Task Next()
+        public Task NextAsync()
         {
-            return this.HandleCommandAsync(handler => handler.NextQuestion());
+            return this.GetHandler().NextAsync();
         }
 
         [Command("undo")]
         [Summary("Undoes a scoring operation.")]
-        public Task Undo()
+        public Task UndoAsync()
         {
-            return this.HandleCommandAsync(handler => handler.Undo());
+            return this.GetHandler().UndoAsync();
+        }
+
+        private ReaderCommandHandler GetHandler()
+        {
+            // this.Context is null in the constructor, so create the handler in this method
+            return new ReaderCommandHandler(this.Context, this.Manager);
         }
     }
 }

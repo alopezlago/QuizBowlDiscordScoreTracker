@@ -5,28 +5,57 @@ using QuizBowlDiscordScoreTracker.Database;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
-    public class GeneralCommands : BotCommandBase
+    [RequireContext(ContextType.Guild)]
+    public class GeneralCommands : ModuleBase
     {
         public GeneralCommands(
             GameStateManager manager,
             IOptionsMonitor<BotConfiguration> options,
             IDatabaseActionFactory dbActionFactory)
-            : base(manager, options, dbActionFactory)
         {
+            this.DatabaseActionFactory = dbActionFactory;
+            this.Manager = manager;
+            this.Options = options;
+        }
+
+        private IDatabaseActionFactory DatabaseActionFactory { get; }
+
+        private GameStateManager Manager { get; }
+
+        private IOptionsMonitor<BotConfiguration> Options { get; }
+
+        [Command("about")]
+        [Summary("Gets the version of the bot and a link to the changes in this version.")]
+        public Task AboutAsync()
+        {
+            return this.GetHandler().AboutAsync();
+        }
+
+        [Command("gameReport")]
+        [Summary("Gets a question-by-question report of the game.")]
+        public Task GetGameReportAsync()
+        {
+            return this.GetHandler().GetGameReportAsync();
         }
 
         [Command("read")]
         [Summary("Set yourself as the reader.")]
-        public Task SetReader()
+        public Task SetReaderAsync()
         {
-            return this.HandleCommandAsync(handler => handler.SetReader());
+            return this.GetHandler().SetReaderAsync();
         }
 
         [Command("score")]
         [Summary("Get the top scores in the current game.")]
-        public Task GetScore()
+        public Task GetScoreAsync()
         {
-            return this.HandleCommandAsync(handler => handler.GetScore());
+            return this.GetHandler().GetScoreAsync();
+        }
+
+        private GeneralCommandHandler GetHandler()
+        {
+            // this.Context is null in the constructor, so create the handler in this method
+            return new GeneralCommandHandler(this.Context, this.Manager, this.Options, this.DatabaseActionFactory);
         }
     }
 }

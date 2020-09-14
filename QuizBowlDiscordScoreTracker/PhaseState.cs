@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -8,7 +9,7 @@ namespace QuizBowlDiscordScoreTracker
         private readonly SortedSet<Buzz> buzzQueue;
         private readonly HashSet<ulong> alreadyBuzzedPlayers;
         private readonly Stack<ScoreAction> actions;
-        private readonly Dictionary<ulong, int> scores;
+        private readonly Dictionary<ulong, ScoreAction> scores;
 
         // We may be able to get rid of this lock, if we rely on the host keeping it consistent.
         private readonly object collectionLock = new object();
@@ -18,11 +19,13 @@ namespace QuizBowlDiscordScoreTracker
             this.buzzQueue = new SortedSet<Buzz>();
             this.alreadyBuzzedPlayers = new HashSet<ulong>();
             this.actions = new Stack<ScoreAction>();
-            this.scores = new Dictionary<ulong, int>();
+            this.scores = new Dictionary<ulong, ScoreAction>();
         }
 
         // We don't need to order them here.
-        public IEnumerable<KeyValuePair<ulong, int>> Scores => this.scores;
+        public IEnumerable<KeyValuePair<ulong, ScoreAction>> Scores => this.scores;
+
+        public IEnumerable<ScoreAction> OrderedScoreActions => this.actions.Reverse();
 
         public bool AddBuzz(Buzz player)
         {
@@ -62,15 +65,9 @@ namespace QuizBowlDiscordScoreTracker
 
             this.buzzQueue.Remove(buzz);
 
-            // TODO: We may want to limit what score can be, to protect against typos.
-            if (!this.scores.TryGetValue(buzz.UserId, out int currentScore))
-            {
-                currentScore = 0;
-            }
-
-            this.scores[buzz.UserId] = currentScore + score;
-
+            // TODO: Should we verify that this.scores doesn't have an action for that user already?
             ScoreAction action = new ScoreAction(buzz, score);
+            this.scores[buzz.UserId] = action;
             this.actions.Push(action);
 
             return true;
@@ -127,13 +124,8 @@ namespace QuizBowlDiscordScoreTracker
                 return false;
             }
 
-            // TODO: Should we always just remove the score action? Is it possible to ever have more points than 0?
             userId = action.Buzz.UserId;
-            this.scores[userId] -= action.Score;
-            if (this.scores[userId] == 0)
-            {
-                this.scores.Remove(userId);
-            }
+            this.scores.Remove(userId);
 
             // We shouldn't need to change the list of already buzzed players, because in order to have an action the
             // player must've buzzed in. We do need to add the player back to the queue. The queue should be sorted by

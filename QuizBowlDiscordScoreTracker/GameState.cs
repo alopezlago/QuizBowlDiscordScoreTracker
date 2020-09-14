@@ -6,14 +6,13 @@ namespace QuizBowlDiscordScoreTracker
 {
     public partial class GameState
     {
-        // Note: this needs to be under 25 if we plan on sticking with Embeds. Alternatively, we have to send out
-        // multiple embeds.
-        public const int ScoresListLimit = 10;
+        public const int ScoresListLimit = 200;
 
         private readonly LinkedList<PhaseState> phases;
 
         private ulong? readerId;
-        private KeyValuePair<ulong, int>[] cachedScore;
+        private IDictionary<ulong, ScoringSplitOnScoreAction> cachedLastScoringSplit;
+        private IEnumerable<IEnumerable<ScoringSplitOnScoreAction>> cachedSplitsPerPhase;
 
         private readonly object phasesLock = new object();
         private readonly object readerLock = new object();
@@ -21,9 +20,22 @@ namespace QuizBowlDiscordScoreTracker
         public GameState()
         {
             this.phases = new LinkedList<PhaseState>();
-            this.cachedScore = null;
+            this.cachedLastScoringSplit = null;
+            this.cachedSplitsPerPhase = null;
+
             this.SetupInitialPhases();
             this.ReaderId = null;
+        }
+
+        public int PhaseNumber
+        {
+            get
+            {
+                lock (this.phasesLock)
+                {
+                    return this.phases.Count;
+                }
+            }
         }
 
         public ulong? ReaderId
@@ -61,11 +73,11 @@ namespace QuizBowlDiscordScoreTracker
             lock (this.phasesLock)
             {
                 this.CurrentPhase.Clear();
-                this.cachedScore = null;
+                this.ClearCaches();
             }
         }
 
-        public bool AddPlayer(ulong userId)
+        public bool AddPlayer(ulong userId, string playerDisplayName)
         {
             // readers cannot add themselves
             if (userId == this.ReaderId)
@@ -77,7 +89,8 @@ namespace QuizBowlDiscordScoreTracker
             {
                 // TODO: Consider taking this from the message. This would require passing in another parameter.
                 Timestamp = DateTime.Now,
-                UserId = userId
+                UserId = userId,
+                PlayerDisplayName = playerDisplayName
             };
 
             lock (this.phasesLock)
@@ -100,26 +113,79 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public IEnumerable<KeyValuePair<ulong, int>> GetScores()
+        //IEnumerable<ICollection<(ScoreAction scoreAction, ScoringSplit split)>>
+        public void EnsureCachedCollectionsExist()
+        {
+            if (this.cachedLastScoringSplit != null && this.cachedSplitsPerPhase != null)
+            {
+                return;
+            }
+
+            List<IEnumerable<ScoringSplitOnScoreAction>> splitsPerPhase = new List<IEnumerable<ScoringSplitOnScoreAction>>();
+            IDictionary<ulong, ScoringSplitOnScoreAction> lastScoringSplits =
+                new Dictionary<ulong, ScoringSplitOnScoreAction>();
+            foreach (PhaseState phase in this.phases)
+            {
+                List<ScoringSplitOnScoreAction> splitsInPhase = new List<ScoringSplitOnScoreAction>();
+                foreach (ScoreAction scoreAction in phase.OrderedScoreActions)
+                {
+                    // Try to get the split and clone it. If it doesn't exist, just make a new one.
+                    lastScoringSplits.TryGetValue(
+                        scoreAction.Buzz.UserId, out ScoringSplitOnScoreAction splitActionPair);
+                    ScoringSplit newSplit = splitActionPair?.Split.Clone() ?? new ScoringSplit();
+                    switch (scoreAction.Score)
+                    {
+                        case -5:
+                            newSplit.Negs++;
+                            break;
+                        case 0:
+                            newSplit.NoPenalties++;
+                            break;
+                        case 10:
+                            newSplit.Gets++;
+                            break;
+                        case 15:
+                            newSplit.Powers++;
+                            break;
+                        case 20:
+                            newSplit.Superpowers++;
+                            break;
+                        default:
+                            break;
+                    }
+
+                    ScoringSplitOnScoreAction newPair = new ScoringSplitOnScoreAction()
+                    {
+                        Action = scoreAction,
+                        Split = newSplit
+                    };
+
+                    lastScoringSplits[scoreAction.Buzz.UserId] = newPair;
+                    splitsInPhase.Add(newPair);
+                }
+
+                splitsPerPhase.Add(splitsInPhase);
+            }
+
+            this.cachedSplitsPerPhase = splitsPerPhase;
+            this.cachedLastScoringSplit = lastScoringSplits;
+        }
+
+        public IDictionary<ulong, ScoringSplitOnScoreAction> GetLastScoringSplits()
         {
             lock (this.phasesLock)
             {
-                // This has the potential to be slow. However, a quick test on my machine shows that even with
-                // 1 million phases it takes ~35 ms. That's still not great, but it's about the same as looping through
-                // with a for loop. The caching should help mitigate any expensive computations
-                // This gets all of the score pairs from the phases, groups them together, sums the values in the
-                // grouping, and then sorts it.
-                if (this.cachedScore == null)
-                {
-                    this.cachedScore = this.phases
-                        .SelectMany(phase => phase.Scores)
-                        .GroupBy(kvp => kvp.Key, kvp => kvp.Value)
-                        .Select(grouping => new KeyValuePair<ulong, int>(grouping.Key, grouping.Sum()))
-                        .OrderByDescending(kvp => kvp.Value)
-                        .ToArray();
-                }
+                this.EnsureCachedCollectionsExist();
+                return this.cachedLastScoringSplit;
+            }
+        }
 
-                return this.cachedScore;
+        public IEnumerable<IEnumerable<ScoringSplitOnScoreAction>> GetScoringActionsByPhase()
+        {
+            lock (this.phasesLock)
+            {
+                this.EnsureCachedCollectionsExist();
+                return this.cachedSplitsPerPhase;
             }
         }
 
@@ -138,7 +204,7 @@ namespace QuizBowlDiscordScoreTracker
             {
                 if (this.CurrentPhase.TryScore(score))
                 {
-                    this.cachedScore = null;
+                    this.ClearCaches();
                     // Player was correct, so move on to the next phase.
                     if (score > 0)
                     {
@@ -173,16 +239,24 @@ namespace QuizBowlDiscordScoreTracker
                 }
 
                 // In the only case where nothing was undone, there's no score to calculate, so clearing the cache is harmless
-                this.cachedScore = null;
+                this.ClearCaches();
 
                 return couldUndo;
             }
         }
 
+        private void ClearCaches()
+        {
+            // TODO: If calculating the splits is too expensive, then look into just clearing the last
+            // phase (or undoing the changes to the dictionary)
+            this.cachedLastScoringSplit = null;
+            this.cachedSplitsPerPhase = null;
+        }
+
         private void SetupInitialPhases()
         {
             // We must always have one phase.
-            this.cachedScore = null;
+            this.ClearCaches();
             this.phases.Clear();
             this.phases.AddFirst(new PhaseState());
         }
