@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -23,6 +24,8 @@ namespace QuizBowlDiscordScoreTracker
 
         // We don't need to order them here.
         public IEnumerable<KeyValuePair<ulong, ScoreAction>> Scores => this.scores;
+
+        public IEnumerable<ScoreAction> OrderedScoreActions => this.actions.Reverse();
 
         public bool AddBuzz(Buzz player)
         {

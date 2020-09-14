@@ -278,6 +278,11 @@ namespace QuizBowlDiscordScoreTracker
                         case 20:
                             state.ScorePlayer(points);
                             await this.PromptNextPlayerAsync(state, channel);
+                            if (points > 0)
+                            {
+                                await channel.SendMessageAsync($"**TU {state.PhaseNumber}**");
+                            }
+
                             return;
                         default:
                             break;

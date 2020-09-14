@@ -69,14 +69,18 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return Task.CompletedTask;
         }
 
-        public Task NextAsync()
+        public async Task NextAsync()
         {
-            if (this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
             {
-                game.NextQuestion();
+                return;
             }
 
-            return Task.CompletedTask;
+            game.NextQuestion();
+
+            // TODO: Consider having an event handler in GameState that will trigger when the phase is changed, so we
+            // can avoid duplicating this code
+            await this.Context.Channel.SendMessageAsync($"**TU {game.PhaseNumber}**");
         }
 
         public async Task UndoAsync()

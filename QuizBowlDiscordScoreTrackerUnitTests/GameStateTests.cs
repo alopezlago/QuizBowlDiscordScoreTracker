@@ -90,7 +90,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             }
 
             Assert.IsFalse(
-                gameState.TryGetNextPlayer(out nextPlayerId), "No players should be left in the queue.");
+                gameState.TryGetNextPlayer(out _), "No players should be left in the queue.");
         }
 
         [TestMethod]
@@ -106,7 +106,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.AreEqual(id, nextPlayerId, "Id of the next player should be ours.");
             Assert.IsTrue(gameState.WithdrawPlayer(id), "Withdrawing the same player should succeed.");
             Assert.IsFalse(
-                gameState.TryGetNextPlayer(out nextPlayerId),
+                gameState.TryGetNextPlayer(out _),
                 "There should be no player in the queue when they withdrew.");
         }
 
@@ -209,13 +209,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsFalse(gameState.TryGetNextPlayer(out ulong _), "Queue should have been cleared.");
             Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed after clear.");
             Assert.AreEqual(readerId, gameState.ReaderId, "Reader should remain the same.");
-            IEnumerable<IGrouping<ulong, ScoreAction>> scoreGroupings = gameState.GetScoringActions();
-            Assert.AreEqual(1, scoreGroupings.Count(), "Unexpected number of scores.");
+            IDictionary<ulong, ScoringSplitOnScoreAction> lastSplits = gameState.GetLastScoringSplits();
+            Assert.AreEqual(1, lastSplits.Count, "Unexpected number of scores.");
 
-            IGrouping<ulong, ScoreAction> scoreGrouping = scoreGroupings.First();
-            Assert.AreEqual(id, scoreGrouping.Key, "Unexpected ID for the score.");
-            Assert.AreEqual(1, scoreGrouping.Count(), "Unexpected number of score actions.");
-            Assert.AreEqual(-5, scoreGrouping.First().Score, "Unexpected point total for the score.");
+            KeyValuePair<ulong, ScoringSplitOnScoreAction> splitPair = lastSplits.First();
+            Assert.AreEqual(id, splitPair.Key, "Unexpected ID for the score.");
+            Assert.AreEqual(-5, splitPair.Value.Split.Points, "Unexpected point total for the score.");
         }
 
         [TestMethod]
@@ -258,13 +257,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             GameState gameState = new GameState();
             Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed.");
             gameState.ScorePlayer(-5);
-            IEnumerable<IGrouping<ulong, ScoreAction>> scoreGroupings = gameState.GetScoringActions();
-            Assert.AreEqual(1, scoreGroupings.Count(), "Only one player should have a score.");
-            IGrouping<ulong, ScoreAction> scoreGrouping = scoreGroupings.First();
+            IDictionary<ulong, ScoringSplitOnScoreAction> lastSplits = gameState.GetLastScoringSplits();
+            Assert.AreEqual(1, lastSplits.Count, "Only one player should have a score.");
+            KeyValuePair<ulong, ScoringSplitOnScoreAction> splitPair = lastSplits.First();
 
-            Assert.AreEqual(id, scoreGrouping.Key, "Unexpected ID.");
-            Assert.AreEqual(1, scoreGrouping.Count(), "Unexpected number of score actions.");
-            Assert.AreEqual(-5, scoreGrouping.First().Score, "Unexpected score.");
+            Assert.AreEqual(id, splitPair.Key, "Unexpected ID.");
+            Assert.AreEqual(-5, splitPair.Value.Split.Points, "Unexpected score.");
         }
 
         [TestMethod]
@@ -274,13 +272,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             GameState gameState = new GameState();
             Assert.IsTrue(gameState.AddPlayer(id, "Player"), "Add should succeed.");
             gameState.ScorePlayer(10);
-            IEnumerable<IGrouping<ulong, ScoreAction>> scoreGroupings = gameState.GetScoringActions();
-            Assert.AreEqual(1, scoreGroupings.Count(), "Only one player should have a score.");
-            IGrouping<ulong, ScoreAction> scoreGrouping = scoreGroupings.First();
+            IDictionary<ulong, ScoringSplitOnScoreAction> lastSplits = gameState.GetLastScoringSplits();
+            Assert.AreEqual(1, lastSplits.Count, "Only one player should have a score.");
+            KeyValuePair<ulong, ScoringSplitOnScoreAction> splitPair = lastSplits.First();
 
-            Assert.AreEqual(id, scoreGrouping.Key, "Unexpected ID.");
-            Assert.AreEqual(1, scoreGrouping.Count(), "Unexpected number of score actions.");
-            Assert.AreEqual(10, scoreGrouping.First().Score, "Unexpected score.");
+            Assert.AreEqual(id, splitPair.Key, "Unexpected ID.");
+            Assert.AreEqual(10, splitPair.Value.Split.Points, "Unexpected score.");
         }
 
         [TestMethod]
@@ -299,12 +296,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 }
             }
 
-            IEnumerable<IGrouping<ulong, ScoreAction>> scoreGroupings = gameState.GetScoringActions();
-            Assert.AreEqual(1, scoreGroupings.Count(), "Only one player should have a score.");
-            IGrouping<ulong, ScoreAction> scoreGrouping = scoreGroupings.First();
+            IDictionary<ulong, ScoringSplitOnScoreAction> lastSplits = gameState.GetLastScoringSplits();
+            Assert.AreEqual(1, lastSplits.Count, "Only one player should have a score.");
+            KeyValuePair<ulong, ScoringSplitOnScoreAction> splitPair = lastSplits.First();
 
-            Assert.AreEqual(id, scoreGrouping.Key, "Unexpected ID.");
-            Assert.AreEqual(points.Sum(), scoreGrouping.Sum(action => action.Score), "Unexpected score.");
+            Assert.AreEqual(id, splitPair.Key, "Unexpected ID.");
+            Assert.AreEqual(points.Sum(), splitPair.Value.Split.Points, "Unexpected score.");
         }
 
         [TestMethod]
@@ -319,18 +316,16 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             gameState.ScorePlayer(-5);
             gameState.ScorePlayer(10);
 
-            IEnumerable<IGrouping<ulong, ScoreAction>> scoreGroupings = gameState.GetScoringActions();
-            Assert.AreEqual(2, scoreGroupings.Count(), "Only one player should have a score.");
+            IDictionary<ulong, ScoringSplitOnScoreAction> lastSplits = gameState.GetLastScoringSplits();
+            Assert.AreEqual(2, lastSplits.Count, "Two players should have scored.");
 
-            IGrouping<ulong, ScoreAction> scoreGrouping = scoreGroupings.FirstOrDefault(pair => pair.Key == firstId);
+            KeyValuePair<ulong, ScoringSplitOnScoreAction> scoreGrouping = lastSplits.FirstOrDefault(pair => pair.Key == firstId);
             Assert.IsNotNull(scoreGrouping, "We should have a pair which relates to the first player.");
-            Assert.AreEqual(1, scoreGrouping.Count(), "The first player should only have one score action.");
-            Assert.AreEqual(-5, scoreGrouping.First().Score, "The first player should have negged.");
+            Assert.AreEqual(-5, scoreGrouping.Value.Split.Points, "The first player should have negged.");
 
-            scoreGrouping = scoreGroupings.FirstOrDefault(pair => pair.Key == secondId);
+            scoreGrouping = lastSplits.FirstOrDefault(pair => pair.Key == secondId);
             Assert.IsNotNull(scoreGrouping, "We should have a pair which relates to the second player.");
-            Assert.AreEqual(1, scoreGrouping.Count(), "The second player should only have one score action.");
-            Assert.AreEqual(10, scoreGrouping.First().Score, "The second player should have negged.");
+            Assert.AreEqual(10, scoreGrouping.Value.Split.Points, "The second player should have negged.");
         }
 
         [TestMethod]
@@ -400,13 +395,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(gameState.AddPlayer(firstId, "Player1"), "First add should succeed.");
             gameState.ScorePlayer(firstPointsFromBuzz);
 
-
             Assert.IsTrue(gameState.AddPlayer(firstId, "Player1"), "First add in second question should succeed.");
             Assert.IsTrue(gameState.AddPlayer(secondId, "Player2"), "Second add in second question should succeed.");
 
             gameState.ScorePlayer(pointsFromBuzz);
-            IDictionary<ulong, int> scores = gameState.GetScoringActions()
-                .ToDictionary(grouping => grouping.Key, grouping => grouping.Sum(action => action.Score));
+            IDictionary<ulong, int> scores = gameState.GetLastScoringSplits()
+                .ToDictionary(lastSplitPair => lastSplitPair.Key, lastSplitPair => lastSplitPair.Value.Split.Points);
             Assert.IsTrue(scores.TryGetValue(firstId, out int score), "Unable to get score for the first player.");
             Assert.AreEqual(pointsFromBuzz + firstPointsFromBuzz, score, "Incorrect score.");
 
@@ -416,8 +410,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 "We should still have a player in the buzz queue.");
             Assert.AreEqual(firstId, nextPlayerId, "Next player should be the first one.");
 
-            scores = gameState.GetScoringActions()
-                .ToDictionary(grouping => grouping.Key, grouping => grouping.Sum(action => action.Score));
+            scores = gameState.GetLastScoringSplits()
+                .ToDictionary(lastSplitPair => lastSplitPair.Key, lastSplitPair => lastSplitPair.Value.Split.Points);
             Assert.IsTrue(
                 scores.TryGetValue(firstId, out int scoreAfterUndo),
                 "Unable to get score for the first player after undo.");

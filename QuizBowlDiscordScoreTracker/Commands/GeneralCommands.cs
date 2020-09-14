@@ -24,6 +24,20 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         private IOptionsMonitor<BotConfiguration> Options { get; }
 
+        [Command("about")]
+        [Summary("Gets the version of the bot and a link to the changes in this version.")]
+        public Task AboutAsync()
+        {
+            return this.GetHandler().AboutAsync();
+        }
+
+        [Command("gameReport")]
+        [Summary("Gets a question-by-question report of the game.")]
+        public Task GetGameReportAsync()
+        {
+            return this.GetHandler().GetGameReportAsync();
+        }
+
         [Command("read")]
         [Summary("Set yourself as the reader.")]
         public Task SetReaderAsync()
