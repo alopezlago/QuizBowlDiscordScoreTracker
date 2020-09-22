@@ -1,6 +1,7 @@
 ﻿using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using QuizBowlDiscordScoreTracker.Database;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
@@ -8,12 +9,15 @@ namespace QuizBowlDiscordScoreTracker.Commands
     [RequireContext(ContextType.Guild)]
     public class ReaderCommands : ModuleBase
     {
-        public ReaderCommands(GameStateManager manager)
+        public ReaderCommands(GameStateManager manager, IDatabaseActionFactory dbActionFactory)
         {
             this.Manager = manager;
+            this.DatabaseActionFactory = dbActionFactory;
         }
 
         private GameStateManager Manager { get; }
+
+        private IDatabaseActionFactory DatabaseActionFactory { get; }
 
         [Command("setnewreader")]
         [Summary("Set another user as the reader.")]
@@ -60,7 +64,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private ReaderCommandHandler GetHandler()
         {
             // this.Context is null in the constructor, so create the handler in this method
-            return new ReaderCommandHandler(this.Context, this.Manager);
+            return new ReaderCommandHandler(this.Context, this.Manager, this.DatabaseActionFactory);
         }
     }
 }

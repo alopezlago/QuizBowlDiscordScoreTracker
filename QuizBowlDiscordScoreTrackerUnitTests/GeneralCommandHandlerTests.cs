@@ -4,10 +4,12 @@ using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Discord;
 using Discord.Commands;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Commands;
 using QuizBowlDiscordScoreTracker.Database;
@@ -17,12 +19,17 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
     [TestClass]
     public sealed class GeneralCommandHandlerTests : IDisposable
     {
-        private const int MaxFieldsInEmbed = 20;
-        private const ulong DefaultReaderId = 1;
-        private static readonly HashSet<ulong> DefaultIds = new HashSet<ulong>(new ulong[] { 1, 2, 3 });
+        private const ulong DefaultReaderId = 10;
+        private static readonly HashSet<ulong> DefaultIds = new HashSet<ulong>(new ulong[] { 1, 2, 3, DefaultReaderId });
 
         private const ulong DefaultChannelId = 11;
         private const ulong DefaultGuildId = 9;
+        private const ulong FirstTeamRoleId = 1001;
+        private const string FirstTeamName = "Alpha";
+        private const ulong SecondTeamRoleId = FirstTeamRoleId + 1;
+        private const string SecondTeamName = "Beta";
+        private const ulong ThirdTeamRoleId = FirstTeamRoleId + 2;
+        private const string ThirdTeamName = "Gamma";
 
         private InMemoryBotConfigurationContextFactory botConfigurationfactory;
 
@@ -314,7 +321,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             }
 
             await handler.GetScoreAsync();
-            int embedCount = (GameState.ScoresListLimit + 1) / MaxFieldsInEmbed;
+            int embedCount = (GameState.ScoresListLimit + 1) / EmbedBuilder.MaxFieldCount;
             Assert.AreEqual(
                 embedCount, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent after first GetScore.");
             string embed = messageStore.ChannelEmbeds.Last();
@@ -369,7 +376,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             }
 
             await handler.GetScoreAsync();
-            int embedCount = (GameState.ScoresListLimit + 1) / MaxFieldsInEmbed;
+            int embedCount = (GameState.ScoresListLimit + 1) / EmbedBuilder.MaxFieldCount;
             Assert.AreEqual(
                 embedCount,
                 messageStore.ChannelEmbeds.Count,
@@ -544,7 +551,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public async Task GetGameReportWithNoRounds()
         {
-            this.CreateHandler(out GeneralCommandHandler handler, out _, out MessageStore messageStore);
+            this.CreateHandler(out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
+            game.ReaderId = DefaultReaderId;
             await handler.GetGameReportAsync();
 
             Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
@@ -683,6 +691,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             this.CreateHandler(
                 out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
+            game.ReaderId = DefaultReaderId;
             for (int i = 0; i < GeneralCommandHandler.MaxLeadersShown; i++)
             {
                 ulong number = (ulong)i;
@@ -726,6 +735,244 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 $"2 \"others\" wasn't found in {embed}");
         }
 
+        [TestMethod]
+        public async Task GetGameReportWithTeamsMultipleLeadersWithOthers()
+        {
+            await this.SetDefaultTeamRolePrefix();
+
+            this.CreateHandler(
+                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
+            game.ReaderId = DefaultReaderId;
+
+            for (int i = 0; i < GeneralCommandHandler.MaxLeadersShown; i++)
+            {
+                ulong number = (ulong)i;
+                game.AddPlayer(number, $"Player {number}", FirstTeamRoleId + (ulong)i);
+                game.ScorePlayer(10);
+            }
+
+            // No "..." at the limit
+            await handler.GetGameReportAsync();
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = messageStore.ChannelEmbeds.First();
+            messageStore.Clear();
+            Assert.IsFalse(
+                embed.Contains("...", StringComparison.OrdinalIgnoreCase),
+                $"\"...\" was found unexpectedly in\n{embed}");
+
+            // Once we are past the limit, show "..."
+            ulong otherLimit = GeneralCommandHandler.MaxLeadersShown;
+            game.AddPlayer(otherLimit, $"Player {otherLimit}");
+            game.ScorePlayer(10);
+
+            await handler.GetGameReportAsync();
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            embed = messageStore.ChannelEmbeds.First();
+            messageStore.Clear();
+            Assert.IsTrue(
+                embed.Contains("...", StringComparison.OrdinalIgnoreCase),
+                $"\"...r\" wasn't found in\n {embed}");
+        }
+
+        [TestMethod]
+        public async Task GameReportWithTeamsLeadersSortedByScore()
+        {
+            await this.SetDefaultTeamRolePrefix();
+
+            this.CreateHandler(
+                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
+            game.ReaderId = DefaultReaderId;
+            game.AddPlayer(1, "Player1", FirstTeamRoleId);
+            game.ScorePlayer(10);
+            game.AddPlayer(2, "Player2", SecondTeamRoleId);
+            game.ScorePlayer(20);
+
+            await handler.GetGameReportAsync();
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = messageStore.ChannelEmbeds.First();
+            messageStore.Clear();
+
+            Assert.IsTrue(embed.Contains(
+                $"**{SecondTeamName}** 20, **{FirstTeamName}** 10", StringComparison.InvariantCultureIgnoreCase),
+                $"Sorted score wasn't found in\n{embed}");
+
+            game.AddPlayer(3, "Player3", FirstTeamRoleId);
+            game.ScorePlayer(15);
+            await handler.GetGameReportAsync();
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds after the 4th question");
+            embed = messageStore.ChannelEmbeds.First();
+
+            Assert.IsTrue(embed.Contains(
+                $"**{FirstTeamName}** 25, **{SecondTeamName}** 20", StringComparison.InvariantCultureIgnoreCase),
+                $"Sorted score wasn't found after the 4th question i\n{embed}");
+        }
+
+        [TestMethod]
+        public async Task GameReportWithMoreThanTwoTeams()
+        {
+            const int firstScore = 10;
+            const int secondScore = 15;
+            const int thirdScore = 20;
+            await this.SetDefaultTeamRolePrefix();
+
+            this.CreateHandler(
+                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
+            game.ReaderId = DefaultReaderId;
+            game.AddPlayer(1, "Player1", FirstTeamRoleId);
+            game.ScorePlayer(firstScore);
+            game.AddPlayer(2, "Player2", SecondTeamRoleId);
+            game.ScorePlayer(secondScore);
+            game.AddPlayer(3, "Player3", ThirdTeamRoleId);
+            game.ScorePlayer(thirdScore);
+
+            await handler.GetGameReportAsync();
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = messageStore.ChannelEmbeds.First();
+            Assert.IsTrue(
+                embed.Contains($"**{ThirdTeamName}** {thirdScore}, **{SecondTeamName}** {secondScore}, " +
+                    $"**{FirstTeamName}** {firstScore}", StringComparison.InvariantCultureIgnoreCase),
+                $"Three teams weren't found in\n{embed}");
+        }
+
+        [TestMethod]
+        public async Task GameReportWithTeamsIncludesPlayers()
+        {
+            await this.SetDefaultTeamRolePrefix();
+
+            this.CreateHandler(
+                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
+            game.ReaderId = DefaultReaderId;
+            game.AddPlayer(1, "Player1", FirstTeamRoleId);
+            game.ScorePlayer(10);
+            game.AddPlayer(1, "Player1", FirstTeamRoleId);
+            game.ScorePlayer(-5);
+            game.AddPlayer(2, "Player2", SecondTeamRoleId);
+            game.ScorePlayer(15);
+
+            await handler.GetGameReportAsync();
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = messageStore.ChannelEmbeds.First();
+            messageStore.Clear();
+
+            Assert.IsTrue(
+                embed.Contains(
+                    "**Question 1**: > Correctly answered by **Player1** (Alpha) (0/1/0)",
+                    StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find first player's buzz in embed\n{embed}");
+            Assert.IsTrue(
+                embed.Contains(
+                    "**Question 2**: > Negged by **Player1** (Alpha) (0/1/1)",
+                    StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find first player's neg in embed\n{embed}");
+            Assert.IsTrue(
+                embed.Contains(
+                    "> Powered by **Player2** (Beta) (1/0/0)",
+                    StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find second player's power in embed\n{embed}");
+
+            // Make sure superpowers and no penalties appear too
+            game.AddPlayer(1, "Player1", FirstTeamRoleId);
+            game.ScorePlayer(20);
+            game.AddPlayer(2, "Player2", SecondTeamRoleId);
+            game.ScorePlayer(0);
+
+            await handler.GetGameReportAsync();
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            embed = messageStore.ChannelEmbeds.First();
+            Assert.IsTrue(
+                embed.Contains(
+                    "**Question 3**: > Superpowered by **Player1** (Alpha) (1/0/1/1)",
+                    StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find first player's superpower in embed\n{embed}");
+            Assert.IsTrue(
+                embed.Contains(
+                    "**Question 4**: > Incorrectly answered by **Player2** (Beta) (0/1/0/0)",
+                    StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find second player's no penalty buzz in embed\n{embed}");
+        }
+
+        [TestMethod]
+        public async Task GameReportSamePlayerDifferentTeams()
+        {
+            const string playerName = "Player1";
+            await this.SetDefaultTeamRolePrefix();
+
+            this.CreateHandler(
+                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
+            game.ReaderId = DefaultReaderId;
+            game.AddPlayer(1, playerName);
+            game.ScorePlayer(10);
+            game.AddPlayer(1, playerName, FirstTeamRoleId);
+            game.ScorePlayer(15);
+            game.AddPlayer(1, playerName, SecondTeamRoleId);
+            game.ScorePlayer(-5);
+
+            await handler.GetGameReportAsync();
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = messageStore.ChannelEmbeds.First();
+            messageStore.Clear();
+
+            Assert.IsTrue(embed.Contains(
+                $"**{FirstTeamName}** 15, **{playerName}** 10, **{SecondTeamName}** -5",
+                StringComparison.InvariantCultureIgnoreCase),
+                $"Score wasn't found in\n{embed}");
+
+            Assert.IsTrue(
+                embed.Contains(
+                    "**Player1** (0/1/0)", StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find first player's buzz in embed\n{embed}");
+            Assert.IsTrue(
+                embed.Contains(
+                    "**Player1** (Alpha) (1/0/0)", StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find first player's neg in embed\n{embed}");
+            Assert.IsTrue(
+                embed.Contains(
+                    "**Player1** (Beta) (0/0/1)", StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find second player's power in embed\n{embed}");
+        }
+
+        [TestMethod]
+        public async Task GetScoreSamePlayerDifferentTeams()
+        {
+            const string playerName = "Player1";
+            await this.SetDefaultTeamRolePrefix();
+
+            this.CreateHandler(
+                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
+            game.ReaderId = DefaultReaderId;
+
+            game.AddPlayer(1, playerName);
+            game.ScorePlayer(10);
+            game.AddPlayer(1, playerName, FirstTeamRoleId);
+            game.ScorePlayer(15);
+            game.AddPlayer(1, playerName, SecondTeamRoleId);
+            game.ScorePlayer(-5);
+
+            await handler.GetScoreAsync();
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = messageStore.ChannelEmbeds.First();
+            messageStore.Clear();
+
+            Regex firstTeamLine = new Regex($"Alpha.*\\(15\\).*{playerName}.*15 \\(1/0/0\\)", RegexOptions.IgnoreCase);
+            System.Text.RegularExpressions.Match firstTeamMatch = firstTeamLine.Match(embed);
+            Assert.IsTrue(firstTeamMatch.Success, $"Couldn't find first team stats in embed\n{embed}");
+            Regex individualLine = new Regex(
+                $"{playerName}.*\\(10\\).*{playerName}.*10 \\(0/1/0\\)", RegexOptions.IgnoreCase);
+            System.Text.RegularExpressions.Match individualMatch = individualLine.Match(embed);
+            Assert.IsTrue(individualMatch.Success, $"Couldn't find first team stats in embed\n{embed}");
+            Regex secondTeamLine = new Regex($"Beta.*\\(-5\\).*{playerName}.*-5 \\(0/0/1\\)", RegexOptions.IgnoreCase);
+            System.Text.RegularExpressions.Match secondTeamMatch = secondTeamLine.Match(embed);
+            Assert.IsTrue(secondTeamMatch.Success, $"Couldn't find first team stats in embed\n{embed}");
+
+            // Verify the ordering
+            Assert.IsTrue(
+                firstTeamMatch.Index < individualMatch.Index,
+                $"First team score wasn't before the individual score ({firstTeamMatch.Index} >= {individualMatch.Index})");
+            Assert.IsTrue(
+                individualMatch.Index < secondTeamMatch.Index,
+                $"Individual score wasn't before the second team score ({individualMatch.Index} >= {secondTeamMatch.Index})");
+        }
+
         private static ulong GetExistingNonReaderUserId(ulong readerId = DefaultReaderId)
         {
             return DefaultIds.Except(new ulong[] { readerId }).First();
@@ -764,9 +1011,25 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 existingIds,
                 DefaultGuildId,
                 DefaultChannelId,
-                voiceChannelId: 9999,
-                voiceChannelName: "Voice",
                 userId: userId,
+                updateMockGuild: (mockGuild, textChannel) =>
+                {
+                    Mock<IRole> mockRole = new Mock<IRole>();
+                    mockRole.Setup(role => role.Id).Returns(FirstTeamRoleId);
+                    mockRole.Setup(role => role.Name).Returns($"Team {FirstTeamName}");
+                    Mock<IRole> mockRole2 = new Mock<IRole>();
+                    mockRole2.Setup(role => role.Id).Returns(SecondTeamRoleId);
+                    mockRole2.Setup(role => role.Name).Returns($"Team {SecondTeamName}");
+                    Mock<IRole> mockRole3 = new Mock<IRole>();
+                    mockRole3.Setup(role => role.Id).Returns(ThirdTeamRoleId);
+                    mockRole3.Setup(role => role.Name).Returns($"Team {ThirdTeamName}");
+
+                    IRole[] roles = new IRole[]
+                    {
+                        mockRole.Object, mockRole2.Object, mockRole3.Object
+                    };
+                    mockGuild.Setup(guild => guild.Roles).Returns(roles);
+                },
                 out _);
             IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
                 this.botConfigurationfactory);
@@ -775,6 +1038,15 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             manager.TryCreate(DefaultChannelId, out game);
 
             handler = new GeneralCommandHandler(commandContext, manager, options, dbActionFactory);
+        }
+
+        private Task SetDefaultTeamRolePrefix()
+        {
+            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            using (DatabaseAction action = new DatabaseAction(context))
+            {
+                return action.SetTeamRolePrefixAsync(DefaultGuildId, "Team ");
+            }
         }
     }
 }

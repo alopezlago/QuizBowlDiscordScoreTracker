@@ -77,7 +77,8 @@ namespace QuizBowlDiscordScoreTracker
                         .WriteTo.File(
                             Path.Combine("logs", "bot.log"),
                             fileSizeLimitBytes: maxLogfileSize,
-                            retainedFileCountLimit: 10);
+                            rollingInterval: RollingInterval.Month,
+                            retainedFileCountLimit: 6);
                     Log.Logger = loggerConfiguration.CreateLogger();
                 })
                 .UseConsoleLifetime()

@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -11,7 +10,7 @@ namespace QuizBowlDiscordScoreTracker
         private readonly LinkedList<PhaseState> phases;
 
         private ulong? readerId;
-        private IDictionary<ulong, ScoringSplitOnScoreAction> cachedLastScoringSplit;
+        private IDictionary<PlayerTeamPair, ScoringSplitOnScoreAction> cachedLastScoringSplit;
         private IEnumerable<IEnumerable<ScoringSplitOnScoreAction>> cachedSplitsPerPhase;
 
         private readonly object phasesLock = new object();
@@ -77,7 +76,7 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public bool AddPlayer(ulong userId, string playerDisplayName)
+        public bool AddPlayer(ulong userId, string playerDisplayName, ulong? teamId = null)
         {
             // readers cannot add themselves
             if (userId == this.ReaderId)
@@ -89,8 +88,9 @@ namespace QuizBowlDiscordScoreTracker
             {
                 // TODO: Consider taking this from the message. This would require passing in another parameter.
                 Timestamp = DateTime.Now,
-                UserId = userId,
-                PlayerDisplayName = playerDisplayName
+                PlayerDisplayName = playerDisplayName,
+                TeamId = teamId,
+                UserId = userId
             };
 
             lock (this.phasesLock)
@@ -99,7 +99,7 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public bool WithdrawPlayer(ulong userId)
+        public bool WithdrawPlayer(ulong userId, ulong? userTeamId = null)
         {
             // readers cannot withdraw themselves
             if (userId == this.ReaderId)
@@ -109,11 +109,10 @@ namespace QuizBowlDiscordScoreTracker
 
             lock (this.phasesLock)
             {
-                return this.CurrentPhase.WithdrawPlayer(userId);
+                return this.CurrentPhase.WithdrawPlayer(userId, userTeamId);
             }
         }
 
-        //IEnumerable<ICollection<(ScoreAction scoreAction, ScoringSplit split)>>
         public void EnsureCachedCollectionsExist()
         {
             if (this.cachedLastScoringSplit != null && this.cachedSplitsPerPhase != null)
@@ -122,16 +121,16 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             List<IEnumerable<ScoringSplitOnScoreAction>> splitsPerPhase = new List<IEnumerable<ScoringSplitOnScoreAction>>();
-            IDictionary<ulong, ScoringSplitOnScoreAction> lastScoringSplits =
-                new Dictionary<ulong, ScoringSplitOnScoreAction>();
+            IDictionary<PlayerTeamPair, ScoringSplitOnScoreAction> lastScoringSplits =
+                new Dictionary<PlayerTeamPair, ScoringSplitOnScoreAction>();
             foreach (PhaseState phase in this.phases)
             {
                 List<ScoringSplitOnScoreAction> splitsInPhase = new List<ScoringSplitOnScoreAction>();
                 foreach (ScoreAction scoreAction in phase.OrderedScoreActions)
                 {
                     // Try to get the split and clone it. If it doesn't exist, just make a new one.
-                    lastScoringSplits.TryGetValue(
-                        scoreAction.Buzz.UserId, out ScoringSplitOnScoreAction splitActionPair);
+                    PlayerTeamPair pair = new PlayerTeamPair(scoreAction.Buzz.UserId, scoreAction.Buzz.TeamId);
+                    lastScoringSplits.TryGetValue(pair, out ScoringSplitOnScoreAction splitActionPair);
                     ScoringSplit newSplit = splitActionPair?.Split.Clone() ?? new ScoringSplit();
                     switch (scoreAction.Score)
                     {
@@ -160,7 +159,7 @@ namespace QuizBowlDiscordScoreTracker
                         Split = newSplit
                     };
 
-                    lastScoringSplits[scoreAction.Buzz.UserId] = newPair;
+                    lastScoringSplits[pair] = newPair;
                     splitsInPhase.Add(newPair);
                 }
 
@@ -171,7 +170,7 @@ namespace QuizBowlDiscordScoreTracker
             this.cachedLastScoringSplit = lastScoringSplits;
         }
 
-        public IDictionary<ulong, ScoringSplitOnScoreAction> GetLastScoringSplits()
+        public IDictionary<PlayerTeamPair, ScoringSplitOnScoreAction> GetLastScoringSplits()
         {
             lock (this.phasesLock)
             {

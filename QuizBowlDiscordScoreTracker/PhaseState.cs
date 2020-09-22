@@ -6,8 +6,11 @@ namespace QuizBowlDiscordScoreTracker
 {
     public class PhaseState
     {
+        // If there are memory issues, look into making alreadyBuzzedTeamIds an array, since there shouldn't usually be
+        // many teams.
         private readonly SortedSet<Buzz> buzzQueue;
-        private readonly HashSet<ulong> alreadyBuzzedPlayers;
+        private readonly HashSet<ulong> alreadyBuzzedPlayerIds;
+        private readonly HashSet<ulong> alreadyScoredTeamIds;
         private readonly Stack<ScoreAction> actions;
         private readonly Dictionary<ulong, ScoreAction> scores;
 
@@ -17,7 +20,8 @@ namespace QuizBowlDiscordScoreTracker
         public PhaseState()
         {
             this.buzzQueue = new SortedSet<Buzz>();
-            this.alreadyBuzzedPlayers = new HashSet<ulong>();
+            this.alreadyBuzzedPlayerIds = new HashSet<ulong>();
+            this.alreadyScoredTeamIds = new HashSet<ulong>();
             this.actions = new Stack<ScoreAction>();
             this.scores = new Dictionary<ulong, ScoreAction>();
         }
@@ -27,17 +31,22 @@ namespace QuizBowlDiscordScoreTracker
 
         public IEnumerable<ScoreAction> OrderedScoreActions => this.actions.Reverse();
 
+        // We could add players to it, but if the team has buzzed already, we can skip/eject them from the queue
         public bool AddBuzz(Buzz player)
         {
             lock (this.collectionLock)
             {
-                if (player == null || this.alreadyBuzzedPlayers.Contains(player.UserId))
+                Verify.IsNotNull(player, nameof(player));
+                ulong teamId = GetTeamId(player);
+                if (player == null ||
+                    this.alreadyBuzzedPlayerIds.Contains(player.UserId) ||
+                    this.alreadyScoredTeamIds.Contains(teamId))
                 {
                     return false;
                 }
 
                 this.buzzQueue.Add(player);
-                this.alreadyBuzzedPlayers.Add(player.UserId);
+                this.alreadyBuzzedPlayerIds.Add(player.UserId);
             }
 
             return true;
@@ -48,29 +57,33 @@ namespace QuizBowlDiscordScoreTracker
             lock (this.collectionLock)
             {
                 this.actions.Clear();
-                this.alreadyBuzzedPlayers.Clear();
+                this.alreadyBuzzedPlayerIds.Clear();
                 this.buzzQueue.Clear();
             }
         }
 
         public bool TryScore(int score)
         {
-            Buzz buzz = this.buzzQueue.Min;
-            if (buzz == null)
+            lock (this.collectionLock)
             {
-                // This is a bug we should log when logging is added.
-                Debug.Fail($"{nameof(this.TryScore)} should not be called when there are no players in the queue.");
-                return false;
+                Buzz buzz = this.GetNextPlayerToPrompt();
+                if (buzz == null)
+                {
+                    // This is a bug we should log when logging is added.
+                    Debug.Fail($"{nameof(this.TryScore)} should not be called when there are no players in the queue.");
+                    return false;
+                }
+
+                this.buzzQueue.Remove(buzz);
+
+                // TODO: Should we verify that this.scores doesn't have an action for that user already?
+                ScoreAction action = new ScoreAction(buzz, score);
+                this.scores[buzz.UserId] = action;
+                this.actions.Push(action);
+                this.alreadyScoredTeamIds.Add(GetTeamId(buzz));
+
+                return true;
             }
-
-            this.buzzQueue.Remove(buzz);
-
-            // TODO: Should we verify that this.scores doesn't have an action for that user already?
-            ScoreAction action = new ScoreAction(buzz, score);
-            this.scores[buzz.UserId] = action;
-            this.actions.Push(action);
-
-            return true;
         }
 
         public bool TryGetNextPlayer(out ulong nextPlayerId)
@@ -81,7 +94,7 @@ namespace QuizBowlDiscordScoreTracker
                 // Only get the next player if there hasn't been a buzz that was correct.
                 if (!this.actions.TryPeek(out ScoreAction action) || action.Score <= 0)
                 {
-                    next = this.buzzQueue.Min;
+                    next = this.GetNextPlayerToPrompt();
                 }
             }
 
@@ -95,16 +108,17 @@ namespace QuizBowlDiscordScoreTracker
             return true;
         }
 
-        public bool WithdrawPlayer(ulong userId)
+        public bool WithdrawPlayer(ulong userId, ulong? userTeamId = null)
         {
             int count = 0;
             lock (this.collectionLock)
             {
-                if (this.alreadyBuzzedPlayers.Remove(userId))
+                if (this.alreadyBuzzedPlayerIds.Remove(userId))
                 {
                     // Unless we change Buzz's Equals to only take the User into account then we have to go through the
                     // whole set to withdraw.
                     count = this.buzzQueue.RemoveWhere(buzz => buzz.UserId == userId);
+                    this.alreadyScoredTeamIds.Remove(userTeamId ?? userId);
                     Debug.Assert(count <= 1, "The same user should not be in the queue more than once.");
                 }
             }
@@ -118,20 +132,43 @@ namespace QuizBowlDiscordScoreTracker
         /// <returns>True if we could undo an action. False if there were no actions to undo.</returns>
         public bool Undo(out ulong userId)
         {
-            if (!this.actions.TryPop(out ScoreAction action))
+            lock (this.collectionLock)
             {
-                userId = 0;
-                return false;
+                if (!this.actions.TryPop(out ScoreAction action))
+                {
+                    userId = 0;
+                    return false;
+                }
+
+                userId = action.Buzz.UserId;
+                this.scores.Remove(userId);
+
+                // We shouldn't need to change the list of already buzzed players, because in order to have an action the
+                // player must've buzzed in. We do need to add the player back to the queue. The queue should be sorted by
+                // the timing of the buzz, so consecutive undos should place the players back in the right order.
+                this.buzzQueue.Add(action.Buzz);
+                this.alreadyScoredTeamIds.Remove(GetTeamId(action.Buzz));
+                return true;
             }
+        }
 
-            userId = action.Buzz.UserId;
-            this.scores.Remove(userId);
+        private static ulong GetTeamId(Buzz player)
+        {
+            // If the player isn't on a team, treat them as being on their own team (they're player ID, which should be
+            // distinct in Discord)
+            return player.TeamId ?? player.UserId;
+        }
 
-            // We shouldn't need to change the list of already buzzed players, because in order to have an action the
-            // player must've buzzed in. We do need to add the player back to the queue. The queue should be sorted by
-            // the timing of the buzz, so consecutive undos should place the players back in the right order.
-            this.buzzQueue.Add(action.Buzz);
-            return true;
+        private Buzz GetNextPlayerToPrompt()
+        {
+            // This would normally be buzzQueue.Min, and without teams we could do that, but because we support Undo
+            // we sometimes have to keep buzzes that don't get prompted in the queue.
+            // The scenario: The buzzes are A1 B1 B2 C1 -> A1 gets -5, B1 gets -5, C1 is prompted, reader undos and
+            // withdraws B1 (perhaps because their connection dropped)
+            // If we want to prompt B2, then we cannot remove B2 from the buzz queue when we prompt C1. This means we
+            // need to keep these buzzes around, so we must search for the next correct buzz
+            // In realistic games this should basically be .Min
+            return this.buzzQueue.FirstOrDefault(buzz => !this.alreadyScoredTeamIds.Contains(GetTeamId(buzz)));
         }
     }
 }

@@ -7,14 +7,6 @@ namespace QuizBowlDiscordScoreTracker
 {
     public static class IMessageChannelExtensions
     {
-        private const int MaxFieldsInEmbed = 20;
-        private const int MaxEmbedLength = 6000;
-
-        // We enumerate through each field to create an list of EmbedFieldBuidlers. Then we can do both
-        // the item limits and item length limits while iterating through that list, since we can access the index.
-        // I tried just doing it inline when going through the collection, but the logic for handling edge cases is
-        // messier.
-
         /// <summary>
         /// Sends an embed with fields for each item in the collection. If the number of items is greater than Discord's
         /// embed field limit, it splits up the message into multiple embeds.
@@ -54,12 +46,12 @@ namespace QuizBowlDiscordScoreTracker
                 EmbedBuilder embedBuilder = createEmbedBuilder();
                 int embedLength = 0;
 
-                while (embedBuilder.Fields.Count < MaxFieldsInEmbed && fieldIndex < fields.Count)
+                while (embedBuilder.Fields.Count < EmbedBuilder.MaxFieldCount && fieldIndex < fields.Count)
                 {
                     EmbedFieldBuilder field = fields[fieldIndex];
                     int fieldLength = GetEmbedFieldLength(field);
 
-                    if (fieldLength > MaxEmbedLength)
+                    if (fieldLength > EmbedBuilder.MaxEmbedLength)
                     {
                         // We will never be able to add this embed. Fail.
                         throw new ArgumentException(
@@ -67,7 +59,7 @@ namespace QuizBowlDiscordScoreTracker
                     }
 
                     embedLength += fieldLength;
-                    if (embedLength >= MaxEmbedLength)
+                    if (embedLength >= EmbedBuilder.MaxEmbedLength)
                     {
                         // This field would push us over the limit, so sotp for now.
                         break;
