@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Discord;
 using Discord.Commands;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 using QuizBowlDiscordScoreTracker.Commands;
 using QuizBowlDiscordScoreTracker.Database;
 
@@ -221,9 +223,24 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 DefaultIds,
                 DefaultGuildId,
                 DefaultChannelId,
-                voiceChannelId,
-                voiceChannelName,
                 DefaultReaderId,
+                (mockGuild, textChannel) =>
+                {
+                    Mock<IVoiceChannel> mockVoiceChannel = new Mock<IVoiceChannel>();
+                    mockVoiceChannel.Setup(voiceChannel => voiceChannel.Id).Returns(voiceChannelId);
+                    mockVoiceChannel.Setup(voiceChannel => voiceChannel.Name).Returns(voiceChannelName);
+                    mockGuild
+                        .Setup(guild => guild.GetVoiceChannelAsync(It.IsAny<ulong>(), It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
+                        .Returns(Task.FromResult(mockVoiceChannel.Object));
+
+                    List<IVoiceChannel> voiceChannels = new List<IVoiceChannel>()
+                    {
+                        mockVoiceChannel.Object
+                    };
+                    mockGuild
+                        .Setup(guild => guild.GetVoiceChannelsAsync(It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
+                        .Returns(Task.FromResult<IReadOnlyCollection<IVoiceChannel>>(voiceChannels));
+                },
                 out guildTextChannel);
             IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
                 this.botConfigurationfactory);

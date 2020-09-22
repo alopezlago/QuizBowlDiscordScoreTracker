@@ -1,6 +1,7 @@
 ﻿using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using QuizBowlDiscordScoreTracker.Database;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker.Commands
@@ -9,15 +10,19 @@ namespace QuizBowlDiscordScoreTracker.Commands
     {
         private static readonly ILogger Logger = Log.ForContext(typeof(ReaderCommandHandler));
 
-        public ReaderCommandHandler(ICommandContext context, GameStateManager manager)
+        public ReaderCommandHandler(
+            ICommandContext context, GameStateManager manager, IDatabaseActionFactory dbActionFactory)
         {
             this.Context = context;
             this.Manager = manager;
+            this.DatabaseActionFactory = dbActionFactory;
         }
 
         private ICommandContext Context { get; }
 
         private GameStateManager Manager { get; }
+
+        private IDatabaseActionFactory DatabaseActionFactory { get; }
 
         public async Task SetNewReaderAsync(IGuildUser newReader)
         {
@@ -99,10 +104,11 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 // Also unsure if this is really applicable. Could use status, but some people may play while
                 // appearing offline.
                 name = "<Unknown>";
+                ulong? teamId = await user.GetTeamId(this.DatabaseActionFactory);
 
                 // Need to remove player from queue too, since they cannot answer
                 // Maybe we need to find the next player in the queue?
-                game.WithdrawPlayer(userId);
+                game.WithdrawPlayer(userId, teamId);
                 string nextPlayerMention = null;
                 while (game.TryGetNextPlayer(out ulong nextPlayerId))
                 {
@@ -114,7 +120,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     }
 
                     // Player isn't here, so withdraw them
-                    game.WithdrawPlayer(nextPlayerId);
+                    teamId = await user.GetTeamId(this.DatabaseActionFactory);
+                    game.WithdrawPlayer(nextPlayerId, teamId);
                 }
 
                 message = nextPlayerMention != null ?

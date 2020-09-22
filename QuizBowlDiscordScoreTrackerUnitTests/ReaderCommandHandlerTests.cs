@@ -4,15 +4,17 @@ using System.Linq;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Commands;
+using QuizBowlDiscordScoreTracker.Database;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
     [TestClass]
-    public class ReaderCommandHandlerTests
+    public sealed class ReaderCommandHandlerTests : IDisposable
     {
         private const ulong DefaultReaderId = 1;
         private static readonly HashSet<ulong> DefaultIds = new HashSet<ulong>(new ulong[] { 1, 2, 3 });
@@ -20,12 +22,32 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         private const ulong DefaultChannelId = 11;
         private const ulong DefaultGuildId = 9;
 
+        private InMemoryBotConfigurationContextFactory botConfigurationfactory;
+
+        [TestInitialize]
+        public void InitializeTest()
+        {
+            this.botConfigurationfactory = new InMemoryBotConfigurationContextFactory();
+
+            // Make sure the database is initialized before running the test
+            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            {
+                context.Database.Migrate();
+            }
+        }
+
+        [TestCleanup]
+        public void Dispose()
+        {
+            this.botConfigurationfactory.Dispose();
+        }
+
         [TestMethod]
         public async Task CanSetExistingUserAsNewReader()
         {
             ulong newReaderId = GetExistingNonReaderUserId();
             string newReaderMention = $"@User_{newReaderId}";
-            CreateHandler(
+            this.CreateHandler(
                 out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
             currentGame.ReaderId = 0;
 
@@ -46,7 +68,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task ClearEmptiesQueue()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            CreateHandler(out ReaderCommandHandler handler, out GameState currentGame, out _);
+            this.CreateHandler(out ReaderCommandHandler handler, out GameState currentGame, out _);
 
             currentGame.AddPlayer(buzzer, "Player");
             await handler.ClearAsync();
@@ -63,8 +85,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             MessageStore messageStore = new MessageStore();
             ICommandContext commandContext = CommandMocks.CreateCommandContext(
                 messageStore, DefaultIds, DefaultGuildId, DefaultChannelId, DefaultReaderId);
+            IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
+                this.botConfigurationfactory);
 
-            ReaderCommandHandler handler = new ReaderCommandHandler(commandContext, manager);
+            ReaderCommandHandler handler = new ReaderCommandHandler(commandContext, manager, dbActionFactory);
 
             await handler.ClearAllAsync();
 
@@ -78,7 +102,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task NextQuestionClears()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            CreateHandler(out ReaderCommandHandler handler, out GameState currentGame, out _);
+            this.CreateHandler(out ReaderCommandHandler handler, out GameState currentGame, out _);
 
             currentGame.AddPlayer(buzzer, "Player");
             await handler.NextAsync();
@@ -91,7 +115,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task CanUndoWithReader()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            CreateHandler(
+            this.CreateHandler(
                 out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
 
             currentGame.ReaderId = 0;
@@ -116,13 +140,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             return DefaultIds.Except(new ulong[] { readerId }).First();
         }
 
-        private static void CreateHandler(
+        private void CreateHandler(
             out ReaderCommandHandler handler, out GameState game, out MessageStore messageStore)
         {
-            CreateHandler(DefaultIds, out handler, out game, out messageStore);
+            this.CreateHandler(DefaultIds, out handler, out game, out messageStore);
         }
 
-        private static void CreateHandler(
+        private void CreateHandler(
             HashSet<ulong> existingIds,
             out ReaderCommandHandler handler,
             out GameState game,
@@ -134,14 +158,15 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 existingIds,
                 DefaultGuildId,
                 DefaultChannelId,
-                voiceChannelId: 9999,
-                voiceChannelName: "Voice",
                 userId: DefaultReaderId,
+                updateMockGuild: null,
                 out _);
             GameStateManager manager = new GameStateManager();
             manager.TryCreate(DefaultChannelId, out game);
+            IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
+                this.botConfigurationfactory);
 
-            handler = new ReaderCommandHandler(commandContext, manager);
+            handler = new ReaderCommandHandler(commandContext, manager, dbActionFactory);
         }
     }
 }
