@@ -5,7 +5,8 @@ namespace QuizBowlDiscordScoreTracker.Web
 {
     public class MonitorHub : Hub
     {
-        public async Task AddToChannelAsync(string channelId)
+        // Use the old name (without Async) so it's found
+        public async Task AddToChannel(string channelId)
         {
             await this.Groups.AddToGroupAsync(this.Context.ConnectionId, channelId);
 
