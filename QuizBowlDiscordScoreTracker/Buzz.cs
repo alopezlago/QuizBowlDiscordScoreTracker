@@ -9,7 +9,7 @@ namespace QuizBowlDiscordScoreTracker
         // We don't use name for equality, just UserId.
         public string PlayerDisplayName { get; set; }
 
-        public ulong? TeamId { get; set; }
+        public string TeamId { get; set; }
 
         public DateTime Timestamp { get; set; }
 
@@ -25,7 +25,9 @@ namespace QuizBowlDiscordScoreTracker
 
         public override int GetHashCode()
         {
-            return this.UserId.GetHashCode() ^ this.Timestamp.GetHashCode() ^ (this.TeamId?.GetHashCode() ?? 0);
+            return this.UserId.GetHashCode() ^
+                this.Timestamp.GetHashCode() ^
+                (this.TeamId?.GetHashCode(StringComparison.Ordinal) ?? 0);
         }
 
         public override bool Equals(object obj)
@@ -42,9 +44,9 @@ namespace QuizBowlDiscordScoreTracker
 
         public static bool operator ==(Buzz left, Buzz right)
         {
-            if (ReferenceEquals(left, null))
+            if (left is null)
             {
-                return ReferenceEquals(right, null);
+                return right is null;
             }
 
             return left.Equals(right);
@@ -57,22 +59,22 @@ namespace QuizBowlDiscordScoreTracker
 
         public static bool operator <(Buzz left, Buzz right)
         {
-            return ReferenceEquals(left, null) ? !ReferenceEquals(right, null) : left.CompareTo(right) < 0;
+            return left is null ? right is object : left.CompareTo(right) < 0;
         }
 
         public static bool operator <=(Buzz left, Buzz right)
         {
-            return ReferenceEquals(left, null) || left.CompareTo(right) <= 0;
+            return left is null || left.CompareTo(right) <= 0;
         }
 
         public static bool operator >(Buzz left, Buzz right)
         {
-            return !ReferenceEquals(left, null) && left.CompareTo(right) > 0;
+            return left is object && left.CompareTo(right) > 0;
         }
 
         public static bool operator >=(Buzz left, Buzz right)
         {
-            return ReferenceEquals(left, null) ? ReferenceEquals(right, null) : left.CompareTo(right) >= 0;
+            return left is null ? right is null : left.CompareTo(right) >= 0;
         }
     }
 }

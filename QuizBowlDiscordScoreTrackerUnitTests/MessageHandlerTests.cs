@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Database;
+using QuizBowlDiscordScoreTracker.TeamManager;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
@@ -95,10 +96,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             messageStore.Clear();
 
             await handler.TryScoreBuzz(state, readerUser, channel, "no penalty");
-            IDictionary<PlayerTeamPair, ScoringSplitOnScoreAction> lastSplits = state.GetLastScoringSplits();
+            IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
             PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, null);
             Assert.IsTrue(
-                lastSplits.TryGetValue(pair, out ScoringSplitOnScoreAction split),
+                lastSplits.TryGetValue(pair, out LastScoringSplit split),
                 "Couldn't get scoring split");
             Assert.AreEqual(0, split.Split.Points, "Unexpected number of points");
             messageStore.VerifyChannelMessages();
@@ -115,19 +116,19 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out IGuildTextChannel channel,
                 out MessageStore messageStore);
 
-            state.AddPlayer(DefaultPlayerId, "Player");
+            await state.AddPlayer(DefaultPlayerId, "Player");
 
             bool scoredBuzz = await handler.TryScoreBuzz(state, playerUser, channel, "no penalty");
             Assert.IsFalse(scoredBuzz, "Player shouldn't be able to give points");
-            IDictionary<PlayerTeamPair, ScoringSplitOnScoreAction> lastSplits = state.GetLastScoringSplits();
+            IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
             PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, null);
             Assert.IsFalse(lastSplits.TryGetValue(pair, out _), "Scoring split shouldn't exist");
 
             scoredBuzz = await handler.TryScoreBuzz(state, readerUser, channel, "10");
             Assert.IsTrue(scoredBuzz, "Buzz wasn't scored");
-            lastSplits = state.GetLastScoringSplits();
+            lastSplits = await state.GetLastScoringSplits();
             Assert.IsTrue(
-                lastSplits.TryGetValue(pair, out ScoringSplitOnScoreAction split),
+                lastSplits.TryGetValue(pair, out LastScoringSplit split),
                 "Couldn't get scoring split"); ;
             Assert.AreEqual(10, split.Split.Points, "Unexpected number of points");
             messageStore.VerifyChannelMessages("**TU 2**");
@@ -229,10 +230,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             bool scoredBuzz = await handler.TryScoreBuzz(
                 state, readerUser, channel, score.ToString(CultureInfo.InvariantCulture));
             Assert.IsTrue(scoredBuzz, "Buzz wasn't scored");
-            IDictionary<PlayerTeamPair, ScoringSplitOnScoreAction> lastSplits = state.GetLastScoringSplits();
+            IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
             PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, null);
             Assert.IsTrue(
-                lastSplits.TryGetValue(pair, out ScoringSplitOnScoreAction split),
+                lastSplits.TryGetValue(pair, out LastScoringSplit split),
                 "Couldn't get scoring split");
             Assert.AreEqual(score, split.Split.Points, "Unexpected number of points");
 
@@ -256,10 +257,6 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
             handler = new MessageHandler(
                 options, dbActionFactory, CommandMocks.CreateHubContext(), new Mock<ILogger>().Object);
-            state = new GameState()
-            {
-                ReaderId = DefaultReaderId
-            };
 
             playerUser = CommandMocks.CreateGuildUser(DefaultPlayerId);
             readerUser = CommandMocks.CreateGuildUser(DefaultReaderId);
@@ -287,6 +284,11 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 },
                 null,
                 out channel);
+            state = new GameState()
+            {
+                ReaderId = DefaultReaderId,
+                TeamManager = new ByCommandTeamManager()
+            };
         }
     }
 }

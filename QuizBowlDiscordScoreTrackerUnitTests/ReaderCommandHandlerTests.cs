@@ -10,6 +10,7 @@ using Moq;
 using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Commands;
 using QuizBowlDiscordScoreTracker.Database;
+using QuizBowlDiscordScoreTracker.TeamManager;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
@@ -49,7 +50,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             string newReaderMention = $"@User_{newReaderId}";
             this.CreateHandler(
                 out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
-            currentGame.ReaderId = 0;
+            currentGame.ReaderId = DefaultReaderId;
 
             Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
             mockUser.Setup(user => user.Id).Returns(newReaderId);
@@ -70,11 +71,11 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ulong buzzer = GetExistingNonReaderUserId();
             this.CreateHandler(out ReaderCommandHandler handler, out GameState currentGame, out _);
 
-            currentGame.AddPlayer(buzzer, "Player");
+            await currentGame.AddPlayer(buzzer, "Player");
             await handler.ClearAsync();
 
             Assert.IsFalse(currentGame.TryGetNextPlayer(out ulong _), "Queue should've been cleared.");
-            Assert.IsTrue(currentGame.AddPlayer(buzzer, "Player"), "We should be able to add the buzzer again.");
+            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "We should be able to add the buzzer again.");
         }
 
         [TestMethod]
@@ -85,10 +86,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             MessageStore messageStore = new MessageStore();
             ICommandContext commandContext = CommandMocks.CreateCommandContext(
                 messageStore, DefaultIds, DefaultGuildId, DefaultChannelId, DefaultReaderId);
-            IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
-                this.botConfigurationfactory);
+            CommandMocks.CreateDatabaseActionFactory(this.botConfigurationfactory);
 
-            ReaderCommandHandler handler = new ReaderCommandHandler(commandContext, manager, dbActionFactory);
+            ReaderCommandHandler handler = new ReaderCommandHandler(commandContext, manager);
 
             await handler.ClearAllAsync();
 
@@ -104,11 +104,11 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ulong buzzer = GetExistingNonReaderUserId();
             this.CreateHandler(out ReaderCommandHandler handler, out GameState currentGame, out _);
 
-            currentGame.AddPlayer(buzzer, "Player");
+            await currentGame.AddPlayer(buzzer, "Player");
             await handler.NextAsync();
 
             Assert.IsFalse(currentGame.TryGetNextPlayer(out ulong _), "Queue should've been cleared.");
-            Assert.IsTrue(currentGame.AddPlayer(buzzer, "Player"), "We should be able to add the buzzer again.");
+            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "We should be able to add the buzzer again.");
         }
 
         [TestMethod]
@@ -118,8 +118,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             this.CreateHandler(
                 out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
 
-            currentGame.ReaderId = 0;
-            currentGame.AddPlayer(buzzer, "Player");
+            currentGame.ReaderId = DefaultReaderId;
+            await currentGame.AddPlayer(buzzer, "Player");
             currentGame.ScorePlayer(10);
             await handler.UndoAsync();
 
@@ -133,6 +133,128 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(
                 message.Contains($"@User_{buzzer}", StringComparison.InvariantCulture),
                 "Mention should be included in undo message as a prompt.");
+        }
+
+        [TestMethod]
+        public async Task CanRemovePlayer()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            string nickname = $"User_{buzzer}";
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+
+            currentGame.ReaderId = DefaultReaderId;
+            ByCommandTeamManager teamManager = new ByCommandTeamManager();
+            currentGame.TeamManager = teamManager;
+            Assert.IsTrue(teamManager.TryAddTeam("Alpha", out _), "Team should've been added");
+            Assert.IsTrue(teamManager.TryAddPlayerToTeam(buzzer, "Alpha"), "Should've been able to add the player");
+            Assert.IsNotNull(teamManager.GetTeamIdOrNull(buzzer), "Player should have a team");
+
+            Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
+            mockUser.Setup(user => user.Id).Returns(buzzer);
+            mockUser.Setup(user => user.Nickname).Returns(nickname);
+
+            await handler.RemovePlayerAsync(mockUser.Object);
+
+            IEnumerable<PlayerTeamPair> players = await teamManager.GetKnownPlayers();
+            Assert.IsFalse(players.Any(), "There should be no players left");
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
+            Assert.IsTrue(
+                message.Contains(nickname, StringComparison.InvariantCulture),
+                $"Couldn't find username in message\n{message}");
+        }
+
+        [TestMethod]
+        public async Task CannotRemovePlayerNotOnTeam()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            string nickname = $"User_{buzzer}";
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+
+            currentGame.ReaderId = DefaultReaderId;
+            ByCommandTeamManager teamManager = new ByCommandTeamManager();
+            currentGame.TeamManager = teamManager;
+            Assert.IsTrue(teamManager.TryAddTeam("Alpha", out _), "Team should've been added");
+
+            Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
+            mockUser.Setup(user => user.Id).Returns(buzzer);
+            mockUser.Setup(user => user.Nickname).Returns(nickname);
+
+            await handler.RemovePlayerAsync(mockUser.Object);
+
+            IEnumerable<PlayerTeamPair> players = await teamManager.GetKnownPlayers();
+            Assert.IsFalse(players.Any(), "There should be no players");
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
+            Assert.IsTrue(
+                message.Contains($@"Couldn't remove player ""{nickname}""", StringComparison.InvariantCulture),
+                $"Couldn't find failure message in message\n{message}");
+        }
+
+        [TestMethod]
+        public async Task CannotRemovePlayerWithByRoleTeamManager()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            string nickname = $"User_{buzzer}";
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+
+            currentGame.ReaderId = DefaultReaderId;
+
+            Mock<IGuild> mockGuild = new Mock<IGuild>();
+            mockGuild.Setup(guild => guild.Roles).Returns(Array.Empty<IRole>());
+            currentGame.TeamManager = new ByRoleTeamManager(mockGuild.Object, "Team");
+
+            Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
+            mockUser.Setup(user => user.Id).Returns(buzzer);
+            mockUser.Setup(user => user.Nickname).Returns(nickname);
+
+            await handler.RemovePlayerAsync(mockUser.Object);
+
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual("Removing players isn't supported in this mode.", message, $"Unexpected message");
+        }
+
+        [TestMethod]
+        public async Task CanAddTeam()
+        {
+            const string teamName = "My Team";
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            ISelfManagedTeamManager teamManager = new ByCommandTeamManager();
+            currentGame.TeamManager = teamManager;
+
+            await handler.AddTeamAsync(teamName);
+
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            Assert.IsTrue(teamIdToName.ContainsKey(teamName), "Team name wasn't added");
+
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual($@"Added team ""{teamName}"".", message, $"Unexpected message");
+        }
+
+        [TestMethod]
+        public async Task CannotAddTeamWithByRoleTeamManager()
+        {
+            const string teamName = "My Team";
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            Mock<IGuild> mockGuild = new Mock<IGuild>();
+            mockGuild.Setup(guild => guild.Roles).Returns(Array.Empty<IRole>());
+            currentGame.TeamManager = new ByRoleTeamManager(mockGuild.Object, "Team");
+
+            await handler.AddTeamAsync(teamName);
+
+            IReadOnlyDictionary<string, string> teamIdToName = await currentGame.TeamManager.GetTeamIdToNames();
+            Assert.IsFalse(teamIdToName.ContainsKey(teamName), "Team name wasn't added");
+
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual("Adding teams isn't supported in this mode.", message, $"Unexpected message");
         }
 
         private static ulong GetExistingNonReaderUserId(ulong readerId = DefaultReaderId)
@@ -163,10 +285,11 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out _);
             GameStateManager manager = new GameStateManager();
             manager.TryCreate(DefaultChannelId, out game);
-            IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
+            game.TeamManager = new ByCommandTeamManager();
+            CommandMocks.CreateDatabaseActionFactory(
                 this.botConfigurationfactory);
 
-            handler = new ReaderCommandHandler(commandContext, manager, dbActionFactory);
+            handler = new ReaderCommandHandler(commandContext, manager);
         }
     }
 }
