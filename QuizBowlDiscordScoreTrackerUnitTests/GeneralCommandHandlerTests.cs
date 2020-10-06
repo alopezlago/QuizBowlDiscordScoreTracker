@@ -13,6 +13,7 @@ using Moq;
 using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Commands;
 using QuizBowlDiscordScoreTracker.Database;
+using QuizBowlDiscordScoreTracker.TeamManager;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
@@ -31,39 +32,47 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         private const ulong ThirdTeamRoleId = FirstTeamRoleId + 2;
         private const string ThirdTeamName = "Gamma";
 
-        private InMemoryBotConfigurationContextFactory botConfigurationfactory;
+        private InMemoryBotConfigurationContextFactory BotConfigurationfactory { get; set; }
+
+        private GeneralCommandHandler Handler { get; set; }
+
+        private GameState Game { get; set; }
+
+        private MessageStore MessageStore { get; set; }
 
         [TestInitialize]
         public void InitializeTest()
         {
-            this.botConfigurationfactory = new InMemoryBotConfigurationContextFactory();
+            this.BotConfigurationfactory = new InMemoryBotConfigurationContextFactory();
 
             // Make sure the database is initialized before running the test
-            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            using (BotConfigurationContext context = this.BotConfigurationfactory.Create())
             {
                 context.Database.Migrate();
             }
+
+            // Clear out the old fields
+            this.Handler = null;
+            this.Game = null;
+            this.MessageStore = null;
         }
 
         [TestCleanup]
         public void Dispose()
         {
-            this.botConfigurationfactory.Dispose();
+            this.BotConfigurationfactory.Dispose();
         }
 
         [TestMethod]
         public async Task CanSetReaderToExistingUser()
         {
-            this.CreateHandler(
-                out GeneralCommandHandler handler,
-                out GameState currentGame,
-                out MessageStore messageStore);
-            await handler.SetReaderAsync();
+            this.InitializeHandler();
+            await this.Handler.SetReaderAsync();
 
-            Assert.AreEqual(DefaultReaderId, currentGame.ReaderId, "Reader ID was not set properly.");
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+            Assert.AreEqual(DefaultReaderId, this.Game.ReaderId, "Reader ID was not set properly.");
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
             Assert.IsTrue(
-                messageStore.ChannelMessages.First().Contains($"@User_{DefaultReaderId}", StringComparison.InvariantCulture),
+                this.MessageStore.ChannelMessages.First().Contains($"@User_{DefaultReaderId}", StringComparison.InvariantCulture),
                 "Message should include the Mention of the user.");
         }
 
@@ -72,15 +81,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             // This will fail, but in our use case this would be impossible.
             ulong readerId = GetNonexistentUserId();
-            this.CreateHandler(
+            this.InitializeHandler(
                 DefaultIds,
-                readerId,
-                out GeneralCommandHandler handler,
-                out GameState currentGame,
-                out MessageStore _);
-            await handler.SetReaderAsync();
+                readerId);
+            await this.Handler.SetReaderAsync();
 
-            Assert.IsNull(currentGame.ReaderId, "Reader should not be set for nonexistent user.");
+            Assert.IsNull(this.Game.ReaderId, "Reader should not be set for nonexistent user.");
         }
 
         [TestMethod]
@@ -89,17 +95,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong existingReaderId = 1;
             const ulong newReaderId = 2;
 
-            this.CreateHandler(
+            this.InitializeHandler(
                 DefaultIds,
-                newReaderId,
-                out GeneralCommandHandler handler,
-                out GameState currentGame,
-                out MessageStore messageStore);
-            currentGame.ReaderId = existingReaderId;
-            await handler.SetReaderAsync();
+                newReaderId);
+            this.Game.ReaderId = existingReaderId;
+            await this.Handler.SetReaderAsync();
 
-            Assert.AreEqual(existingReaderId, currentGame.ReaderId, "Reader ID was not overwritten.");
-            Assert.AreEqual(0, messageStore.ChannelMessages.Count, "No messages should be sent.");
+            Assert.AreEqual(existingReaderId, this.Game.ReaderId, "Reader ID was not overwritten.");
+            Assert.AreEqual(0, this.MessageStore.ChannelMessages.Count, "No messages should be sent.");
         }
 
         [TestMethod]
@@ -109,20 +112,17 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             // Unprivileged users should be able to get the score.
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(
-                out GeneralCommandHandler handler,
-                out GameState game,
-                out MessageStore messageStore);
+            this.InitializeHandler();
 
-            game.ReaderId = 0;
-            game.AddPlayer(buzzer, $"User_{buzzer}");
-            game.ScorePlayer(points);
-            await handler.GetScoreAsync();
+            this.Game.ReaderId = 0;
+            await this.Game.AddPlayer(buzzer, $"User_{buzzer}");
+            this.Game.ScorePlayer(points);
+            await this.Handler.GetScoreAsync();
 
-            Assert.AreEqual(0, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
+            Assert.AreEqual(0, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
-            string embed = messageStore.ChannelEmbeds.First();
+            string embed = this.MessageStore.ChannelEmbeds.First();
             string[] lines = embed.Split(Environment.NewLine);
             string playerLine = lines.FirstOrDefault(
                 line => line.Contains($"User\\_{buzzer}", StringComparison.InvariantCulture));
@@ -138,59 +138,57 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             int[] scores = new int[] { 10, 0, -5, 0, 10, 10 };
 
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-
-            game.ReaderId = 0;
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
 
             foreach (int score in scores)
             {
-                game.AddPlayer(buzzer, "Player");
-                game.ScorePlayer(score);
+                await this.Game.AddPlayer(buzzer, "Player");
+                this.Game.ScorePlayer(score);
 
                 if (score <= 0)
                 {
-                    game.NextQuestion();
+                    this.Game.NextQuestion();
                 }
             }
 
-            await handler.GetScoreAsync();
-            messageStore.VerifyChannelMessages();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
+            await this.Handler.GetScoreAsync();
+            this.MessageStore.VerifyChannelMessages();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
-            string embed = messageStore.ChannelEmbeds.First();
+            string embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.Contains(" (3/1) (2 no penalty buzzes)", StringComparison.InvariantCultureIgnoreCase),
                 @$"Could not find the correct split in ""{embed}""");
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
             foreach (int score in Enumerable.Repeat(15, 4))
             {
-                game.AddPlayer(buzzer, "Player");
-                game.ScorePlayer(score);
+                await this.Game.AddPlayer(buzzer, "Player");
+                this.Game.ScorePlayer(score);
             }
 
-            await handler.GetScoreAsync();
-            messageStore.VerifyChannelMessages();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
+            await this.Handler.GetScoreAsync();
+            this.MessageStore.VerifyChannelMessages();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
-            embed = messageStore.ChannelEmbeds.First();
+            embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.Contains(" (4/3/1) (2 no penalty buzzes)", StringComparison.InvariantCultureIgnoreCase),
                 @$"Could not find the correct split after addin powers in ""{embed}""");
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
             foreach (int score in Enumerable.Repeat(20, 5))
             {
-                game.AddPlayer(buzzer, "Player");
-                game.ScorePlayer(score);
+                await this.Game.AddPlayer(buzzer, "Player");
+                this.Game.ScorePlayer(score);
             }
 
-            await handler.GetScoreAsync();
-            messageStore.VerifyChannelMessages();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
+            await this.Handler.GetScoreAsync();
+            this.MessageStore.VerifyChannelMessages();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
-            embed = messageStore.ChannelEmbeds.First();
+            embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.Contains(" (5/4/3/1) (2 no penalty buzzes)", StringComparison.InvariantCultureIgnoreCase),
                 @$"Could not find the correct split after adding superpowers in ""{embed}""");
@@ -200,19 +198,17 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task SuperpowerSplitsShowPowers()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
 
-            game.ReaderId = 0;
+            await this.Game.AddPlayer(buzzer, "Player");
+            this.Game.ScorePlayer(20);
 
-            game.AddPlayer(buzzer, "Player");
-            game.ScorePlayer(20);
+            await this.Handler.GetScoreAsync();
+            this.MessageStore.VerifyChannelMessages();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
-            await handler.GetScoreAsync();
-            messageStore.VerifyChannelMessages();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
-
-            string embed = messageStore.ChannelEmbeds.First();
+            string embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.Contains(" (1/0/0/0)", StringComparison.InvariantCultureIgnoreCase),
                 @$"Could not find the correct split in ""{embed}""");
@@ -222,30 +218,28 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task NoPenatliesInSplitsOnlyIfOneHappened()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
+            await this.Game.AddPlayer(buzzer, "Player");
+            this.Game.ScorePlayer(10);
 
-            game.ReaderId = 0;
-            game.AddPlayer(buzzer, "Player");
-            game.ScorePlayer(10);
+            await this.Handler.GetScoreAsync();
+            this.MessageStore.VerifyChannelMessages();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
-            await handler.GetScoreAsync();
-            messageStore.VerifyChannelMessages();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
-
-            string embed = messageStore.ChannelEmbeds.First();
+            string embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.EndsWith(" (1/0)", StringComparison.InvariantCultureIgnoreCase),
                 @$"Could not find the correct split in ""{embed}""");
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            game.AddPlayer(buzzer, "Player");
-            game.ScorePlayer(0);
-            await handler.GetScoreAsync();
-            messageStore.VerifyChannelMessages();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
+            await this.Game.AddPlayer(buzzer, "Player");
+            this.Game.ScorePlayer(0);
+            await this.Handler.GetScoreAsync();
+            this.MessageStore.VerifyChannelMessages();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
-            embed = messageStore.ChannelEmbeds.First();
+            embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.Contains(" (1/0) (1 no penalty buzz)", StringComparison.InvariantCultureIgnoreCase),
                 @$"Could not find the correct split after adding a no penalty buzz in ""{embed}""");
@@ -257,31 +251,29 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const string oldPlayerName = "Old";
             const string newPlayerName = "New";
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
 
-            game.ReaderId = 0;
+            await this.Game.AddPlayer(buzzer, oldPlayerName);
+            this.Game.ScorePlayer(10);
 
-            game.AddPlayer(buzzer, oldPlayerName);
-            game.ScorePlayer(10);
+            await this.Handler.GetScoreAsync();
+            this.MessageStore.VerifyChannelMessages();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
-            await handler.GetScoreAsync();
-            messageStore.VerifyChannelMessages();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
-
-            string embed = messageStore.ChannelEmbeds.First();
+            string embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.Contains(oldPlayerName, StringComparison.InvariantCultureIgnoreCase),
                 @$"Could not find the old player name in ""{embed}""");
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            game.AddPlayer(buzzer, newPlayerName);
-            game.ScorePlayer(0);
-            await handler.GetScoreAsync();
-            messageStore.VerifyChannelMessages();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
+            await this.Game.AddPlayer(buzzer, newPlayerName);
+            this.Game.ScorePlayer(0);
+            await this.Handler.GetScoreAsync();
+            this.MessageStore.VerifyChannelMessages();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
 
-            embed = messageStore.ChannelEmbeds.First();
+            embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsFalse(
                 embed.Contains(oldPlayerName, StringComparison.InvariantCultureIgnoreCase),
                 @$"Found the old player name in ""{embed}"", even though it shouldn't be in the message");
@@ -300,31 +292,29 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 existingIds.Add(i);
             }
 
-            this.CreateHandler(
-                existingIds, out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-
-            game.ReaderId = 0;
-            await handler.GetScoreAsync();
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
+            await this.Handler.GetScoreAsync();
 
             // There should be no embeds if no one has scored yet.
-            messageStore.VerifyChannelEmbeds();
-            messageStore.VerifyChannelMessages("No one has scored yet");
+            this.MessageStore.VerifyChannelEmbeds();
+            this.MessageStore.VerifyChannelMessages("No one has scored yet");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
             // We want to go to the point where the number of players equals the limit, where we still show the
             // original title
             for (ulong i = 1; i < lastId; i++)
             {
-                game.AddPlayer(i, $"Player {i}");
-                game.ScorePlayer(10);
+                await this.Game.AddPlayer(i, $"Player {i}");
+                this.Game.ScorePlayer(10);
             }
 
-            await handler.GetScoreAsync();
+            await this.Handler.GetScoreAsync();
             int embedCount = (GameState.ScoresListLimit + 1) / EmbedBuilder.MaxFieldCount;
             Assert.AreEqual(
-                embedCount, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent after first GetScore.");
-            string embed = messageStore.ChannelEmbeds.Last();
+                embedCount, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent after first GetScore.");
+            string embed = this.MessageStore.ChannelEmbeds.Last();
 
             // Get the title, which should be before the first new line
             embed = embed.Substring(0, embed.IndexOf(Environment.NewLine, StringComparison.InvariantCulture));
@@ -334,15 +324,15 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     StringComparison.InvariantCulture),
                 $"When the number of scorers matches the limit, the embed should not contain the scores list limit. Embed: {embed}");
 
-            game.AddPlayer(lastId, $"Player {lastId}");
-            game.ScorePlayer(-5);
+            await this.Game.AddPlayer(lastId, $"Player {lastId}");
+            this.Game.ScorePlayer(-5);
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.GetScoreAsync();
+            await this.Handler.GetScoreAsync();
             Assert.AreEqual(
-                embedCount, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent after second GetScore.");
-            embed = messageStore.ChannelEmbeds.Last();
+                embedCount, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent after second GetScore.");
+            embed = this.MessageStore.ChannelEmbeds.Last();
 
             embed = embed.Substring(0, embed.IndexOf(Environment.NewLine, StringComparison.InvariantCulture));
             Assert.IsTrue(
@@ -362,29 +352,27 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 existingIds.Add(i);
             }
 
-            this.CreateHandler(
-                existingIds, out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-
-            game.ReaderId = 0;
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
 
             // We want to go to the point where the number of players equals the limit, where we still show the
             // original title
             for (ulong i = 1; i < lastId; i++)
             {
-                game.AddPlayer(i, $"User_{i}");
-                game.ScorePlayer(10);
+                await this.Game.AddPlayer(i, $"User_{i}");
+                this.Game.ScorePlayer(10);
             }
 
-            await handler.GetScoreAsync();
+            await this.Handler.GetScoreAsync();
             int embedCount = (GameState.ScoresListLimit + 1) / EmbedBuilder.MaxFieldCount;
             Assert.AreEqual(
                 embedCount,
-                messageStore.ChannelEmbeds.Count,
+                this.MessageStore.ChannelEmbeds.Count,
                 "Unexpected number of embeds sent after second GetScore.");
 
             // The number of partitions should be one more than the number of times the delimiter appears (e.g. a;b is
             // split into a and b, but there is one ;)
-            int nicknameFields = messageStore.ChannelEmbeds.Sum(embed => embed.Split("User\\_").Length - 1);
+            int nicknameFields = this.MessageStore.ChannelEmbeds.Sum(embed => embed.Split("User\\_").Length - 1);
             Assert.AreEqual(
                 GameState.ScoresListLimit,
                 nicknameFields,
@@ -398,25 +386,24 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             int firstId = (int)GetNonexistentUserId();
 
             int[] players = Enumerable.Range(firstId, playersCount).ToArray();
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
 
-            game.ReaderId = 0;
             for (int i = 0; i < players.Length; i++)
             {
                 ulong player = (ulong)players[i];
                 string playerName = $"Player {player}";
                 for (int j = 0; j <= i; j++)
                 {
-                    game.AddPlayer(player, playerName);
-                    game.ScorePlayer(10);
+                    await this.Game.AddPlayer(player, playerName);
+                    this.Game.ScorePlayer(10);
                 }
 
-                await handler.GetScoreAsync();
+                await this.Handler.GetScoreAsync();
                 Assert.AreEqual(
-                    1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds sent after {i} players");
-                string embed = messageStore.ChannelEmbeds.First();
-                messageStore.Clear();
+                    1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds sent after {i} players");
+                string embed = this.MessageStore.ChannelEmbeds.First();
+                this.MessageStore.Clear();
 
                 int medalIndex = 0;
                 foreach (string medal in GeneralCommandHandler.Medals.Take(i + 1))
@@ -448,26 +435,24 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             int firstId = (int)GetNonexistentUserId();
 
             ulong[] players = Enumerable.Range(firstId, playersCount).Select(id => (ulong)id).ToArray();
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-
-            game.ReaderId = 0;
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
 
             // All tied for 1st
             for (int i = 0; i < 3; i++)
             {
-                game.AddPlayer(players[i], $"Player {i}");
-                game.ScorePlayer(10);
+                await this.Game.AddPlayer(players[i], $"Player {i}");
+                this.Game.ScorePlayer(10);
             }
 
-            game.AddPlayer(players[3], $"Player 3");
-            game.ScorePlayer(0);
+            await this.Game.AddPlayer(players[3], $"Player 3");
+            this.Game.ScorePlayer(0);
 
-            await handler.GetScoreAsync();
+            await this.Handler.GetScoreAsync();
             Assert.AreEqual(
-                1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds after the first round of scoring");
-            string embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+                1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds after the first round of scoring");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
             Assert.AreEqual(
                 4,
                 embed.Split(GeneralCommandHandler.Medals[0]).Length,
@@ -480,15 +465,15 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 $"3rd place medal appeared when it shouldn't have in\n{embed}");
 
             // One tied for 1st, two tied for 2nd
-            game.AddPlayer(players[0], "Player 0");
-            game.ScorePlayer(10);
-            await handler.GetScoreAsync();
+            await this.Game.AddPlayer(players[0], "Player 0");
+            this.Game.ScorePlayer(10);
+            await this.Handler.GetScoreAsync();
             Assert.AreEqual(
                 1,
-                messageStore.ChannelEmbeds.Count,
+                this.MessageStore.ChannelEmbeds.Count,
                 $"Unexpected number of embeds sent after the second round of scoring");
-            embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
 
             Assert.AreEqual(
                 2,
@@ -503,15 +488,15 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 $"3rd place medal appeared when it shouldn't have after the 2nd round of scoring in\n{embed}");
 
             // Two tied for 1st, one for third
-            game.AddPlayer(players[1], "Player 1");
-            game.ScorePlayer(10);
-            await handler.GetScoreAsync();
+            await this.Game.AddPlayer(players[1], "Player 1");
+            this.Game.ScorePlayer(10);
+            await this.Handler.GetScoreAsync();
             Assert.AreEqual(
                 1,
-                messageStore.ChannelEmbeds.Count,
+                this.MessageStore.ChannelEmbeds.Count,
                 $"Unexpected number of embeds sent after the third round of scoring");
-            embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
 
             Assert.AreEqual(
                 3,
@@ -526,14 +511,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 $"There wasn't 1 3rd place medals after the 3rd round of scoring in\n{embed}");
 
             // Two tied for 1st, two for third
-            game.AddPlayer(players[3], "Player 3");
-            game.ScorePlayer(10);
-            await handler.GetScoreAsync();
+            await this.Game.AddPlayer(players[3], "Player 3");
+            this.Game.ScorePlayer(10);
+            await this.Handler.GetScoreAsync();
             Assert.AreEqual(
                 1,
-                messageStore.ChannelEmbeds.Count,
+                this.MessageStore.ChannelEmbeds.Count,
                 $"Unexpected number of embeds sent after the fourth round of scoring");
-            embed = messageStore.ChannelEmbeds.First();
+            embed = this.MessageStore.ChannelEmbeds.First();
 
             Assert.AreEqual(
                 3,
@@ -551,12 +536,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public async Task GetGameReportWithNoRounds()
         {
-            this.CreateHandler(out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-            game.ReaderId = DefaultReaderId;
-            await handler.GetGameReportAsync();
+            this.InitializeHandler();
+            this.Game.ReaderId = DefaultReaderId;
+            await this.Handler.GetGameReportAsync();
 
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            string embed = messageStore.ChannelEmbeds.First();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.Contains("No questions read", StringComparison.OrdinalIgnoreCase),
                 "No questions message not found");
@@ -565,16 +550,15 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public async Task GetGameReportSkipLastRoundWithNoBuzzes()
         {
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-            game.ReaderId = 0;
-            game.AddPlayer(1, "Player");
-            game.ScorePlayer(10);
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
+            await this.Game.AddPlayer(1, "Player");
+            this.Game.ScorePlayer(10);
 
-            await handler.GetGameReportAsync();
+            await this.Handler.GetGameReportAsync();
 
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            string embed = messageStore.ChannelEmbeds.First();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.Contains("Question 1", StringComparison.OrdinalIgnoreCase), "Question 1 report wasn't found");
             Assert.IsFalse(
@@ -584,17 +568,16 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public async Task GetGameReportQuestionWentDead()
         {
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-            game.ReaderId = 0;
-            game.AddPlayer(1, "Player");
-            game.ScorePlayer(0);
-            game.NextQuestion();
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
+            await this.Game.AddPlayer(1, "Player");
+            this.Game.ScorePlayer(0);
+            this.Game.NextQuestion();
 
-            await handler.GetGameReportAsync();
+            await this.Handler.GetGameReportAsync();
 
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            string embed = messageStore.ChannelEmbeds.First();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.Contains("Question went dead", StringComparison.OrdinalIgnoreCase),
                 "Question 1 wasn't reported as dead");
@@ -605,20 +588,19 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public async Task GetGameReportAllBuzzesReported()
         {
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-            game.ReaderId = 0;
-            game.AddPlayer(1, "Player 1");
-            game.ScorePlayer(-5);
-            game.AddPlayer(2, "Player 2");
-            game.ScorePlayer(0);
-            game.AddPlayer(3, "Player 3");
-            game.ScorePlayer(10);
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
+            await this.Game.AddPlayer(1, "Player 1");
+            this.Game.ScorePlayer(-5);
+            await this.Game.AddPlayer(2, "Player 2");
+            this.Game.ScorePlayer(0);
+            await this.Game.AddPlayer(3, "Player 3");
+            this.Game.ScorePlayer(10);
 
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            string embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
             Assert.IsTrue(
                 embed.Contains("Question 1", StringComparison.OrdinalIgnoreCase), "Question 1 report wasn't found");
 
@@ -631,13 +613,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Regex playerThreeLead = new Regex(".*Player 3.* is in the lead.");
             Assert.IsTrue(playerThreeLead.IsMatch(embed), $"Couldn't find correct player 3 as the leader in\n{embed}");
 
-            game.AddPlayer(4, "Player 4");
-            game.ScorePlayer(15);
+            await this.Game.AddPlayer(4, "Player 4");
+            this.Game.ScorePlayer(15);
 
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
             Assert.IsTrue(
                 embed.Contains("Question 1", StringComparison.OrdinalIgnoreCase),
                 "Question 1 report wasn't found in the second call");
@@ -648,12 +630,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Regex playerFourLead = new Regex(".*Player 4.* is in the lead.");
             Assert.IsTrue(playerFourLead.IsMatch(embed), $"Couldn't find correct player 4 as the leader in\n{embed}");
 
-            game.AddPlayer(5, "Player 5");
-            game.ScorePlayer(20);
+            await this.Game.AddPlayer(5, "Player 5");
+            this.Game.ScorePlayer(20);
 
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            embed = messageStore.ChannelEmbeds.First();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.Contains("Question 2", StringComparison.OrdinalIgnoreCase),
                 "Question 2 report wasn't found in the third call");
@@ -668,18 +650,17 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public async Task GetGameReportMultipleLeaders()
         {
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-            game.ReaderId = 0;
-            game.AddPlayer(1, "Player 1");
-            game.ScorePlayer(10);
-            game.AddPlayer(2, "Player 2");
-            game.ScorePlayer(10);
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
+            await this.Game.AddPlayer(1, "Player 1");
+            this.Game.ScorePlayer(10);
+            await this.Game.AddPlayer(2, "Player 2");
+            this.Game.ScorePlayer(10);
 
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            string embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
             Assert.IsTrue(
                 embed.Contains("Question 2", StringComparison.OrdinalIgnoreCase), "Question 3 report wasn't found");
             Regex leadReport = new Regex(".*Player 1.*,.*Player 2.* are in the lead.");
@@ -689,118 +670,178 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public async Task GetGameReportMultipleLeadersWithOthers()
         {
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-            game.ReaderId = DefaultReaderId;
+            this.InitializeHandler();
+            this.Game.ReaderId = DefaultReaderId;
             for (int i = 0; i < GeneralCommandHandler.MaxLeadersShown; i++)
             {
                 ulong number = (ulong)i;
-                game.AddPlayer(number, $"Player {number}");
-                game.ScorePlayer(10);
+                await this.Game.AddPlayer(number, $"Player {number}");
+                this.Game.ScorePlayer(10);
             }
 
             // No "other" at the limit
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            string embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
             Assert.IsFalse(
                 embed.Contains("other are in the lead", StringComparison.OrdinalIgnoreCase),
                 $"\"other\" was found unexpectedly in\n{embed}");
 
             // Once we are past the limit, show other
             ulong otherLimit = GeneralCommandHandler.MaxLeadersShown;
-            game.AddPlayer(otherLimit, $"Player {otherLimit}");
-            game.ScorePlayer(10);
+            await this.Game.AddPlayer(otherLimit, $"Player {otherLimit}");
+            this.Game.ScorePlayer(10);
 
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
             Assert.IsTrue(
                 embed.Contains("other are in the lead", StringComparison.OrdinalIgnoreCase),
                 $"1 \"other\" wasn't found in\n {embed}");
 
             // Once we're two players past the limit, show "others", since there's a count
             ulong lastNumber = otherLimit + 1;
-            game.AddPlayer(lastNumber, $"Player {lastNumber}");
-            game.ScorePlayer(10);
+            await this.Game.AddPlayer(lastNumber, $"Player {lastNumber}");
+            this.Game.ScorePlayer(10);
 
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
             Assert.IsTrue(
                 embed.Contains("others are in the lead", StringComparison.OrdinalIgnoreCase),
                 $"2 \"others\" wasn't found in {embed}");
         }
 
         [TestMethod]
-        public async Task GetGameReportWithTeamsMultipleLeadersWithOthers()
+        public async Task GetGameReportWithTeamsByCommandMultipleLeadersWithOthers()
         {
             await this.SetDefaultTeamRolePrefix();
 
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-            game.ReaderId = DefaultReaderId;
+            this.InitializeHandler(DefaultIds, managerType: TeamManagerType.ByCommand);
+            this.Game.ReaderId = DefaultReaderId;
+            ByCommandTeamManager teamManager = this.Game.TeamManager as ByCommandTeamManager;
+            Assert.IsTrue(teamManager.TryAddTeam("Alpha", out _), "Couldn't add team");
+            teamManager.TryAddPlayerToTeam(0, "Alpha");
 
             for (int i = 0; i < GeneralCommandHandler.MaxLeadersShown; i++)
             {
                 ulong number = (ulong)i;
-                game.AddPlayer(number, $"Player {number}", FirstTeamRoleId + (ulong)i);
-                game.ScorePlayer(10);
+                await this.Game.AddPlayer(number, $"Player {number}");
+                this.Game.ScorePlayer(10);
             }
 
             // No "..." at the limit
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            string embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
             Assert.IsFalse(
                 embed.Contains("...", StringComparison.OrdinalIgnoreCase),
                 $"\"...\" was found unexpectedly in\n{embed}");
 
             // Once we are past the limit, show "..."
             ulong otherLimit = GeneralCommandHandler.MaxLeadersShown;
-            game.AddPlayer(otherLimit, $"Player {otherLimit}");
-            game.ScorePlayer(10);
+            await this.Game.AddPlayer(otherLimit, $"Player {otherLimit}");
+            this.Game.ScorePlayer(10);
 
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
             Assert.IsTrue(
                 embed.Contains("...", StringComparison.OrdinalIgnoreCase),
-                $"\"...r\" wasn't found in\n {embed}");
+                $"\"...\" wasn't found in\n {embed}");
         }
 
+        [TestMethod]
+        public async Task GetGameReportWithTeamsByRoleMultipleLeadersWithOthers()
+        {
+            await this.SetDefaultTeamRolePrefix();
+
+            this.InitializeHandlerWithTeamsByRole(
+                (mockUser) =>
+                {
+                    mockUser
+                        .Setup(user => user.RoleIds)
+                        .Returns(() =>
+                        {
+                            return new ulong[] { FirstTeamRoleId + mockUser.Object.Id };
+                        });
+                });
+            this.Game.ReaderId = DefaultReaderId;
+
+            for (int i = 0; i < GeneralCommandHandler.MaxLeadersShown; i++)
+            {
+                ulong number = (ulong)i;
+                await this.Game.AddPlayer(number, $"Player {number}");
+                this.Game.ScorePlayer(10);
+            }
+
+            // No "..." at the limit
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
+            Assert.IsFalse(
+                embed.Contains("...", StringComparison.OrdinalIgnoreCase),
+                $"\"...\" was found unexpectedly in\n{embed}");
+
+            // Once we are past the limit, show "..."
+            ulong otherLimit = GeneralCommandHandler.MaxLeadersShown;
+            await this.Game.AddPlayer(otherLimit, $"Player {otherLimit}");
+            this.Game.ScorePlayer(10);
+
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
+            Assert.IsTrue(
+                embed.Contains("...", StringComparison.OrdinalIgnoreCase),
+                $"\"...\" wasn't found in\n {embed}");
+        }
+
+        // TODO: Make a test for ByRole and ByCommand
         [TestMethod]
         public async Task GameReportWithTeamsLeadersSortedByScore()
         {
             await this.SetDefaultTeamRolePrefix();
 
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-            game.ReaderId = DefaultReaderId;
-            game.AddPlayer(1, "Player1", FirstTeamRoleId);
-            game.ScorePlayer(10);
-            game.AddPlayer(2, "Player2", SecondTeamRoleId);
-            game.ScorePlayer(20);
+            this.InitializeHandlerWithTeamsByRole(
+                (mockUser) =>
+                {
+                    mockUser
+                        .Setup(user => user.RoleIds)
+                        .Returns(() =>
+                        {
+                            return new ulong[]
+                            {
+                                mockUser.Object.Id == 2 ? SecondTeamRoleId : FirstTeamRoleId
+                            };
+                        });
+                });
+            this.Game.ReaderId = DefaultReaderId;
+            await this.Game.AddPlayer(1, "Player1");
+            this.Game.ScorePlayer(10);
+            await this.Game.AddPlayer(2, "Player2");
+            this.Game.ScorePlayer(20);
 
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            string embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
 
             Assert.IsTrue(embed.Contains(
                 $"**{SecondTeamName}** 20, **{FirstTeamName}** 10", StringComparison.InvariantCultureIgnoreCase),
                 $"Sorted score wasn't found in\n{embed}");
 
-            game.AddPlayer(3, "Player3", FirstTeamRoleId);
-            game.ScorePlayer(15);
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds after the 4th question");
-            embed = messageStore.ChannelEmbeds.First();
+            await this.Game.AddPlayer(3, "Player3");
+            this.Game.ScorePlayer(15);
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds after the 4th question");
+            embed = this.MessageStore.ChannelEmbeds.First();
 
             Assert.IsTrue(embed.Contains(
                 $"**{FirstTeamName}** 25, **{SecondTeamName}** 20", StringComparison.InvariantCultureIgnoreCase),
@@ -815,19 +856,32 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const int thirdScore = 20;
             await this.SetDefaultTeamRolePrefix();
 
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-            game.ReaderId = DefaultReaderId;
-            game.AddPlayer(1, "Player1", FirstTeamRoleId);
-            game.ScorePlayer(firstScore);
-            game.AddPlayer(2, "Player2", SecondTeamRoleId);
-            game.ScorePlayer(secondScore);
-            game.AddPlayer(3, "Player3", ThirdTeamRoleId);
-            game.ScorePlayer(thirdScore);
+            this.InitializeHandlerWithTeamsByRole(
+                (mockUser) =>
+                {
+                    mockUser
+                        .Setup(user => user.RoleIds)
+                        .Returns(() =>
+                        {
+                            return mockUser.Object.Id switch
+                            {
+                                1 => new ulong[] { FirstTeamRoleId },
+                                2 => new ulong[] { SecondTeamRoleId },
+                                _ => new ulong[] { ThirdTeamRoleId },
+                            };
+                        });
+                });
+            this.Game.ReaderId = DefaultReaderId;
+            await this.Game.AddPlayer(1, "Player1");
+            this.Game.ScorePlayer(firstScore);
+            await this.Game.AddPlayer(2, "Player2");
+            this.Game.ScorePlayer(secondScore);
+            await this.Game.AddPlayer(3, "Player3");
+            this.Game.ScorePlayer(thirdScore);
 
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            string embed = messageStore.ChannelEmbeds.First();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.Contains($"**{ThirdTeamName}** {thirdScore}, **{SecondTeamName}** {secondScore}, " +
                     $"**{FirstTeamName}** {firstScore}", StringComparison.InvariantCultureIgnoreCase),
@@ -839,20 +893,31 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             await this.SetDefaultTeamRolePrefix();
 
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-            game.ReaderId = DefaultReaderId;
-            game.AddPlayer(1, "Player1", FirstTeamRoleId);
-            game.ScorePlayer(10);
-            game.AddPlayer(1, "Player1", FirstTeamRoleId);
-            game.ScorePlayer(-5);
-            game.AddPlayer(2, "Player2", SecondTeamRoleId);
-            game.ScorePlayer(15);
+            this.InitializeHandlerWithTeamsByRole(
+                (mockUser) =>
+                {
+                    mockUser
+                        .Setup(user => user.RoleIds)
+                        .Returns(() =>
+                        {
+                            return new ulong[]
+                            {
+                                mockUser.Object.Id == 1 ?FirstTeamRoleId : SecondTeamRoleId
+                            };
+                        });
+                });
+            this.Game.ReaderId = DefaultReaderId;
+            await this.Game.AddPlayer(1, "Player1");
+            this.Game.ScorePlayer(10);
+            await this.Game.AddPlayer(1, "Player1");
+            this.Game.ScorePlayer(-5);
+            await this.Game.AddPlayer(2, "Player2");
+            this.Game.ScorePlayer(15);
 
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            string embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
 
             Assert.IsTrue(
                 embed.Contains(
@@ -871,14 +936,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 $"Couldn't find second player's power in embed\n{embed}");
 
             // Make sure superpowers and no penalties appear too
-            game.AddPlayer(1, "Player1", FirstTeamRoleId);
-            game.ScorePlayer(20);
-            game.AddPlayer(2, "Player2", SecondTeamRoleId);
-            game.ScorePlayer(0);
+            await this.Game.AddPlayer(1, "Player1");
+            this.Game.ScorePlayer(20);
+            await this.Game.AddPlayer(2, "Player2");
+            this.Game.ScorePlayer(0);
 
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            embed = messageStore.ChannelEmbeds.First();
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            embed = this.MessageStore.ChannelEmbeds.First();
             Assert.IsTrue(
                 embed.Contains(
                     "**Question 3**: > Superpowered by **Player1** (Alpha) (1/0/1/1)",
@@ -897,20 +962,39 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const string playerName = "Player1";
             await this.SetDefaultTeamRolePrefix();
 
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-            game.ReaderId = DefaultReaderId;
-            game.AddPlayer(1, playerName);
-            game.ScorePlayer(10);
-            game.AddPlayer(1, playerName, FirstTeamRoleId);
-            game.ScorePlayer(15);
-            game.AddPlayer(1, playerName, SecondTeamRoleId);
-            game.ScorePlayer(-5);
+            int scoreCounter = 0;
+            this.InitializeHandlerWithTeamsByRole(
+                (mockUser) =>
+                {
+                    mockUser
+                        .Setup(user => user.RoleIds)
+                        .Returns(() =>
+                        {
+                            return scoreCounter switch
+                            {
+                                0 => Array.Empty<ulong>(),
+                                1 => new ulong[] { FirstTeamRoleId },
+                                _ => new ulong[] { SecondTeamRoleId },
+                            };
+                        });
+                });
+            this.Game.ReaderId = DefaultReaderId;
 
-            await handler.GetGameReportAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            string embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            await this.Game.AddPlayer(1, playerName);
+            this.Game.ScorePlayer(10);
+            scoreCounter++;
+
+            await this.Game.AddPlayer(1, playerName);
+            this.Game.ScorePlayer(15);
+            scoreCounter++;
+
+            await this.Game.AddPlayer(1, playerName);
+            this.Game.ScorePlayer(-5);
+
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
 
             Assert.IsTrue(embed.Contains(
                 $"**{FirstTeamName}** 15, **{playerName}** 10, **{SecondTeamName}** -5",
@@ -932,26 +1016,74 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task GameReportIndividualInLead()
+        {
+            const string playerName = "Player1";
+            await this.SetDefaultTeamRolePrefix();
+
+            this.InitializeHandlerWithTeamsByRole(
+                (mockUser) =>
+                {
+                    // No user is on a team, but the team prefix is set
+                    mockUser
+                        .Setup(user => user.RoleIds)
+                        .Returns(Array.Empty<ulong>());
+                });
+            this.Game.ReaderId = DefaultReaderId;
+            this.Game.TeamManager = new SoloOnlyTeamManager();
+
+            await this.Game.AddPlayer(1, playerName);
+            this.Game.ScorePlayer(10);
+
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+
+            Assert.IsTrue(
+                embed.Contains(
+                    "**Player1** is in the lead", StringComparison.InvariantCultureIgnoreCase),
+                $"Player1 wasn't mentioned in the leaders message in\n{embed}");
+        }
+
+        [TestMethod]
         public async Task GetScoreSamePlayerDifferentTeams()
         {
             const string playerName = "Player1";
             await this.SetDefaultTeamRolePrefix();
 
-            this.CreateHandler(
-                out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore);
-            game.ReaderId = DefaultReaderId;
+            int scoreCounter = 0;
+            this.InitializeHandlerWithTeamsByRole(
+                (mockUser) =>
+                {
+                    mockUser
+                        .Setup(user => user.RoleIds)
+                        .Returns(() =>
+                        {
+                            return scoreCounter switch
+                            {
+                                0 => Array.Empty<ulong>(),
+                                1 => new ulong[] { FirstTeamRoleId },
+                                _ => new ulong[] { SecondTeamRoleId },
+                            };
+                        });
+                });
+            this.Game.ReaderId = DefaultReaderId;
 
-            game.AddPlayer(1, playerName);
-            game.ScorePlayer(10);
-            game.AddPlayer(1, playerName, FirstTeamRoleId);
-            game.ScorePlayer(15);
-            game.AddPlayer(1, playerName, SecondTeamRoleId);
-            game.ScorePlayer(-5);
+            await this.Game.AddPlayer(1, playerName);
+            this.Game.ScorePlayer(10);
+            scoreCounter++;
 
-            await handler.GetScoreAsync();
-            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
-            string embed = messageStore.ChannelEmbeds.First();
-            messageStore.Clear();
+            await this.Game.AddPlayer(1, playerName);
+            this.Game.ScorePlayer(15);
+            scoreCounter++;
+
+            await this.Game.AddPlayer(1, playerName);
+            this.Game.ScorePlayer(-5);
+
+            await this.Handler.GetScoreAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
 
             Regex firstTeamLine = new Regex($"Alpha.*\\(15\\).*{playerName}.*15 \\(1/0/0\\)", RegexOptions.IgnoreCase);
             System.Text.RegularExpressions.Match firstTeamMatch = firstTeamLine.Match(embed);
@@ -973,6 +1105,186 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 $"Individual score wasn't before the second team score ({individualMatch.Index} >= {secondTeamMatch.Index})");
         }
 
+        [TestMethod]
+        public async Task JoinTeamSucceeds()
+        {
+            const ulong userId = 1;
+            this.InitializeHandler(DefaultIds, userId, TeamManagerType.ByCommand);
+            ByCommandTeamManager teamManager = this.Game.TeamManager as ByCommandTeamManager;
+            Assert.IsTrue(teamManager.TryAddTeam(FirstTeamName, out _), "Couldn't add team");
+
+            Assert.IsNull(await teamManager.GetTeamIdOrNull(userId), "User shouldn't be on a team yet");
+            await this.Handler.JoinTeamAsync(FirstTeamName);
+            Assert.AreEqual(FirstTeamName, await teamManager.GetTeamIdOrNull(userId), "User didn't join the team");
+            this.MessageStore.VerifyChannelMessages($@"@User_{userId} is on team ""{FirstTeamName}""");
+        }
+
+        [TestMethod]
+        public async Task JoinNonexistentTeamFails()
+        {
+            const ulong userId = 1;
+            this.InitializeHandler(DefaultIds, userId, TeamManagerType.ByCommand);
+
+            await this.Handler.JoinTeamAsync(SecondTeamName);
+            Assert.IsNull(await this.Game.TeamManager.GetTeamIdOrNull(userId), "User shouldn't be on a team");
+            this.MessageStore.VerifyChannelMessages(
+                $@"Couldn't join team ""{SecondTeamName}"". Make sure it is not misspelled.");
+        }
+
+        [TestMethod]
+        public async Task JoinTeamWithByRoleTeamManagerFails()
+        {
+            const ulong userId = 1;
+            this.InitializeHandler(DefaultIds, userId);
+            Mock<ITeamManager> mockTeamManager = new Mock<ITeamManager>();
+            this.Game.TeamManager = mockTeamManager.Object;
+
+            await this.Handler.JoinTeamAsync(FirstTeamName);
+
+            mockTeamManager.VerifyNoOtherCalls();
+            this.MessageStore.VerifyChannelMessages("Joining teams isn't supported in this mode.");
+        }
+
+        [TestMethod]
+        public async Task LeaveTeamSucceeds()
+        {
+            const ulong userId = 1;
+            this.InitializeHandler(DefaultIds, userId, TeamManagerType.ByCommand);
+            ByCommandTeamManager teamManager = this.Game.TeamManager as ByCommandTeamManager;
+            Assert.IsTrue(teamManager.TryAddTeam(FirstTeamName, out _), "Couldn't add team");
+            Assert.IsTrue(teamManager.TryAddPlayerToTeam(userId, FirstTeamName), "Couldn't add player");
+            Assert.AreEqual(
+                FirstTeamName,
+                await teamManager.GetTeamIdOrNull(userId),
+                "User isn't on the right team before joining");
+
+            await this.Handler.LeaveTeamAsync();
+            Assert.IsNull(await teamManager.GetTeamIdOrNull(userId), "User didn't leave a team");
+            this.MessageStore.VerifyChannelMessages($@"""User_{userId}"" left their team.");
+        }
+
+        [TestMethod]
+        public async Task LeaveTeamFailsWhenNotOnATeam()
+        {
+            const ulong userId = 1;
+            this.InitializeHandler(DefaultIds, userId, TeamManagerType.ByCommand);
+            ByCommandTeamManager teamManager = this.Game.TeamManager as ByCommandTeamManager;
+            Assert.IsTrue(teamManager.TryAddTeam(FirstTeamName, out _), "Couldn't add team");
+
+            await this.Handler.LeaveTeamAsync();
+            Assert.IsNull(await teamManager.GetTeamIdOrNull(userId), "User should not be on a team");
+            this.MessageStore.VerifyChannelMessages($@"""User_{userId}"" isn't on a team.");
+        }
+
+        [TestMethod]
+        public async Task LeaveTeamWithByRoleTeamManagerFails()
+        {
+            const ulong userId = 1;
+            this.InitializeHandler(DefaultIds, userId);
+            Mock<ITeamManager> mockTeamManager = new Mock<ITeamManager>();
+            this.Game.TeamManager = mockTeamManager.Object;
+
+            await this.Handler.LeaveTeamAsync();
+
+            mockTeamManager.VerifyNoOtherCalls();
+            this.MessageStore.VerifyChannelMessages("Leaving teams isn't supported in this mode.");
+        }
+
+        [TestMethod]
+        public async Task GetTeamsSucceeds()
+        {
+            this.InitializeHandler();
+            Mock<ITeamManager> mockTeamManager = new Mock<ITeamManager>();
+
+            IReadOnlyDictionary<string, string> teamIdToName = new Dictionary<string, string>()
+            {
+                { "1", FirstTeamName },
+                { "2", SecondTeamName },
+                { "3", ThirdTeamName }
+            };
+            mockTeamManager.Setup(manager => manager.GetTeamIdToNames()).Returns(Task.FromResult(teamIdToName));
+            this.Game.TeamManager = mockTeamManager.Object;
+
+            await this.Handler.GetTeamsAsync();
+            this.MessageStore.VerifyChannelMessages($"Teams: {FirstTeamName}, {SecondTeamName}, {ThirdTeamName}");
+        }
+
+        [TestMethod]
+        public async Task GetTeamsSucceedsWithManyTeams()
+        {
+            this.InitializeHandler();
+            Mock<ITeamManager> mockTeamManager = new Mock<ITeamManager>();
+
+            Dictionary<string, string> teamIdToName = new Dictionary<string, string>();
+            for (int i = 0; i < GeneralCommandHandler.MaxTeamsShown; i++)
+            {
+                string id = i.ToString(CultureInfo.InvariantCulture);
+                string teamName = $"Team {string.Empty.PadLeft(i, 'A')}";
+                teamIdToName[id] = teamName;
+            }
+
+            string lastTeam = $"Team {string.Empty.PadLeft(GeneralCommandHandler.MaxTeamsShown - 1, 'A')}";
+
+            mockTeamManager
+                .Setup(manager => manager.GetTeamIdToNames())
+                .Returns(Task.FromResult((IReadOnlyDictionary<string, string>)teamIdToName));
+            this.Game.TeamManager = mockTeamManager.Object;
+
+            await this.Handler.GetTeamsAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
+            string message = this.MessageStore.ChannelMessages.First();
+            this.MessageStore.Clear();
+
+            Assert.IsFalse(
+                message.Contains("other", StringComparison.InvariantCultureIgnoreCase),
+                $@"Message contains ""other"", but it's not at the limit. Message\n{message}");
+            Assert.IsTrue(
+                 message.EndsWith(lastTeam, StringComparison.InvariantCultureIgnoreCase),
+                 $"Last team isn't found in the message\n{message}");
+
+            string overTheLimitId = GeneralCommandHandler.MaxTeamsShown.ToString(CultureInfo.InvariantCulture);
+            string overTheLimitTeamName = $"Team {string.Empty.PadLeft(GeneralCommandHandler.MaxTeamsShown, 'A')}";
+            teamIdToName[overTheLimitId] = overTheLimitTeamName;
+            await this.Handler.GetTeamsAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
+            message = this.MessageStore.ChannelMessages.First();
+            this.MessageStore.Clear();
+
+            Assert.IsTrue(
+                message.Contains("other", StringComparison.InvariantCultureIgnoreCase),
+                $@"""other"" is not in message\n{message}");
+            Assert.IsTrue(
+                 message.Contains(lastTeam, StringComparison.InvariantCultureIgnoreCase),
+                 $"Last team isn't found in the second message\n{message}");
+            Assert.IsFalse(
+                message.Contains(overTheLimitTeamName, StringComparison.InvariantCultureIgnoreCase),
+                $"Team over the limit was found in the message\n{message}");
+
+            teamIdToName["another team"] = "another team";
+            await this.Handler.GetTeamsAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
+            message = this.MessageStore.ChannelMessages.First();
+            Assert.IsTrue(
+                message.Contains("others", StringComparison.InvariantCultureIgnoreCase),
+                $@"""others"" is not in message\n{message}");
+        }
+
+        [TestMethod]
+        public async Task GetTeamsMessageWhenNoTeamsExist()
+        {
+            const string joinTeamDescription = "The join team description";
+            this.InitializeHandler();
+            Mock<ITeamManager> mockTeamManager = new Mock<ITeamManager>();
+
+            IReadOnlyDictionary<string, string> teamIdToName = new Dictionary<string, string>(0);
+            mockTeamManager.Setup(manager => manager.GetTeamIdToNames()).Returns(Task.FromResult(teamIdToName));
+            mockTeamManager.Setup(manager => manager.JoinTeamDescription).Returns(joinTeamDescription);
+            this.Game.TeamManager = mockTeamManager.Object;
+
+            await this.Handler.GetTeamsAsync();
+            this.MessageStore.VerifyChannelMessages(joinTeamDescription);
+        }
+
         private static ulong GetExistingNonReaderUserId(ulong readerId = DefaultReaderId)
         {
             return DefaultIds.Except(new ulong[] { readerId }).First();
@@ -983,31 +1295,37 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             return DefaultIds.Max() + 1;
         }
 
-        private void CreateHandler(
-            out GeneralCommandHandler handler, out GameState game, out MessageStore messageStore)
+        private void InitializeHandler()
         {
-            this.CreateHandler(DefaultIds, out handler, out game, out messageStore);
+            this.InitializeHandler(DefaultIds);
         }
 
-        private void CreateHandler(
+        private void InitializeHandlerWithTeamsByRole(Action<Mock<IGuildUser>> updateUser)
+        {
+            this.InitializeHandler(
+                DefaultIds,
+                DefaultReaderId,
+                TeamManagerType.ByRole,
+                updateUser);
+        }
+
+        private void InitializeHandler(
             HashSet<ulong> existingIds,
-            out GeneralCommandHandler handler,
-            out GameState game,
-            out MessageStore messageStore)
+            ulong userId = DefaultReaderId,
+            TeamManagerType managerType = TeamManagerType.Solo)
         {
-            this.CreateHandler(existingIds, DefaultReaderId, out handler, out game, out messageStore);
+            this.InitializeHandler(existingIds, userId, managerType, (mockUser) => { });
         }
 
-        private void CreateHandler(
+        private void InitializeHandler(
             HashSet<ulong> existingIds,
             ulong userId,
-            out GeneralCommandHandler handler,
-            out GameState game,
-            out MessageStore messageStore)
+            TeamManagerType teamManagerType,
+            Action<Mock<IGuildUser>> updateUser)
         {
-            messageStore = new MessageStore();
+            this.MessageStore = new MessageStore();
             ICommandContext commandContext = CommandMocks.CreateCommandContext(
-                messageStore,
+                this.MessageStore,
                 existingIds,
                 DefaultGuildId,
                 DefaultChannelId,
@@ -1029,24 +1347,74 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                         mockRole.Object, mockRole2.Object, mockRole3.Object
                     };
                     mockGuild.Setup(guild => guild.Roles).Returns(roles);
+
+                    mockGuild
+                        .Setup(guild => guild.GetUserAsync(It.IsAny<ulong>(), It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
+                        .Returns<ulong, CacheMode, RequestOptions>((id, cacheMode, requestOptions) =>
+                        {
+                            if (existingIds?.Contains(id) == true)
+                            {
+                                return Task.FromResult(CommandMocks.CreateGuildUser(id, updateUser));
+                            }
+
+                            return Task.FromResult<IGuildUser>(null);
+                        });
+                    mockGuild
+                        .Setup(guild => guild.GetUsersAsync(It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
+                        .Returns<CacheMode, RequestOptions>((cacheMode, requestOptions) =>
+                        {
+                            IReadOnlyCollection<IGuildUser> users = existingIds
+                                .Select(id => CommandMocks.CreateGuildUser(id, updateUser))
+                                .ToList();
+                            return Task.FromResult(users);
+                        });
                 },
                 out _);
             IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
-                this.botConfigurationfactory);
+                this.BotConfigurationfactory);
             IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
             GameStateManager manager = new GameStateManager();
-            manager.TryCreate(DefaultChannelId, out game);
+            manager.TryCreate(DefaultChannelId, out GameState game);
 
-            handler = new GeneralCommandHandler(commandContext, manager, options, dbActionFactory);
+            // Use the By Role team manager by default
+            // game.TeamManager = new ByRoleTeamManager(commandContext.Guild, "Team ");
+            // TODO: Need to update the Mock User to specify RoleIds
+            // And this needs to come from GetUserId
+            ITeamManager teamManager = null;
+            switch (teamManagerType)
+            {
+                case TeamManagerType.ByCommand:
+                    teamManager = new ByCommandTeamManager();
+                    break;
+                case TeamManagerType.ByRole:
+                    teamManager = new ByRoleTeamManager(commandContext.Guild, "Team ");
+                    break;
+                case TeamManagerType.Solo:
+                default:
+                    teamManager = SoloOnlyTeamManager.Instance;
+                    break;
+            }
+
+            game.TeamManager = teamManager;
+
+            this.Game = game;
+            this.Handler = new GeneralCommandHandler(commandContext, manager, options, dbActionFactory);
         }
 
         private Task SetDefaultTeamRolePrefix()
         {
-            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            using (BotConfigurationContext context = this.BotConfigurationfactory.Create())
             using (DatabaseAction action = new DatabaseAction(context))
             {
                 return action.SetTeamRolePrefixAsync(DefaultGuildId, "Team ");
             }
+        }
+
+        private enum TeamManagerType
+        {
+            Solo,
+            ByRole,
+            ByCommand
         }
     }
 }

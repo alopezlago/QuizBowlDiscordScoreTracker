@@ -161,7 +161,8 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            await this.messageHandler.HandlePlayerMessage(state, guildUser, channel, message.Content);
+            // Don't block on this
+            _ = Task.Run(() => this.messageHandler.HandlePlayerMessage(state, guildUser, channel, message.Content));
         }
 
         private Task OnLogAsync(LogMessage logMessage)

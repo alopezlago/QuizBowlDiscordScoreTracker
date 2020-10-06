@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
@@ -10,7 +11,7 @@ namespace QuizBowlDiscordScoreTracker
         // many teams.
         private readonly SortedSet<Buzz> buzzQueue;
         private readonly HashSet<ulong> alreadyBuzzedPlayerIds;
-        private readonly HashSet<ulong> alreadyScoredTeamIds;
+        private readonly HashSet<string> alreadyScoredTeamIds;
         private readonly Stack<ScoreAction> actions;
         private readonly Dictionary<ulong, ScoreAction> scores;
 
@@ -21,7 +22,7 @@ namespace QuizBowlDiscordScoreTracker
         {
             this.buzzQueue = new SortedSet<Buzz>();
             this.alreadyBuzzedPlayerIds = new HashSet<ulong>();
-            this.alreadyScoredTeamIds = new HashSet<ulong>();
+            this.alreadyScoredTeamIds = new HashSet<string>();
             this.actions = new Stack<ScoreAction>();
             this.scores = new Dictionary<ulong, ScoreAction>();
         }
@@ -37,7 +38,7 @@ namespace QuizBowlDiscordScoreTracker
             lock (this.collectionLock)
             {
                 Verify.IsNotNull(player, nameof(player));
-                ulong teamId = GetTeamId(player);
+                string teamId = GetTeamId(player);
                 if (player == null ||
                     this.alreadyBuzzedPlayerIds.Contains(player.UserId) ||
                     this.alreadyScoredTeamIds.Contains(teamId))
@@ -108,7 +109,7 @@ namespace QuizBowlDiscordScoreTracker
             return true;
         }
 
-        public bool WithdrawPlayer(ulong userId, ulong? userTeamId = null)
+        public bool WithdrawPlayer(ulong userId, string userTeamId)
         {
             int count = 0;
             lock (this.collectionLock)
@@ -118,7 +119,7 @@ namespace QuizBowlDiscordScoreTracker
                     // Unless we change Buzz's Equals to only take the User into account then we have to go through the
                     // whole set to withdraw.
                     count = this.buzzQueue.RemoveWhere(buzz => buzz.UserId == userId);
-                    this.alreadyScoredTeamIds.Remove(userTeamId ?? userId);
+                    this.alreadyScoredTeamIds.Remove(GetTeamId(userTeamId, userId));
                     Debug.Assert(count <= 1, "The same user should not be in the queue more than once.");
                 }
             }
@@ -152,11 +153,16 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        private static ulong GetTeamId(Buzz player)
+        private static string GetTeamId(Buzz player)
         {
             // If the player isn't on a team, treat them as being on their own team (they're player ID, which should be
             // distinct in Discord)
-            return player.TeamId ?? player.UserId;
+            return GetTeamId(player.TeamId, player.UserId);
+        }
+
+        private static string GetTeamId(string teamId, ulong userId)
+        {
+            return teamId ?? userId.ToString(CultureInfo.InvariantCulture);
         }
 
         private Buzz GetNextPlayerToPrompt()

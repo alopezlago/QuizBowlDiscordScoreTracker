@@ -1,7 +1,6 @@
 ﻿using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
-using QuizBowlDiscordScoreTracker.Database;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
@@ -9,15 +8,33 @@ namespace QuizBowlDiscordScoreTracker.Commands
     [RequireContext(ContextType.Guild)]
     public class ReaderCommands : ModuleBase
     {
-        public ReaderCommands(GameStateManager manager, IDatabaseActionFactory dbActionFactory)
+        public ReaderCommands(GameStateManager manager)
         {
             this.Manager = manager;
-            this.DatabaseActionFactory = dbActionFactory;
         }
 
         private GameStateManager Manager { get; }
 
-        private IDatabaseActionFactory DatabaseActionFactory { get; }
+        [Command("addTeam")]
+        [Summary("Adds a team to the game (not available if the team role prefix is set).")]
+        public Task AddTeamAsync([Summary("Name of the team you are adding")][Remainder] string teamName)
+        {
+            return this.GetHandler().AddTeamAsync(teamName);
+        }
+
+        [Command("removeTeam")]
+        [Summary("Removes a team from the game (not available if the team role prefix is set).")]
+        public Task RemoveTeamAsync([Summary("Name of the team you are removing")][Remainder] string teamName)
+        {
+            return this.GetHandler().RemoveTeamAsync(teamName);
+        }
+
+        [Command("removePlayer")]
+        [Summary("Removes a player from the given team (not available if the team role prefix is set).")]
+        public Task RemovePlayerAsync([Summary("Mention of the user to remove")] IGuildUser player)
+        {
+            return this.GetHandler().RemovePlayerAsync(player);
+        }
 
         [Command("setnewreader")]
         [Summary("Set another user as the reader.")]
@@ -64,7 +81,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private ReaderCommandHandler GetHandler()
         {
             // this.Context is null in the constructor, so create the handler in this method
-            return new ReaderCommandHandler(this.Context, this.Manager, this.DatabaseActionFactory);
+            return new ReaderCommandHandler(this.Context, this.Manager);
         }
     }
 }

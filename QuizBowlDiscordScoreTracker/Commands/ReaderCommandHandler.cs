@@ -1,7 +1,7 @@
 ﻿using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
-using QuizBowlDiscordScoreTracker.Database;
+using QuizBowlDiscordScoreTracker.TeamManager;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker.Commands
@@ -10,19 +10,82 @@ namespace QuizBowlDiscordScoreTracker.Commands
     {
         private static readonly ILogger Logger = Log.ForContext(typeof(ReaderCommandHandler));
 
-        public ReaderCommandHandler(
-            ICommandContext context, GameStateManager manager, IDatabaseActionFactory dbActionFactory)
+        public ReaderCommandHandler(ICommandContext context, GameStateManager manager)
         {
             this.Context = context;
             this.Manager = manager;
-            this.DatabaseActionFactory = dbActionFactory;
         }
 
         private ICommandContext Context { get; }
 
         private GameStateManager Manager { get; }
 
-        private IDatabaseActionFactory DatabaseActionFactory { get; }
+        public async Task AddTeamAsync(string teamName)
+        {
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
+            {
+                // This command only works during a game
+                return;
+            }
+
+            if (!(game.TeamManager is ISelfManagedTeamManager teamManager))
+            {
+                // TODO: Should we look at the database and see if the team prefix is set?
+                await this.Context.Channel.SendMessageAsync("Adding teams isn't supported in this mode.");
+                return;
+            }
+
+            teamManager.TryAddTeam(teamName, out string message);
+            await this.Context.Channel.SendMessageAsync(message);
+        }
+
+        public async Task RemoveTeamAsync(string teamName)
+        {
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
+            {
+                // This command only works during a game
+                return;
+            }
+
+            if (!(game.TeamManager is ISelfManagedTeamManager teamManager))
+            {
+                // TODO: Should we look at the database and see if the team prefix is set?
+                await this.Context.Channel.SendMessageAsync("Removing teams isn't supported in this mode.");
+                return;
+            }
+
+            teamManager.TryRemoveTeam(teamName, out string message);
+            await this.Context.Channel.SendMessageAsync(message);
+        }
+
+        public async Task RemovePlayerAsync(IGuildUser player)
+        {
+            Verify.IsNotNull(player, nameof(player));
+
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
+            {
+                // This command only works during a game
+                return;
+            }
+
+            if (!(game.TeamManager is ISelfManagedTeamManager teamManager))
+            {
+                // TODO: Should we look at the database and see if the team prefix is set?
+                await this.Context.Channel.SendMessageAsync("Removing players isn't supported in this mode.");
+                return;
+            }
+
+            string playerName = player.Nickname ?? player.Username;
+            if (!teamManager.TryRemovePlayerFromTeam(player.Id))
+            {
+                await this.Context.Channel.SendMessageAsync(
+                    $@"Couldn't remove player ""{playerName}"" from a team. Are they on a team?");
+                return;
+            }
+
+            await this.Context.Channel.SendMessageAsync(
+                $@"Player ""{playerName}"" removed from their team.");
+        }
 
         public async Task SetNewReaderAsync(IGuildUser newReader)
         {
@@ -104,11 +167,10 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 // Also unsure if this is really applicable. Could use status, but some people may play while
                 // appearing offline.
                 name = "<Unknown>";
-                ulong? teamId = await user.GetTeamId(this.DatabaseActionFactory);
 
                 // Need to remove player from queue too, since they cannot answer
                 // Maybe we need to find the next player in the queue?
-                game.WithdrawPlayer(userId, teamId);
+                await game.WithdrawPlayer(userId);
                 string nextPlayerMention = null;
                 while (game.TryGetNextPlayer(out ulong nextPlayerId))
                 {
@@ -120,8 +182,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     }
 
                     // Player isn't here, so withdraw them
-                    teamId = await user.GetTeamId(this.DatabaseActionFactory);
-                    game.WithdrawPlayer(nextPlayerId, teamId);
+                    await game.WithdrawPlayer(nextPlayerId);
                 }
 
                 message = nextPlayerMention != null ?

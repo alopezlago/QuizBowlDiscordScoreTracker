@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -11,17 +12,18 @@ namespace QuizBowlDiscordScoreTracker
         /// </summary>
         /// <param name="playerId"></param>
         /// <param name="teamId"></param>
-        public PlayerTeamPair(ulong playerId, ulong? teamId)
+        public PlayerTeamPair(ulong playerId, string teamId)
         {
             this.PlayerId = playerId;
-            this.TeamId = teamId ?? playerId;
+            this.TeamId = teamId ?? playerId.ToString(CultureInfo.InvariantCulture);
+            this.IsOnTeam = teamId != null;
         }
 
-        public bool IsOnTeam => this.PlayerId != this.TeamId;
+        public bool IsOnTeam { get; }
 
         public ulong PlayerId { get; private set; }
 
-        public ulong TeamId { get; private set; }
+        public string TeamId { get; private set; }
 
         public override bool Equals(object obj)
         {
@@ -45,7 +47,7 @@ namespace QuizBowlDiscordScoreTracker
 
         public override int GetHashCode()
         {
-            return this.PlayerId.GetHashCode() ^ this.TeamId.GetHashCode();
+            return this.PlayerId.GetHashCode() ^ this.TeamId.GetHashCode(StringComparison.Ordinal);
         }
     }
 }

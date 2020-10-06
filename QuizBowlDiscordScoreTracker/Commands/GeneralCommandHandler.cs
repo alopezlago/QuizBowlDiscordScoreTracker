@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -10,6 +11,7 @@ using Discord;
 using Discord.Commands;
 using Microsoft.Extensions.Options;
 using QuizBowlDiscordScoreTracker.Database;
+using QuizBowlDiscordScoreTracker.TeamManager;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker.Commands
@@ -17,6 +19,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
     public class GeneralCommandHandler
     {
         internal const int MaxLeadersShown = 5;
+        internal const int MaxTeamsShown = 10;
         private const string GameReportTitle = "Game Report";
 
         // These characters are two characters in length, so we can't use string indexing as a trick
@@ -58,6 +61,88 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.Context.Channel.SendMessageAsync(embed: embedBuilder.Build());
         }
 
+        public Task JoinTeamAsync(string teamName)
+        {
+            if (!(this.Manager.TryGet(this.Context.Channel.Id, out GameState game) &&
+                this.Context.User is IGuildUser guildUser))
+            {
+                // This command only works during a game
+                return Task.CompletedTask;
+            }
+
+            if (!(game.TeamManager is ISelfManagedTeamManager teamManager))
+            {
+                // TODO: Should we look at the database and see if the team prefix is set?
+                return this.Context.Channel.SendMessageAsync("Joining teams isn't supported in this mode.");
+            }
+
+            if (!teamManager.TryAddPlayerToTeam(this.Context.User.Id, teamName))
+            {
+                return this.Context.Channel.SendMessageAsync(
+                    $@"Couldn't join team ""{teamName}"". Make sure it is not misspelled.");
+            }
+
+            return this.Context.Channel.SendMessageAsync($@"{guildUser.Mention} is on team ""{teamName}""");
+        }
+
+        public Task LeaveTeamAsync()
+        {
+            if (!(this.Manager.TryGet(this.Context.Channel.Id, out GameState game) &&
+                this.Context.User is IGuildUser guildUser))
+            {
+                // This command only works during a game
+                return Task.CompletedTask;
+            }
+
+            if (!(game.TeamManager is ISelfManagedTeamManager teamManager))
+            {
+                // TODO: Should we look at the database and see if the team prefix is set?
+                return this.Context.Channel.SendMessageAsync("Leaving teams isn't supported in this mode.");
+            }
+
+            string name = guildUser.Nickname ?? guildUser.Username;
+            if (!teamManager.TryRemovePlayerFromTeam(this.Context.User.Id))
+            {
+                return this.Context.Channel.SendMessageAsync($@"""{name}"" isn't on a team.");
+            }
+
+            // We don't want to ping the user when they left, so use their nickname/username
+            return this.Context.Channel.SendMessageAsync($@"""{name}"" left their team.");
+        }
+
+        public async Task GetTeamsAsync()
+        {
+            if (!(this.Manager.TryGet(this.Context.Channel.Id, out GameState game) &&
+                this.Context.User is IGuildUser guildUser))
+            {
+                // This command only works during a game
+                return;
+            }
+
+            IEnumerable<string> teamNames = (await game.TeamManager.GetTeamIdToNames()).Values;
+            if (!teamNames.Any())
+            {
+                await this.Context.Channel.SendMessageAsync(game.TeamManager.JoinTeamDescription);
+                return;
+            }
+
+            string teams;
+            IEnumerable<string> orderedTeamNames = teamNames.OrderBy(name => name).Take(MaxTeamsShown);
+            int teamsCount = teamNames.Count();
+            if (teamsCount > MaxTeamsShown)
+            {
+                int remainingTeamsCount = teamsCount - MaxTeamsShown;
+                teams = $"{string.Join(", ", orderedTeamNames)}, and {remainingTeamsCount} " +
+                    $"other{(remainingTeamsCount == 1 ? string.Empty : "s")}...";
+            }
+            else
+            {
+                teams = string.Join(", ", orderedTeamNames);
+            }
+
+            await this.Context.Channel.SendMessageAsync($"Teams: {teams}");
+        }
+
         public async Task GetGameReportAsync()
         {
             if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState currentGame) ||
@@ -67,7 +152,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            IEnumerable<IEnumerable<ScoringSplitOnScoreAction>> scoresByPhases = currentGame.GetScoringActionsByPhase();
+            IEnumerable<IEnumerable<ScoringSplitOnScoreAction>> scoresByPhases = await currentGame.GetScoringActionsByPhase();
 
             // If there's been no buzzes in the last question, don't show it in the report (could be end of the packet)
             IEnumerable<ScoringSplitOnScoreAction> lastQuestion = scoresByPhases.LastOrDefault();
@@ -80,11 +165,10 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 .SelectMany(pairs => pairs.Select(pair => pair.Split));
             HighestPointsLevel highestPointsLevel = FindHighestPointLevel(splits);
 
+            // Because we only have the scoring splits here, we have to rely on buzzes having a team ID
             bool hasTeams = scoresByPhases
-                .Any(scoresInPhase => scoresInPhase.Any(pair => pair.Action.Buzz.TeamId.HasValue));
-            IDictionary<ulong, string> teamIdToName = hasTeams ?
-                await this.GetTeamIdToNameDictionary() :
-                new Dictionary<ulong, string>(0);
+                .Any(scoresInPhase => scoresInPhase.Any(pair => pair.Action.Buzz.TeamId != null));
+            IReadOnlyDictionary<string, string> teamIdToName = await currentGame.TeamManager.GetTeamIdToNames();
 
             int scoresByQuestionCount = scoresByPhases.Count();
             int questionsReported = await this.Context.Channel.SendAllEmbeds(
@@ -142,19 +226,30 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             // Prevent a cold start on the first buzz, and eagerly get the team prefix and channel pair
-            Task[] dbTasks = new Task[2];
+            string teamRolePrefix;
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
             {
-                dbTasks[0] = action.GetPairedVoiceChannelIdOrNullAsync(this.Context.Channel.Id);
-                dbTasks[1] = action.GetTeamRolePrefixAsync(this.Context.Guild.Id);
+                await action.GetPairedVoiceChannelIdOrNullAsync(this.Context.Channel.Id);
+                teamRolePrefix = await action.GetTeamRolePrefixAsync(this.Context.Guild.Id);
             }
 
-            await Task.WhenAll(dbTasks);
+            // Set teams here, if they are using roles.
+            if (teamRolePrefix != null)
+            {
+                state.TeamManager = new ByRoleTeamManager(this.Context.Guild, teamRolePrefix);
+            }
+            else
+            {
+                state.TeamManager = new ByCommandTeamManager();
+            }
 
-            string message = this.Options.CurrentValue.WebBaseURL == null ?
+            string baseMessage = this.Options.CurrentValue.WebBaseURL == null ?
                 $"{this.Context.User.Mention} is the reader." :
                 $"{this.Context.User.Mention} is the reader. Please visit {this.Options.CurrentValue.WebBaseURL}?{this.Context.Channel.Id} to hear buzzes.";
-            await this.Context.Channel.SendMessageAsync(message);
+            string teamManagementMessage = teamRolePrefix == null ?
+                "The reader can add teams through !addTeam *teamName*, and players can join teams with !join *teamName*. See !help for more team-based commands." :
+                $@"Teams are set by the server role. Team roles begin with ""{teamRolePrefix}"".";
+            await this.Context.Channel.SendMessageAsync($"{baseMessage}\n{teamManagementMessage}");
         }
 
         public async Task GetScoreAsync()
@@ -175,11 +270,12 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            IEnumerable<KeyValuePair<PlayerTeamPair, ScoringSplitOnScoreAction>> scoringSplits =
-                    currentGame.GetLastScoringSplits();
+            IEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> scoringSplits =
+                await currentGame.GetLastScoringSplits();
             HighestPointsLevel highestPointsLevel = FindHighestPointLevel(
-                scoringSplits.Select(kvp => kvp.Value.Split));
-            bool hasTeams = scoringSplits.Any(kvp => kvp.Value.Action.Buzz.TeamId.HasValue);
+                scoringSplits.Where(kvp => kvp.Value != null).Select(kvp => kvp.Value.Split));
+
+            bool hasTeams = scoringSplits.Any(kvp => kvp.Key.IsOnTeam);
             int embedsSentCount = hasTeams ?
                 await this.ShowScoreForTeams(currentGame, scoringSplits, highestPointsLevel) :
                 await this.ShowScoreForShootout(scoringSplits, highestPointsLevel);
@@ -190,11 +286,12 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
         }
 
-        private static void AppendIndividualLeadersMessage(GameState state, StringBuilder valueBuilder)
+        private static async Task AppendIndividualLeadersMessage(GameState state, StringBuilder valueBuilder)
         {
-            IEnumerable<ScoringSplitOnScoreAction> lastSplits = state.GetLastScoringSplits().Values;
-            IGrouping<int, ScoringSplitOnScoreAction> topLastSplits = state.GetLastScoringSplits().Values
-                .GroupBy(pair => pair.Split.Points)
+            IEnumerable<LastScoringSplit> lastSplits = (await state.GetLastScoringSplits()).Values;
+            IGrouping<int, LastScoringSplit> topLastSplits = lastSplits
+                .Where(lastSplit => lastSplit.PlayerDisplayName != null)
+                .GroupBy(lastSplit => lastSplit.Split.Points)
                 .OrderByDescending(grouping => grouping.Key)
                 .FirstOrDefault();
             if (topLastSplits == null)
@@ -204,7 +301,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             IEnumerable<string> boldedNames = topLastSplits
                 .Take(MaxLeadersShown)
-                .Select(split => $"**{EscapeText(split.Action.Buzz.PlayerDisplayName)}**");
+                .Select(split => $"**{EscapeText(split.PlayerDisplayName)}**");
             int boldedNamesCount = boldedNames.Count();
             string verb = boldedNamesCount > 1 ? "are" : "is";
             string playersList = string.Join(", ", boldedNames);
@@ -217,26 +314,27 @@ namespace QuizBowlDiscordScoreTracker.Commands
             valueBuilder.AppendLine($"> {playersEtAlList} {verb} in the lead.");
         }
 
-        private static void AppendTeamLeadersMessage(
-            GameState state, IDictionary<ulong, string> teamIdtoName, StringBuilder valueBuilder)
+        private static async Task AppendTeamLeadersMessage(
+            GameState state, IReadOnlyDictionary<string, string> teamIdToName, StringBuilder valueBuilder)
         {
             // Group the teams by their score, then select the grouping with the highest score
-            IDictionary<ulong, int> teamScores = GetTeamScores(state);
-            IEnumerable<KeyValuePair<ulong, int>> topTeamScores = teamScores
+            IDictionary<string, int> teamScores = await GetTeamScores(state);
+            IEnumerable<KeyValuePair<string, int>> topTeamScores = teamScores
                 .GroupBy(kvp => kvp.Value)
                 .OrderByDescending(grouping => grouping.Key)
                 .SelectMany(grouping => grouping);
 
-            IEnumerable<ScoringSplitOnScoreAction> lastSplits = state.GetLastScoringSplits().Values;
-            IDictionary<ulong, string> playerIdToName = lastSplits
-                .Where(splitPair => !splitPair.Action.Buzz.TeamId.HasValue)
-                .ToDictionary(
-                    splitPair => splitPair.Action.Buzz.UserId,
-                    splitPair => splitPair.Action.Buzz.PlayerDisplayName);
+            IEnumerable<LastScoringSplit> lastSplits = (await state.GetLastScoringSplits()).Values;
+            Dictionary<string, string> playerIdToName = new Dictionary<string, string>();
+            foreach (LastScoringSplit lastSplit in lastSplits.Where(lastSplit => lastSplit.TeamId == null))
+            {
+                string key = lastSplit.PlayerId.ToString(CultureInfo.InvariantCulture);
+                playerIdToName[key] = lastSplit.PlayerDisplayName;
+            }
 
             IEnumerable<string> teamNamesAndScores = topTeamScores.Take(MaxLeadersShown).Select(kvp =>
             {
-                if (!(teamIdtoName.TryGetValue(kvp.Key, out string teamName) ||
+                if (!(teamIdToName.TryGetValue(kvp.Key, out string teamName) ||
                     playerIdToName.TryGetValue(kvp.Key, out teamName)))
                 {
                     teamName = "*<Unknown>*";
@@ -302,10 +400,10 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return level;
         }
 
-        private static EmbedFieldBuilder GetEmbedFieldForPhase(
+        private static async Task<EmbedFieldBuilder> GetEmbedFieldForPhase(
             GameState state,
             IEnumerable<ScoringSplitOnScoreAction> pairs,
-            IDictionary<ulong, string> teamIdToName,
+            IReadOnlyDictionary<string, string> teamIdToName,
             HighestPointsLevel highestPointsLevel,
             int index,
             bool isLastPhase)
@@ -341,8 +439,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
                 valueBuilder.Append($"**{EscapeText(pair.Action.Buzz.PlayerDisplayName)}** ");
 
-                ulong? teamId = pair.Action.Buzz.TeamId;
-                if (teamId.HasValue && teamIdToName.TryGetValue(teamId.Value, out string teamName))
+                if (pair.Action.Buzz.TeamId != null &&
+                    teamIdToName.TryGetValue(pair.Action.Buzz.TeamId, out string teamName))
                 {
                     valueBuilder.Append($"({teamName}) ");
                 }
@@ -360,11 +458,11 @@ namespace QuizBowlDiscordScoreTracker.Commands
             {
                 if (teamIdToName.Count == 0)
                 {
-                    AppendIndividualLeadersMessage(state, valueBuilder);
+                    await AppendIndividualLeadersMessage(state, valueBuilder);
                 }
                 else
                 {
-                    AppendTeamLeadersMessage(state, teamIdToName, valueBuilder);
+                    await AppendTeamLeadersMessage(state, teamIdToName, valueBuilder);
                 }
             }
 
@@ -375,28 +473,19 @@ namespace QuizBowlDiscordScoreTracker.Commands
             };
         }
 
-        private static IDictionary<ulong, int> GetTeamScores(GameState state)
+        private static async Task<IDictionary<string, int>> GetTeamScores(GameState state)
         {
-            IEnumerable<ScoringSplitOnScoreAction> scoringActions = state.GetScoringActionsByPhase()
-                .SelectMany(pairsByPhase => pairsByPhase);
-            IDictionary<ulong, int> scores = new Dictionary<ulong, int>();
+            IEnumerable<IGrouping<string, int>> lastScoringSplits =
+                (await state.GetLastScoringSplits())
+                    .GroupBy(
+                        kvp => kvp.Key.TeamId ?? kvp.Key.PlayerId.ToString(CultureInfo.InvariantCulture),
+                        kvp => kvp.Value.Split.Points);
 
-            foreach (ScoringSplitOnScoreAction splitPair in scoringActions)
-            {
-                ulong teamId = splitPair.Action.Buzz.TeamId ?? splitPair.Action.Buzz.UserId;
-                if (!scores.TryGetValue(teamId, out int score))
-                {
-                    score = 0;
-                }
-
-                scores[teamId] = score + splitPair.Action.Score;
-            }
-
-            return scores;
+            return lastScoringSplits.ToDictionary(grouping => grouping.Key, grouping => grouping.Sum());
         }
 
         private static int[] GetTopThreeScores(
-            IOrderedEnumerable<KeyValuePair<PlayerTeamPair, ScoringSplitOnScoreAction>> orderedScoringSplits)
+            IOrderedEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> orderedScoringSplits)
         {
             // We may not have 3 scorers in our splits, so fill in the values with the previous scores or 0
             int[] topThreeScores = new int[3];
@@ -411,7 +500,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 i++;
             }
 
-            int lastTopScore = topExistingScores.Length > 0 ? topExistingScores[topExistingScores.Length - 1] : 0;
+            int lastTopScore = topExistingScores.Length > 0 ? topExistingScores[^1] : 0;
             while (i < topThreeScores.Length)
             {
                 topThreeScores[i] = lastTopScore;
@@ -421,31 +510,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return topThreeScores;
         }
 
-        private async Task<IDictionary<ulong, string>> GetTeamIdToNameDictionary()
-        {
-            string rolePrefix = null;
-            using (DatabaseAction action = this.DatabaseActionFactory.Create())
-            {
-                rolePrefix = await action.GetTeamRolePrefixAsync(this.Context.Guild.Id);
-            }
-
-            // TODO: Use the database action to determine where the team comes from
-            IDictionary<ulong, string> teamIdToName = this.Context.Guild.Roles
-                .ToDictionary(
-                role => role.Id,
-                role => rolePrefix == null || !role.Name.StartsWith(rolePrefix, StringComparison.InvariantCultureIgnoreCase) ?
-                    role.Name :
-                    role.Name.Substring(rolePrefix.Length).Trim());
-            return teamIdToName;
-        }
-
         private Task<int> ShowScoreForShootout(
-            IEnumerable<KeyValuePair<PlayerTeamPair, ScoringSplitOnScoreAction>> scoringSplits,
+            IEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> scoringSplits,
             HighestPointsLevel highestPointsLevel)
         {
-            IOrderedEnumerable<KeyValuePair<PlayerTeamPair, ScoringSplitOnScoreAction>> orderedScoringSplits = scoringSplits
+            IOrderedEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> orderedScoringSplits = scoringSplits
                 .OrderByDescending(kvp => kvp.Value.Split.Points);
-            IEnumerable<KeyValuePair<PlayerTeamPair, ScoringSplitOnScoreAction>> topOrderedScoringSplits = orderedScoringSplits
+            IEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> topOrderedScoringSplits = orderedScoringSplits
                 .Take(GameState.ScoresListLimit);
             int[] topThreeScores = GetTopThreeScores(orderedScoringSplits);
 
@@ -462,18 +533,25 @@ namespace QuizBowlDiscordScoreTracker.Commands
                         Color = Color.Gold
                     };
                 },
-                (kvp, index) =>
+                async (kvp, index) =>
                 {
                     StringBuilder valueBuilder = new StringBuilder();
                     ScoringSplit split = kvp.Value.Split;
-                    string name = EscapeText(kvp.Value.Action.Buzz.PlayerDisplayName);
+                    string name = kvp.Value.PlayerDisplayName;
+                    if (name == null)
+                    {
+                        IGuildUser user = await this.Context.Guild.GetUserAsync(kvp.Key.PlayerId);
+                        name = user != null ? (user.Nickname ?? user.Username) : "<Unknown>";
+                    }
+
+                    string escapedName = EscapeText(name);
 
                     // If the player has one of the top three scores (or is tied with one of them), show the medal for
                     // it.
                     int topScoreIndex = Array.IndexOf(topThreeScores, split.Points);
                     if (topScoreIndex >= 0)
                     {
-                        name = $"{Medals[topScoreIndex]} {name}";
+                        escapedName = $"{Medals[topScoreIndex]} {escapedName}";
                     }
 
                     valueBuilder.Append($"**{split.Points}** ");
@@ -487,7 +565,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
                     return new EmbedFieldBuilder()
                     {
-                        Name = name,
+                        Name = escapedName,
                         Value = valueBuilder.ToString()
                     };
                 });
@@ -495,34 +573,47 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         private async Task<int> ShowScoreForTeams(
             GameState state,
-            IEnumerable<KeyValuePair<PlayerTeamPair, ScoringSplitOnScoreAction>> scoringSplits,
+            IEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> scoringSplits,
             HighestPointsLevel highestPointsLevel)
         {
-            IDictionary<ulong, int> teamScores = GetTeamScores(state);
+            IDictionary<string, int> teamScores = await GetTeamScores(state);
 
-            // Show team scoes in description (ordered, team names bolded)
-            IOrderedEnumerable<IGrouping<PlayerTeamPair, ScoringSplitOnScoreAction>> orderedScoringSplits =
+            IOrderedEnumerable<IGrouping<string, LastScoringSplit>> orderedScoringSplits =
                 scoringSplits
-                    .GroupBy(kvp => kvp.Key, kvp => kvp.Value)
+                    .GroupBy(
+                        kvp => kvp.Key.TeamId ?? kvp.Key.PlayerId.ToString(CultureInfo.InvariantCulture),
+                        kvp => kvp.Value)
                     .OrderByDescending(grouping => grouping.Sum(value => value.Split.Points));
-            IEnumerable<IGrouping<PlayerTeamPair, ScoringSplitOnScoreAction>> topOrderedScoringSplits =
+            IEnumerable<IGrouping<string, LastScoringSplit>> topOrderedScoringSplits =
                 orderedScoringSplits.Take(GameState.ScoresListLimit);
-            IDictionary<ulong, string> teamIdToName = await this.GetTeamIdToNameDictionary();
+            IReadOnlyDictionary<string, string> teamIdToName = await state.TeamManager.GetTeamIdToNames();
 
             // Show top teams in description
-            (string teamName, int points)[] topTeamScores = topOrderedScoringSplits
-                .Select(grouping =>
+            (string teamName, int points)[] topTeamScores = await Task.WhenAll(topOrderedScoringSplits
+                .Select(async grouping =>
                 {
                     int points = grouping.Sum(value => value.Split.Points);
-                    if (grouping.Key.IsOnTeam && teamIdToName.TryGetValue(grouping.Key.TeamId, out string teamName))
+                    LastScoringSplit lastSplit = grouping.FirstOrDefault();
+                    if (lastSplit == null)
+                    {
+                        // TODO: See if this will just show the player ID sometimes
+                        return (EscapeText(grouping.Key), 0);
+                    }
+
+                    if (lastSplit.TeamId != null && teamIdToName.TryGetValue(lastSplit.TeamId, out string teamName))
                     {
                         return (EscapeText(teamName), points);
                     }
 
-                    teamName = grouping.FirstOrDefault().Action.Buzz.PlayerDisplayName ?? "<unknown>";
+                    teamName = grouping.FirstOrDefault()?.PlayerDisplayName;
+                    if (teamName == null)
+                    {
+                        IGuildUser user = await this.Context.Guild.GetUserAsync(lastSplit.PlayerId);
+                        teamName = user != null ? (user.Nickname ?? user.Username) : "<Unknown>";
+                    }
+
                     return (EscapeText(teamName), points);
-                })
-                .ToArray();
+                }));
 
             IEnumerable<string> teamScoresInTitle = topTeamScores.Take(3).Select(tuple => $"{tuple.teamName} {tuple.points}");
             string title = topTeamScores.Length > 3 ?
@@ -541,14 +632,23 @@ namespace QuizBowlDiscordScoreTracker.Commands
                         Description = "Individual splits and scores below"
                     };
                 },
-                (grouping, index) =>
+                async (grouping, index) =>
                 {
                     StringBuilder valueBuilder = new StringBuilder();
-                    foreach (ScoringSplitOnScoreAction splitPair in grouping)
+                    foreach (LastScoringSplit lastSplit in grouping)
                     {
-                        ScoringSplit split = splitPair.Split;
+                        ScoringSplit split = lastSplit.Split;
+                        string name = lastSplit.PlayerDisplayName;
+
+                        if (name == null)
+                        {
+                            // TODO: Find a way to not await in the loop
+                            IGuildUser user = await this.Context.Guild.GetUserAsync(lastSplit.PlayerId);
+                            name = user != null ? (user.Nickname ?? user.Username) : "<Unknown>";
+                        }
+
                         valueBuilder.Append(
-                            $"> {EscapeText(splitPair.Action.Buzz.PlayerDisplayName)}:    {split.Points} ");
+                            $"> {EscapeText(name)}:    {split.Points} ");
                         AddSplits(valueBuilder, split, highestPointsLevel);
                         int noPenalties = split.NoPenalties;
                         if (noPenalties > 0)
@@ -558,8 +658,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
                         valueBuilder.AppendLine();
                     }
 
-                    (string teamName, int points) teamScore = topTeamScores[index];
-                    string score = $"**{teamScore.teamName}** ({teamScore.points})";
+                    (string teamName, int points) = topTeamScores[index];
+                    string score = $"**{teamName}** ({points})";
                     return new EmbedFieldBuilder()
                     {
                         Name = score,

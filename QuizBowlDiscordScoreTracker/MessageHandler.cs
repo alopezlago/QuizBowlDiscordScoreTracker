@@ -65,10 +65,10 @@ namespace QuizBowlDiscordScoreTracker
 
             // Player has buzzed in
             string playerDisplayName = messageAuthor.Nickname ?? messageAuthor.Username;
-            ulong? teamId = await messageAuthor.GetTeamId(this.DatabaseActionFactory);
+            string teamId = await state.TeamManager.GetTeamIdOrNull(messageAuthor.Id);
             ulong nextPlayerId;
 
-            if (this.IsBuzz(messageContent) && state.AddPlayer(messageAuthor.Id, playerDisplayName, teamId))
+            if (this.IsBuzz(messageContent) && await state.AddPlayer(messageAuthor.Id, playerDisplayName))
             {
                 if (state.TryGetNextPlayer(out nextPlayerId) && nextPlayerId == messageAuthor.Id)
                 {
@@ -82,7 +82,7 @@ namespace QuizBowlDiscordScoreTracker
             // want to send a message about the withdrawl
             if (WithdrawRegex.IsMatch(messageContent) &&
                 state.TryGetNextPlayer(out nextPlayerId) &&
-                state.WithdrawPlayer(messageAuthor.Id, teamId) &&
+                await state.WithdrawPlayer(messageAuthor.Id) &&
                 nextPlayerId == messageAuthor.Id)
             {
                 if (state.TryGetNextPlayer(out _))
@@ -94,7 +94,8 @@ namespace QuizBowlDiscordScoreTracker
                 {
                     // If there are no players in the queue, have the bot recognize the withdrawl
                     IGuildUser messageUser = await channel.Guild.GetUserAsync(messageAuthor.Id);
-                    await channel.SendMessageAsync($"{messageUser.Mention} has withdrawn.");
+                    string teamNameReference = await GetTeamNameForMessage(state, teamId);
+                    await channel.SendMessageAsync($"{messageUser.Mention}{teamNameReference} has withdrawn.");
                 }
             }
         }
@@ -171,6 +172,13 @@ namespace QuizBowlDiscordScoreTracker
             return channel.Id.ToString(CultureInfo.InvariantCulture);
         }
 
+        private static async Task<string> GetTeamNameForMessage(GameState state, string teamId)
+        {
+            return teamId != null && (await state.TeamManager.GetTeamIdToNames()).TryGetValue(teamId, out string teamName) ?
+                $" ({teamName.Trim()})" :
+                string.Empty;
+        }
+
         private bool IsBuzz(string buzzText)
         {
             return BuzzRegex.IsMatch(buzzText) || this.BuzzEmojisRegex.Any(regex => regex.IsMatch(buzzText));
@@ -232,11 +240,15 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             IGuildUser user = await textChannel.Guild.GetUserAsync(userId);
+            string teamId = await state.TeamManager.GetTeamIdOrNull(user.Id);
+
             Task<Tuple<IVoiceChannel, IGuildUser>> getVoiceChannelReaderPair = this.MuteReader(
                 textChannel, state.ReaderId);
-            Task sendMessage = textChannel.SendMessageAsync(user.Mention);
+
+            string teamNameReference = await GetTeamNameForMessage(state, teamId);
+            Task sendMessage = textChannel.SendMessageAsync($"{user.Mention}{teamNameReference}");
             Task alertWebSocket = this.HubContext.Clients.Group(GroupFromChannel(textChannel))
-                .SendAsync("PlayerBuzz", user.Nickname ?? user.Username);
+                .SendAsync("PlayerBuzz", $"{user.Nickname ?? user.Username}{teamNameReference}");
             await Task.WhenAll(getVoiceChannelReaderPair, sendMessage, alertWebSocket);
 
             Tuple<IVoiceChannel, IGuildUser> voiceChannelReaderPair = getVoiceChannelReaderPair.Result;

@@ -31,6 +31,27 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().AboutAsync();
         }
 
+        [Command("join")]
+        [Summary("Join the team (not available if the team role prefix is set).")]
+        public Task JoinAsync([Remainder] string teamName)
+        {
+            return this.GetHandler().JoinTeamAsync(teamName);
+        }
+
+        [Command("leave")]
+        [Summary("Leave your team (not available if the team role prefix is set).")]
+        public Task LeaveAsync()
+        {
+            return this.GetHandler().LeaveTeamAsync();
+        }
+
+        [Command("getTeams")]
+        [Summary("Gets the teams players can join (not available if the team role prefix is set).")]
+        public Task GetTeamsAsync()
+        {
+            return this.GetHandler().GetTeamsAsync();
+        }
+
         [Command("gameReport")]
         [Summary("Gets a question-by-question report of the game.")]
         public Task GetGameReportAsync()

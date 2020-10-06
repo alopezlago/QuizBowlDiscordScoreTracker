@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using QuizBowlDiscordScoreTracker.TeamManager;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -10,7 +13,7 @@ namespace QuizBowlDiscordScoreTracker
         private readonly LinkedList<PhaseState> phases;
 
         private ulong? readerId;
-        private IDictionary<PlayerTeamPair, ScoringSplitOnScoreAction> cachedLastScoringSplit;
+        private IDictionary<PlayerTeamPair, LastScoringSplit> cachedLastScoringSplit;
         private IEnumerable<IEnumerable<ScoringSplitOnScoreAction>> cachedSplitsPerPhase;
 
         private readonly object phasesLock = new object();
@@ -21,6 +24,7 @@ namespace QuizBowlDiscordScoreTracker
             this.phases = new LinkedList<PhaseState>();
             this.cachedLastScoringSplit = null;
             this.cachedSplitsPerPhase = null;
+            this.TeamManager = SoloOnlyTeamManager.Instance;
 
             this.SetupInitialPhases();
             this.ReaderId = null;
@@ -55,6 +59,8 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
+        public ITeamManager TeamManager { get; set; }
+
         private PhaseState CurrentPhase => this.phases.Last.Value;
 
         public void ClearAll()
@@ -76,7 +82,7 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public bool AddPlayer(ulong userId, string playerDisplayName, ulong? teamId = null)
+        public async Task<bool> AddPlayer(ulong userId, string playerDisplayName)
         {
             // readers cannot add themselves
             if (userId == this.ReaderId)
@@ -84,6 +90,7 @@ namespace QuizBowlDiscordScoreTracker
                 return false;
             }
 
+            string teamId = await this.TeamManager.GetTeamIdOrNull(userId);
             Buzz player = new Buzz()
             {
                 // TODO: Consider taking this from the message. This would require passing in another parameter.
@@ -99,7 +106,7 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public bool WithdrawPlayer(ulong userId, ulong? userTeamId = null)
+        public async Task<bool> WithdrawPlayer(ulong userId)
         {
             // readers cannot withdraw themselves
             if (userId == this.ReaderId)
@@ -107,13 +114,17 @@ namespace QuizBowlDiscordScoreTracker
                 return false;
             }
 
+            string teamId = await this.TeamManager.GetTeamIdOrNull(userId);
+
             lock (this.phasesLock)
             {
-                return this.CurrentPhase.WithdrawPlayer(userId, userTeamId);
+                return this.CurrentPhase.WithdrawPlayer(userId, teamId);
             }
         }
 
-        public void EnsureCachedCollectionsExist()
+
+
+        public void EnsureCachedCollectionsExist(IEnumerable<PlayerTeamPair> knownPlayers)
         {
             if (this.cachedLastScoringSplit != null && this.cachedSplitsPerPhase != null)
             {
@@ -121,8 +132,16 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             List<IEnumerable<ScoringSplitOnScoreAction>> splitsPerPhase = new List<IEnumerable<ScoringSplitOnScoreAction>>();
-            IDictionary<PlayerTeamPair, ScoringSplitOnScoreAction> lastScoringSplits =
-                new Dictionary<PlayerTeamPair, ScoringSplitOnScoreAction>();
+            IDictionary<PlayerTeamPair, LastScoringSplit> lastScoringSplits = knownPlayers
+                .ToDictionary(
+                    pair => pair,
+                    pair => new LastScoringSplit()
+                    {
+                        PlayerId = pair.PlayerId,
+                        Split = new ScoringSplit(),
+                        TeamId = pair.TeamId
+                    });
+
             foreach (PhaseState phase in this.phases)
             {
                 List<ScoringSplitOnScoreAction> splitsInPhase = new List<ScoringSplitOnScoreAction>();
@@ -130,8 +149,8 @@ namespace QuizBowlDiscordScoreTracker
                 {
                     // Try to get the split and clone it. If it doesn't exist, just make a new one.
                     PlayerTeamPair pair = new PlayerTeamPair(scoreAction.Buzz.UserId, scoreAction.Buzz.TeamId);
-                    lastScoringSplits.TryGetValue(pair, out ScoringSplitOnScoreAction splitActionPair);
-                    ScoringSplit newSplit = splitActionPair?.Split.Clone() ?? new ScoringSplit();
+                    bool hasLastSplit = lastScoringSplits.TryGetValue(pair, out LastScoringSplit lastSplit);
+                    ScoringSplit newSplit = hasLastSplit ? lastSplit.Split.Clone() : new ScoringSplit();
                     switch (scoreAction.Score)
                     {
                         case -5:
@@ -159,7 +178,17 @@ namespace QuizBowlDiscordScoreTracker
                         Split = newSplit
                     };
 
-                    lastScoringSplits[pair] = newPair;
+                    // Use the buzz's TeamId instead of the pair's, since the pair will fill in the playerID if the
+                    // teamID was null
+                    lastSplit = new LastScoringSplit()
+                    {
+                        PlayerDisplayName = scoreAction.Buzz.PlayerDisplayName,
+                        PlayerId = pair.PlayerId,
+                        Split = newSplit,
+                        TeamId = scoreAction.Buzz.TeamId
+                    };
+
+                    lastScoringSplits[pair] = lastSplit;
                     splitsInPhase.Add(newPair);
                 }
 
@@ -170,20 +199,24 @@ namespace QuizBowlDiscordScoreTracker
             this.cachedLastScoringSplit = lastScoringSplits;
         }
 
-        public IDictionary<PlayerTeamPair, ScoringSplitOnScoreAction> GetLastScoringSplits()
+        public async Task<IDictionary<PlayerTeamPair, LastScoringSplit>> GetLastScoringSplits()
         {
+            IEnumerable<PlayerTeamPair> knownPlayers = await this.TeamManager.GetKnownPlayers();
+
             lock (this.phasesLock)
             {
-                this.EnsureCachedCollectionsExist();
+                this.EnsureCachedCollectionsExist(knownPlayers);
                 return this.cachedLastScoringSplit;
             }
         }
 
-        public IEnumerable<IEnumerable<ScoringSplitOnScoreAction>> GetScoringActionsByPhase()
+        public async Task<IEnumerable<IEnumerable<ScoringSplitOnScoreAction>>> GetScoringActionsByPhase()
         {
+            IEnumerable<PlayerTeamPair> knownPlayers = await this.TeamManager.GetKnownPlayers();
+
             lock (this.phasesLock)
             {
-                this.EnsureCachedCollectionsExist();
+                this.EnsureCachedCollectionsExist(knownPlayers);
                 return this.cachedSplitsPerPhase;
             }
         }

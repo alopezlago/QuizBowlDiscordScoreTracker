@@ -68,8 +68,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         public static IGuild CreateGuild(
-           MessageStore messageStore,
-           HashSet<ulong> existingUserIds,
+            MessageStore messageStore,
+            HashSet<ulong> existingUserIds,
             ulong guildId,
             ulong messageChannelId,
             Action<Mock<IGuild>, IGuildTextChannel> updateMockGuild,
@@ -89,6 +89,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     return Task.FromResult<IGuildUser>(null);
                 });
             mockGuild.Setup(guild => guild.Id).Returns(guildId);
+
+            mockGuild
+                .Setup(guild => guild.GetUsersAsync(It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
+                .Returns<CacheMode, RequestOptions>((cacheMode, requestOptions) =>
+                {
+                    IReadOnlyCollection<IGuildUser> users = existingUserIds.Select(id => CreateGuildUser(id)).ToList();
+                    return Task.FromResult(users);
+                });
 
             Mock<IGuildUser> mockBotUser = new Mock<IGuildUser>();
             mockBotUser
