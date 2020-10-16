@@ -68,6 +68,12 @@ namespace QuizBowlDiscordScoreTracker.Database
             return guild.TeamRolePrefix;
         }
 
+        public async Task<bool> GetUseBonuses(ulong guildId)
+        {
+            GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
+            return guild.UseBonuses;
+        }
+
         public async Task PairChannelsAsync(ulong guildId, ulong textChannelId, ulong voiceChannelId)
         {
             TextChannelSetting textChannel = await this.AddOrGetTextChannelAsync(guildId, textChannelId);
@@ -93,6 +99,13 @@ namespace QuizBowlDiscordScoreTracker.Database
         {
             GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
             guild.TeamRolePrefix = prefix;
+            await this.Context.SaveChangesAsync();
+        }
+
+        public async Task SetUseBonuses(ulong guildId, bool useBonuses)
+        {
+            GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
+            guild.UseBonuses = useBonuses;
             await this.Context.SaveChangesAsync();
         }
 

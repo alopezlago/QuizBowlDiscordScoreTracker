@@ -2,15 +2,17 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using QuizBowlDiscordScoreTracker.Database;
 
 namespace QuizBowlDiscordScoreTracker.Migrations
 {
     [DbContext(typeof(BotConfigurationContext))]
-    partial class BotConfigurationContextModelSnapshot : ModelSnapshot
+    [Migration("20201011004425_AddGuildSettings_UseBonuses")]
+    partial class AddGuildSettingsUseBonuses
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

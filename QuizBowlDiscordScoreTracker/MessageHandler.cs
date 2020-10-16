@@ -100,7 +100,7 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public async Task<bool> TryScoreBuzz(
+        public Task<bool> TryScore(
             GameState state, IGuildUser messageAuthor, ITextChannel channel, string messageContent)
         {
             Verify.IsNotNull(state, nameof(state));
@@ -108,41 +108,37 @@ namespace QuizBowlDiscordScoreTracker
             Verify.IsNotNull(channel, nameof(channel));
             Verify.IsNotNull(messageContent, nameof(messageContent));
 
-            if (state.ReaderId != messageAuthor.Id || !state.TryGetNextPlayer(out _))
+            if (state.ReaderId != messageAuthor.Id)
+            {
+                return Task.FromResult(false);
+            }
+
+            if (state.PhaseNumber >= GameState.MaximumPhasesCount)
+            {
+                channel.SendMessageAsync($"Reached the limit for games ({GameState.MaximumPhasesCount} questions)");
+                return Task.FromResult(false);
+            }
+
+            return state.CurrentStage switch
+            {
+                PhaseStage.Tossup => this.TryScoreBuzz(state, channel, messageContent),
+                PhaseStage.Bonus => TryScoreBonus(state, channel, messageContent),
+
+                // Can't score when the game is over
+                _ => Task.FromResult(false),
+            };
+        }
+
+        private static async Task<bool> TryScoreBonus(
+            GameState state, IMessageChannel channel, string messageContent)
+        {
+            if (!state.TryScoreBonus(messageContent))
             {
                 return false;
             }
 
-            if (int.TryParse(messageContent, out int points))
-            {
-                // Go back to only accepting -5/0/10/15/20, since we need to track splits now
-                switch (points)
-                {
-                    case -5:
-                    case 0:
-                    case 10:
-                    case 15:
-                    case 20:
-                        state.ScorePlayer(points);
-                        await this.PromptNextPlayerAsync(state, channel);
-                        if (points > 0)
-                        {
-                            await channel.SendMessageAsync($"**TU {state.PhaseNumber}**");
-                        }
-
-                        return true;
-                    default:
-                        break;
-                }
-            }
-            else if (messageContent.Trim() == "no penalty")
-            {
-                state.ScorePlayer(0);
-                await this.PromptNextPlayerAsync(state, channel);
-                return true;
-            }
-
-            return false;
+            await channel.SendMessageAsync($"**TU {state.PhaseNumber}**");
+            return true;
         }
 
         private static IEnumerable<Regex> BuildBuzzEmojiRegexes(BotConfiguration options)
@@ -255,10 +251,55 @@ namespace QuizBowlDiscordScoreTracker
             if (voiceChannelReaderPair != null)
             {
                 // We want to run this on a separate thread and not block the event handler
-#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
-                Task.Run(() => this.UnmuteReaderAfterDelayAsync(voiceChannelReaderPair.Item1, voiceChannelReaderPair.Item2));
-#pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+                _ = Task.Run(() => this.UnmuteReaderAfterDelayAsync(voiceChannelReaderPair.Item1, voiceChannelReaderPair.Item2));
             }
+        }
+
+        private async Task<bool> TryScoreBuzz(
+            GameState state, ITextChannel channel, string messageContent)
+        {
+            if (!state.TryGetNextPlayer(out _))
+            {
+                return false;
+            }
+
+            if (int.TryParse(messageContent, out int points))
+            {
+                // Go back to only accepting -5/0/10/15/20, since we need to track splits now
+                switch (points)
+                {
+                    case -5:
+                    case 0:
+                    case 10:
+                    case 15:
+                    case 20:
+                        state.ScorePlayer(points);
+                        await this.PromptNextPlayerAsync(state, channel);
+                        if (points > 0)
+                        {
+                            if (state.CurrentStage == PhaseStage.Bonus)
+                            {
+                                await channel.SendMessageAsync($"**Bonus for {state.PhaseNumber}**");
+                            }
+                            else if (state.CurrentStage == PhaseStage.Tossup)
+                            {
+                                await channel.SendMessageAsync($"**TU {state.PhaseNumber}**");
+                            }
+                        }
+
+                        return true;
+                    default:
+                        break;
+                }
+            }
+            else if (messageContent.Trim() == "no penalty")
+            {
+                state.ScorePlayer(0);
+                await this.PromptNextPlayerAsync(state, channel);
+                return true;
+            }
+
+            return false;
         }
 
         private async Task UnmuteReaderAfterDelayAsync(IVoiceChannel voiceChannel, IGuildUser reader)

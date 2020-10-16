@@ -1,6 +1,7 @@
 ﻿using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using QuizBowlDiscordScoreTracker.Database;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
@@ -8,10 +9,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
     [RequireContext(ContextType.Guild)]
     public class ReaderCommands : ModuleBase
     {
-        public ReaderCommands(GameStateManager manager)
+        public ReaderCommands(GameStateManager manager, IDatabaseActionFactory dbActionFactory)
         {
             this.Manager = manager;
+            this.DatabaseActionFactory = dbActionFactory;
         }
+
+        private IDatabaseActionFactory DatabaseActionFactory { get; }
 
         private GameStateManager Manager { get; }
 
@@ -36,6 +40,20 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().RemovePlayerAsync(player);
         }
 
+        [Command("disableBonuses")]
+        [Summary("Makes the current game track only tossups from now on. This command will reset the current cycle (like !clear)")]
+        public Task DisableBonusesAsync()
+        {
+            return this.GetHandler().DisableBonusesAsync();
+        }
+
+        [Command("enableBonuses")]
+        [Summary("Makes the current game track bonuses from now on. This command will reset the current cycle (like !clear)")]
+        public Task EnableBonusesAsync()
+        {
+            return this.GetHandler().EnableBonusesAsync();
+        }
+
         [Command("setnewreader")]
         [Summary("Set another user as the reader.")]
         public Task SetNewReaderAsync([Summary("Mention of the new reader")] IGuildUser newReader)
@@ -58,7 +76,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         }
 
         [Command("clear")]
-        [Summary("Clears the player queue and answers from this question, including scores from this question.")]
+        [Summary("Clears the player queue and answers from this question, including scores from this question. This can only be used during the tossup stage.")]
         public Task ClearAsync()
         {
             return this.GetHandler().ClearAsync();
@@ -81,7 +99,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private ReaderCommandHandler GetHandler()
         {
             // this.Context is null in the constructor, so create the handler in this method
-            return new ReaderCommandHandler(this.Context, this.Manager);
+            return new ReaderCommandHandler(this.Context, this.Manager, this.DatabaseActionFactory);
         }
     }
 }

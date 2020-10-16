@@ -5,32 +5,31 @@ using System.Linq;
 
 namespace QuizBowlDiscordScoreTracker
 {
-    public class PhaseState
+    public abstract class PhaseState : IPhaseState
     {
-        // If there are memory issues, look into making alreadyBuzzedTeamIds an array, since there shouldn't usually be
-        // many teams.
-        private readonly SortedSet<Buzz> buzzQueue;
-        private readonly HashSet<ulong> alreadyBuzzedPlayerIds;
-        private readonly HashSet<string> alreadyScoredTeamIds;
-        private readonly Stack<ScoreAction> actions;
-        private readonly Dictionary<ulong, ScoreAction> scores;
-
         // We may be able to get rid of this lock, if we rely on the host keeping it consistent.
         private readonly object collectionLock = new object();
 
         public PhaseState()
         {
-            this.buzzQueue = new SortedSet<Buzz>();
-            this.alreadyBuzzedPlayerIds = new HashSet<ulong>();
-            this.alreadyScoredTeamIds = new HashSet<string>();
-            this.actions = new Stack<ScoreAction>();
-            this.scores = new Dictionary<ulong, ScoreAction>();
+            this.BuzzQueue = new SortedSet<Buzz>();
+            this.AlreadyBuzzedPlayerIds = new HashSet<ulong>();
+            this.AlreadyScoredTeamIds = new HashSet<string>();
+            this.Actions = new Stack<ScoreAction>();
         }
 
-        // We don't need to order them here.
-        public IEnumerable<KeyValuePair<ulong, ScoreAction>> Scores => this.scores;
+        public abstract PhaseStage CurrentStage { get; }
 
-        public IEnumerable<ScoreAction> OrderedScoreActions => this.actions.Reverse();
+        public IEnumerable<ScoreAction> OrderedScoreActions => this.Actions.Reverse();
+
+        // These classes need to be used by the inheriting class
+        internal Stack<ScoreAction> Actions { get; }
+
+        internal HashSet<ulong> AlreadyBuzzedPlayerIds { get; }
+
+        internal HashSet<string> AlreadyScoredTeamIds { get; }
+
+        internal SortedSet<Buzz> BuzzQueue { get; }
 
         // We could add players to it, but if the team has buzzed already, we can skip/eject them from the queue
         public bool AddBuzz(Buzz player)
@@ -40,14 +39,14 @@ namespace QuizBowlDiscordScoreTracker
                 Verify.IsNotNull(player, nameof(player));
                 string teamId = GetTeamId(player);
                 if (player == null ||
-                    this.alreadyBuzzedPlayerIds.Contains(player.UserId) ||
-                    this.alreadyScoredTeamIds.Contains(teamId))
+                    this.AlreadyBuzzedPlayerIds.Contains(player.UserId) ||
+                    this.AlreadyScoredTeamIds.Contains(teamId))
                 {
                     return false;
                 }
 
-                this.buzzQueue.Add(player);
-                this.alreadyBuzzedPlayerIds.Add(player.UserId);
+                this.BuzzQueue.Add(player);
+                this.AlreadyBuzzedPlayerIds.Add(player.UserId);
             }
 
             return true;
@@ -57,13 +56,13 @@ namespace QuizBowlDiscordScoreTracker
         {
             lock (this.collectionLock)
             {
-                this.actions.Clear();
-                this.alreadyBuzzedPlayerIds.Clear();
-                this.buzzQueue.Clear();
+                this.Actions.Clear();
+                this.AlreadyBuzzedPlayerIds.Clear();
+                this.BuzzQueue.Clear();
             }
         }
 
-        public bool TryScore(int score)
+        public virtual bool TryScoreBuzz(int score)
         {
             lock (this.collectionLock)
             {
@@ -71,18 +70,15 @@ namespace QuizBowlDiscordScoreTracker
                 if (buzz == null)
                 {
                     // This is a bug we should log when logging is added.
-                    Debug.Fail($"{nameof(this.TryScore)} should not be called when there are no players in the queue.");
+                    Debug.Fail($"{nameof(this.TryScoreBuzz)} should not be called when there are no players in the queue.");
                     return false;
                 }
 
-                this.buzzQueue.Remove(buzz);
+                this.BuzzQueue.Remove(buzz);
 
-                // TODO: Should we verify that this.scores doesn't have an action for that user already?
                 ScoreAction action = new ScoreAction(buzz, score);
-                this.scores[buzz.UserId] = action;
-                this.actions.Push(action);
-                this.alreadyScoredTeamIds.Add(GetTeamId(buzz));
-
+                this.Actions.Push(action);
+                this.AlreadyScoredTeamIds.Add(GetTeamId(buzz));
                 return true;
             }
         }
@@ -93,7 +89,7 @@ namespace QuizBowlDiscordScoreTracker
             lock (this.collectionLock)
             {
                 // Only get the next player if there hasn't been a buzz that was correct.
-                if (!this.actions.TryPeek(out ScoreAction action) || action.Score <= 0)
+                if (!this.Actions.TryPeek(out ScoreAction action) || action.Score <= 0)
                 {
                     next = this.GetNextPlayerToPrompt();
                 }
@@ -114,12 +110,12 @@ namespace QuizBowlDiscordScoreTracker
             int count = 0;
             lock (this.collectionLock)
             {
-                if (this.alreadyBuzzedPlayerIds.Remove(userId))
+                if (this.AlreadyBuzzedPlayerIds.Remove(userId))
                 {
                     // Unless we change Buzz's Equals to only take the User into account then we have to go through the
                     // whole set to withdraw.
-                    count = this.buzzQueue.RemoveWhere(buzz => buzz.UserId == userId);
-                    this.alreadyScoredTeamIds.Remove(GetTeamId(userTeamId, userId));
+                    count = this.BuzzQueue.RemoveWhere(buzz => buzz.UserId == userId);
+                    this.AlreadyScoredTeamIds.Remove(GetTeamId(userTeamId, userId));
                     Debug.Assert(count <= 1, "The same user should not be in the queue more than once.");
                 }
             }
@@ -131,41 +127,40 @@ namespace QuizBowlDiscordScoreTracker
         /// Undoes the last action in the phase, if possible
         /// </summary>
         /// <returns>True if we could undo an action. False if there were no actions to undo.</returns>
-        public bool Undo(out ulong userId)
+        public virtual bool Undo(out ulong? userId)
         {
             lock (this.collectionLock)
             {
-                if (!this.actions.TryPop(out ScoreAction action))
+                if (!this.Actions.TryPop(out ScoreAction action))
                 {
-                    userId = 0;
+                    userId = null;
                     return false;
                 }
 
                 userId = action.Buzz.UserId;
-                this.scores.Remove(userId);
 
                 // We shouldn't need to change the list of already buzzed players, because in order to have an action the
                 // player must've buzzed in. We do need to add the player back to the queue. The queue should be sorted by
                 // the timing of the buzz, so consecutive undos should place the players back in the right order.
-                this.buzzQueue.Add(action.Buzz);
-                this.alreadyScoredTeamIds.Remove(GetTeamId(action.Buzz));
+                this.BuzzQueue.Add(action.Buzz);
+                this.AlreadyScoredTeamIds.Remove(GetTeamId(action.Buzz));
                 return true;
             }
         }
 
-        private static string GetTeamId(Buzz player)
+        internal static string GetTeamId(Buzz player)
         {
             // If the player isn't on a team, treat them as being on their own team (they're player ID, which should be
             // distinct in Discord)
             return GetTeamId(player.TeamId, player.UserId);
         }
 
-        private static string GetTeamId(string teamId, ulong userId)
+        internal static string GetTeamId(string teamId, ulong userId)
         {
             return teamId ?? userId.ToString(CultureInfo.InvariantCulture);
         }
 
-        private Buzz GetNextPlayerToPrompt()
+        internal Buzz GetNextPlayerToPrompt()
         {
             // This would normally be buzzQueue.Min, and without teams we could do that, but because we support Undo
             // we sometimes have to keep buzzes that don't get prompted in the queue.
@@ -174,7 +169,7 @@ namespace QuizBowlDiscordScoreTracker
             // If we want to prompt B2, then we cannot remove B2 from the buzz queue when we prompt C1. This means we
             // need to keep these buzzes around, so we must search for the next correct buzz
             // In realistic games this should basically be .Min
-            return this.buzzQueue.FirstOrDefault(buzz => !this.alreadyScoredTeamIds.Contains(GetTeamId(buzz)));
+            return this.BuzzQueue.FirstOrDefault(buzz => !this.AlreadyScoredTeamIds.Contains(GetTeamId(buzz)));
         }
     }
 }

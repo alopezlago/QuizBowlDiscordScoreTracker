@@ -41,6 +41,75 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task DisableBonusesAlways()
+        {
+            this.CreateHandler(
+                out AdminCommandHandler handler,
+                out MessageStore messageStore);
+
+            // Enable, then disable the bonuses
+            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            using (DatabaseAction action = new DatabaseAction(context))
+            {
+                await action.SetUseBonuses(DefaultGuildId, true);
+            }
+
+            await handler.GetDefaultFormatAsync();
+            Assert.AreEqual(
+                1, messageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the team role");
+            string getEmbed = messageStore.ChannelEmbeds[0];
+            Assert.IsTrue(
+                getEmbed.Contains("Require scoring bonuses?: Yes", StringComparison.InvariantCulture),
+                $"Enabled setting not in message \"{getEmbed}\"");
+            messageStore.Clear();
+
+            await handler.DisableBonusesAlwaysAsync();
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+            string setMessage = messageStore.ChannelMessages[0];
+            Assert.AreEqual(
+                "Scoring bonuses will no longer be required for every game in this server.",
+                setMessage,
+                "Unexpected message when enabled");
+
+            messageStore.Clear();
+
+            await handler.GetDefaultFormatAsync();
+            Assert.AreEqual(
+                1, messageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the team role");
+            getEmbed = messageStore.ChannelEmbeds[0];
+            Assert.IsTrue(
+                getEmbed.Contains("Require scoring bonuses?: No", StringComparison.InvariantCulture),
+                $"Disabled setting not in message \"{getEmbed}\"");
+        }
+
+        [TestMethod]
+        public async Task EnableBonusesAlways()
+        {
+            this.CreateHandler(
+                out AdminCommandHandler handler,
+                out MessageStore messageStore);
+            await handler.EnableBonusesAlwaysAsync();
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+            string setMessage = messageStore.ChannelMessages[0];
+            Assert.AreEqual(
+                "Scoring bonuses is now required for every game in this server.",
+                setMessage,
+                "Unexpected message when enabled");
+
+            messageStore.Clear();
+
+            await handler.GetDefaultFormatAsync();
+            Assert.AreEqual(
+                1, messageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the team role");
+            string getEmbed = messageStore.ChannelEmbeds[0];
+            Assert.IsTrue(
+                getEmbed.Contains("Require scoring bonuses?: Yes", StringComparison.InvariantCulture),
+                $"Enabled setting not in message \"{getEmbed}\"");
+        }
+
+        [TestMethod]
         public async Task SetTeamRole()
         {
             const string prefix = "Team #";

@@ -1,33 +1,51 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using QuizBowlDiscordScoreTracker.TeamManager;
 
 namespace QuizBowlDiscordScoreTracker
 {
-    public partial class GameState
+    public class GameState
     {
+        // Add a maximum number of phases, to prevent any denial-of-service issues
+        public const int MaximumPhasesCount = 2000;
         public const int ScoresListLimit = 200;
 
-        private readonly LinkedList<PhaseState> phases;
+        private readonly LinkedList<IPhaseState> phases;
 
         private ulong? readerId;
+        private Format format;
+
         private IDictionary<PlayerTeamPair, LastScoringSplit> cachedLastScoringSplit;
-        private IEnumerable<IEnumerable<ScoringSplitOnScoreAction>> cachedSplitsPerPhase;
+        private IEnumerable<PhaseScore> cachedPhaseScoresPerPhase;
+        private IDictionary<string, BonusStats> cachedBonusStats;
 
         private readonly object phasesLock = new object();
         private readonly object readerLock = new object();
 
         public GameState()
         {
-            this.phases = new LinkedList<PhaseState>();
+            this.phases = new LinkedList<IPhaseState>();
             this.cachedLastScoringSplit = null;
-            this.cachedSplitsPerPhase = null;
+            this.cachedPhaseScoresPerPhase = null;
+            this.format = Format.TossupShootout;
             this.TeamManager = SoloOnlyTeamManager.Instance;
 
             this.SetupInitialPhases();
             this.ReaderId = null;
+        }
+
+        public PhaseStage CurrentStage
+        {
+            get
+            {
+                lock (this.phasesLock)
+                {
+                    return this.CurrentPhase.CurrentStage;
+                }
+            }
         }
 
         public int PhaseNumber
@@ -59,9 +77,21 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
+        public Format Format
+        {
+            get => this.format;
+            set
+            {
+                // We need to remove the current phase and use the new format
+                this.format = value;
+                this.phases.RemoveLast();
+                this.TryAddNextPhase();
+            }
+        }
+
         public ITeamManager TeamManager { get; set; }
 
-        private PhaseState CurrentPhase => this.phases.Last.Value;
+        private IPhaseState CurrentPhase => this.phases.Last.Value;
 
         public void ClearAll()
         {
@@ -122,16 +152,138 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-
-
-        public void EnsureCachedCollectionsExist(IEnumerable<PlayerTeamPair> knownPlayers)
+        public async Task<IDictionary<PlayerTeamPair, LastScoringSplit>> GetLastScoringSplits()
         {
-            if (this.cachedLastScoringSplit != null && this.cachedSplitsPerPhase != null)
+            IEnumerable<PlayerTeamPair> knownPlayers = await this.TeamManager.GetKnownPlayers();
+
+            lock (this.phasesLock)
+            {
+                this.EnsureCachedCollectionsExist(knownPlayers);
+                return this.cachedLastScoringSplit;
+            }
+        }
+
+        public async Task<IEnumerable<PhaseScore>> GetPhaseScores()
+        {
+            IEnumerable<PlayerTeamPair> knownPlayers = await this.TeamManager.GetKnownPlayers();
+
+            lock (this.phasesLock)
+            {
+                this.EnsureCachedCollectionsExist(knownPlayers);
+                return this.cachedPhaseScoresPerPhase;
+            }
+        }
+
+        public async Task<IReadOnlyDictionary<string, BonusStats>> GetBonusStats()
+        {
+            IEnumerable<PlayerTeamPair> knownPlayers = await this.TeamManager.GetKnownPlayers();
+
+            lock (this.phasesLock)
+            {
+                this.EnsureCachedCollectionsExist(knownPlayers);
+                return (IReadOnlyDictionary<string, BonusStats>)this.cachedBonusStats;
+            }
+        }
+
+        public void NextQuestion()
+        {
+            lock (this.phasesLock)
+            {
+                // If we're on a bonus, score it as a 0
+                if (this.CurrentStage == PhaseStage.Bonus &&
+                    this.CurrentPhase is ITossupBonusPhaseState tossupBonusPhaseState)
+                {
+                    tossupBonusPhaseState.TryScoreBonus("0");
+                }
+
+                // Add a new phase, since the last one is over
+                this.TryAddNextPhase();
+            }
+        }
+
+        public bool TryScoreBonus(string bonusScore)
+        {
+            lock (this.phasesLock)
+            {
+                if (this.CurrentPhase.CurrentStage != PhaseStage.Bonus ||
+                    !(this.CurrentPhase is ITossupBonusPhaseState bonusPhaseState) ||
+                    !bonusPhaseState.TryScoreBonus(bonusScore))
+                {
+                    return false;
+                }
+
+                this.ClearCaches();
+                return this.TryAddNextPhase();
+            }
+        }
+
+        public void ScorePlayer(int score)
+        {
+            lock (this.phasesLock)
+            {
+                if (this.CurrentPhase.TryScoreBuzz(score))
+                {
+                    this.ClearCaches();
+
+                    // Player was correct, so move on to the next phase.
+                    if (score > 0 && this.CurrentStage == PhaseStage.Complete)
+                    {
+                        this.TryAddNextPhase();
+                    }
+                }
+            }
+        }
+
+        public bool TryGetNextPlayer(out ulong nextPlayerId)
+        {
+            lock (this.phasesLock)
+            {
+                return this.CurrentPhase.TryGetNextPlayer(out nextPlayerId);
+            }
+        }
+
+        public bool Undo(out ulong? userId)
+        {
+            lock (this.phasesLock)
+            {
+                // There are three cases:
+                // - The phase has actions that we can undo. Just undo the action and return true.
+                // - The phase does not have actions to undo, but the previous phase does. Remove the current phase, go
+                //   to the previous one, and undo that one.
+                // - We haven't had any actions (start of 1st phase), so there is nothing to undo.
+                bool couldUndo = this.CurrentPhase.Undo(out userId);
+                while (!couldUndo && this.phases.Count > 1)
+                {
+                    this.phases.RemoveLast();
+                    couldUndo = this.CurrentPhase.Undo(out userId);
+                }
+
+                // In the only case where nothing was undone, there's no score to calculate, so clearing the cache is harmless
+                this.ClearCaches();
+
+                return couldUndo;
+            }
+        }
+
+        private void ClearCaches()
+        {
+            // TODO: If calculating the splits is too expensive, then look into just clearing the last
+            // phase (or undoing the changes to the dictionary)
+            this.cachedLastScoringSplit = null;
+            this.cachedPhaseScoresPerPhase = null;
+            this.cachedBonusStats = null;
+        }
+
+        private void EnsureCachedCollectionsExist(IEnumerable<PlayerTeamPair> knownPlayers)
+        {
+            if (this.cachedLastScoringSplit != null &&
+                this.cachedPhaseScoresPerPhase != null &&
+                this.cachedBonusStats != null)
             {
                 return;
             }
 
-            List<IEnumerable<ScoringSplitOnScoreAction>> splitsPerPhase = new List<IEnumerable<ScoringSplitOnScoreAction>>();
+            List<PhaseScore> splitsPerPhase = new List<PhaseScore>();
             IDictionary<PlayerTeamPair, LastScoringSplit> lastScoringSplits = knownPlayers
                 .ToDictionary(
                     pair => pair,
@@ -141,10 +293,11 @@ namespace QuizBowlDiscordScoreTracker
                         Split = new ScoringSplit(),
                         TeamId = pair.TeamId
                     });
+            IDictionary<string, BonusStats> combinedBonusStats = new Dictionary<string, BonusStats>();
 
             foreach (PhaseState phase in this.phases)
             {
-                List<ScoringSplitOnScoreAction> splitsInPhase = new List<ScoringSplitOnScoreAction>();
+                List<ScoringSplitOnScoreAction> scoringSplitsOnActions = new List<ScoringSplitOnScoreAction>();
                 foreach (ScoreAction scoreAction in phase.OrderedScoreActions)
                 {
                     // Try to get the split and clone it. If it doesn't exist, just make a new one.
@@ -189,100 +342,49 @@ namespace QuizBowlDiscordScoreTracker
                     };
 
                     lastScoringSplits[pair] = lastSplit;
-                    splitsInPhase.Add(newPair);
+                    scoringSplitsOnActions.Add(newPair);
                 }
 
-                splitsPerPhase.Add(splitsInPhase);
-            }
-
-            this.cachedSplitsPerPhase = splitsPerPhase;
-            this.cachedLastScoringSplit = lastScoringSplits;
-        }
-
-        public async Task<IDictionary<PlayerTeamPair, LastScoringSplit>> GetLastScoringSplits()
-        {
-            IEnumerable<PlayerTeamPair> knownPlayers = await this.TeamManager.GetKnownPlayers();
-
-            lock (this.phasesLock)
-            {
-                this.EnsureCachedCollectionsExist(knownPlayers);
-                return this.cachedLastScoringSplit;
-            }
-        }
-
-        public async Task<IEnumerable<IEnumerable<ScoringSplitOnScoreAction>>> GetScoringActionsByPhase()
-        {
-            IEnumerable<PlayerTeamPair> knownPlayers = await this.TeamManager.GetKnownPlayers();
-
-            lock (this.phasesLock)
-            {
-                this.EnsureCachedCollectionsExist(knownPlayers);
-                return this.cachedSplitsPerPhase;
-            }
-        }
-
-        public void NextQuestion()
-        {
-            lock (this.phasesLock)
-            {
-                // Add a new phase, since the last one is over
-                this.phases.AddLast(new PhaseState());
-            }
-        }
-
-        public void ScorePlayer(int score)
-        {
-            lock (this.phasesLock)
-            {
-                if (this.CurrentPhase.TryScore(score))
+                PhaseScore phaseScore = new PhaseScore()
                 {
-                    this.ClearCaches();
-                    // Player was correct, so move on to the next phase.
-                    if (score > 0)
+                    ScoringSplitsOnActions = scoringSplitsOnActions,
+                    BonusScores = Array.Empty<int>()
+                };
+
+                if (phase is ITossupBonusPhaseState tossupBonusPhase && tossupBonusPhase.HasBonus)
+                {
+                    // Someone must've buzzed in correctly at the end if we have a bonus
+                    ScoreAction action = phase.Actions.Peek();
+                    phaseScore.BonusTeamId = action.Buzz.TeamId ?? action.Buzz.UserId.ToString(CultureInfo.InvariantCulture);
+                    phaseScore.BonusScores = tossupBonusPhase.BonusScores;
+
+                    if (!combinedBonusStats.TryGetValue(phaseScore.BonusTeamId, out BonusStats bonusStats))
                     {
-                        this.phases.AddLast(new PhaseState());
+                        bonusStats = new BonusStats();
                     }
-                }
-            }
-        }
 
-        public bool TryGetNextPlayer(out ulong nextPlayerId)
-        {
-            lock (this.phasesLock)
-            {
-                return this.CurrentPhase.TryGetNextPlayer(out nextPlayerId);
-            }
-        }
-
-        public bool Undo(out ulong userId)
-        {
-            lock (this.phasesLock)
-            {
-                // There are three cases:
-                // - The phase has actions that we can undo. Just undo the action and return true.
-                // - The phase does not have actions to undo, but the previous phase does. Remove the current phase, go
-                //   to the previous one, and undo that one.
-                // - We haven't had any actions (start of 1st phase), so there is nothing to undo.
-                bool couldUndo = this.CurrentPhase.Undo(out userId);
-                while (!couldUndo && this.phases.Count > 1)
-                {
-                    this.phases.RemoveLast();
-                    couldUndo = this.CurrentPhase.Undo(out userId);
+                    bonusStats.Heard++;
+                    bonusStats.Total += tossupBonusPhase.BonusScores.Sum();
+                    combinedBonusStats[phaseScore.BonusTeamId] = bonusStats;
                 }
 
-                // In the only case where nothing was undone, there's no score to calculate, so clearing the cache is harmless
-                this.ClearCaches();
-
-                return couldUndo;
+                splitsPerPhase.Add(phaseScore);
             }
+
+            this.cachedPhaseScoresPerPhase = splitsPerPhase;
+            this.cachedLastScoringSplit = lastScoringSplits;
+            this.cachedBonusStats = combinedBonusStats;
         }
 
-        private void ClearCaches()
+        private bool TryAddNextPhase()
         {
-            // TODO: If calculating the splits is too expensive, then look into just clearing the last
-            // phase (or undoing the changes to the dictionary)
-            this.cachedLastScoringSplit = null;
-            this.cachedSplitsPerPhase = null;
+            if (this.phases.Count > MaximumPhasesCount)
+            {
+                return false;
+            }
+
+            this.phases.AddLast(this.format.CreateNextPhase(this.phases.Count));
+            return true;
         }
 
         private void SetupInitialPhases()
@@ -290,7 +392,7 @@ namespace QuizBowlDiscordScoreTracker
             // We must always have one phase.
             this.ClearCaches();
             this.phases.Clear();
-            this.phases.AddFirst(new PhaseState());
+            this.phases.AddFirst(this.Format.CreateNextPhase(0));
         }
     }
 }

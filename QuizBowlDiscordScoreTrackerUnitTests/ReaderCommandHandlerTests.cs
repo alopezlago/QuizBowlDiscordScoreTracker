@@ -11,6 +11,7 @@ using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Commands;
 using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.TeamManager;
+using Format = QuizBowlDiscordScoreTracker.Format;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
@@ -86,9 +87,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             MessageStore messageStore = new MessageStore();
             ICommandContext commandContext = CommandMocks.CreateCommandContext(
                 messageStore, DefaultIds, DefaultGuildId, DefaultChannelId, DefaultReaderId);
-            CommandMocks.CreateDatabaseActionFactory(this.botConfigurationfactory);
+            IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
+                this.botConfigurationfactory);
 
-            ReaderCommandHandler handler = new ReaderCommandHandler(commandContext, manager);
+            ReaderCommandHandler handler = new ReaderCommandHandler(commandContext, manager, dbActionFactory);
 
             await handler.ClearAllAsync();
 
@@ -132,6 +134,56 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             string message = messageStore.ChannelMessages.First();
             Assert.IsTrue(
                 message.Contains($"@User_{buzzer}", StringComparison.InvariantCulture),
+                "Mention should be included in undo message as a prompt.");
+        }
+
+        [TestMethod]
+        public async Task UndoAfterScoringBonusPromptsForBonus()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            currentGame.Format = Format.TossupBonusesShootout;
+
+            currentGame.ReaderId = DefaultReaderId;
+            await currentGame.AddPlayer(buzzer, "Player");
+            currentGame.ScorePlayer(10);
+            Assert.IsTrue(currentGame.TryScoreBonus("0"), "Couldn't score the bonus");
+            await handler.UndoAsync();
+
+            Assert.AreEqual(PhaseStage.Bonus, currentGame.CurrentStage, "We should be in the bonus stage");
+            Assert.AreEqual(1, currentGame.PhaseNumber, "We should be back to the first question");
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(
+                "**Bonus for TU 1**", message, "Mention should be included in undo message as a prompt.");
+        }
+
+        [TestMethod]
+        public async Task SkipBuzzerNoLongerInServerOnUndo()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            ulong buzzerWhoLeft = 999999;
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+
+            currentGame.ReaderId = DefaultReaderId;
+            Assert.IsTrue(await currentGame.AddPlayer(buzzerWhoLeft, "Player2"), "Couldn't add initial buzz");
+            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Couldn't add second buzzer");
+            currentGame.ScorePlayer(10);
+
+            await handler.UndoAsync();
+
+            Assert.IsTrue(
+                currentGame.TryGetNextPlayer(out ulong nextPlayerId),
+                "Queue should be restored, so we should have a player.");
+            Assert.AreEqual(buzzer, nextPlayerId, "Incorrect player in the queue.");
+
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(
+                $"Undid scoring for <Unknown>. @User_{buzzer}, your answer?",
+                message,
                 "Mention should be included in undo message as a prompt.");
         }
 
@@ -257,6 +309,129 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.AreEqual("Adding teams isn't supported in this mode.", message, $"Unexpected message");
         }
 
+        [TestMethod]
+        public async Task ChangingFormatToHaveBonusIncludesBonusInCurrentPhase()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            currentGame.Format = Format.TossupBonusesShootout;
+
+            currentGame.ReaderId = DefaultReaderId;
+            await currentGame.AddPlayer(buzzer, "Player");
+            currentGame.ScorePlayer(10);
+            Assert.AreEqual(
+                PhaseStage.Bonus, currentGame.CurrentStage, "We should be in a bonus stage in the current phase");
+            Assert.AreEqual(1, currentGame.PhaseNumber, "We should still be in the first phase");
+        }
+
+        [TestMethod]
+        public async Task DisableBonuses()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            currentGame.Format = Format.TossupBonusesShootout;
+
+            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
+
+            await handler.DisableBonusesAsync();
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(
+                "Bonuses are no longer being tracked. Scores for the current question have been cleared.",
+                message,
+                $"Unexpected message");
+            Assert.AreEqual(Format.TossupShootout, currentGame.Format, "Unexpected format");
+            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Should've been able to add the player again");
+        }
+
+        [TestMethod]
+        public async Task DisableBonusesFailsIfEnableBonusAlwaysSet()
+        {
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            currentGame.Format = Format.TossupBonusesShootout;
+
+            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            using (DatabaseAction action = new DatabaseAction(context))
+            {
+                await action.SetUseBonuses(DefaultGuildId, true);
+            }
+
+            await handler.DisableBonusesAsync();
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(
+                "Bonuses are always tracked in this server. Run !disableBonusesAlways and restart the game to stop tracking bonuses.",
+                message,
+                $"Unexpected message");
+            Assert.AreEqual(Format.TossupBonusesShootout, currentGame.Format, "Unexpected format");
+        }
+
+        [TestMethod]
+        public async Task DisableBonusesWhenAlreadyDisabled()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            currentGame.Format = Format.TossupShootout;
+
+            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
+
+            await handler.DisableBonusesAsync();
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(
+                "Bonuses are already untracked.",
+                message,
+                $"Unexpected message");
+            Assert.AreEqual(Format.TossupShootout, currentGame.Format, "Unexpected format");
+            Assert.IsFalse(await currentGame.AddPlayer(buzzer, "Player"), "Shouldn't be able to add the player again");
+        }
+
+        [TestMethod]
+        public async Task EnableBonuses()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            currentGame.Format = Format.TossupShootout;
+
+            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
+
+            await handler.EnableBonusesAsync();
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(
+                "Bonuses are now being tracked. Scores for the current question have been cleared.",
+                message,
+                $"Unexpected message");
+            Assert.AreEqual(Format.TossupBonusesShootout, currentGame.Format, "Unexpected format");
+            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Should've been able to add the player again");
+        }
+
+        [TestMethod]
+        public async Task EnableBonusesWhenAlreadyEnabled()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            currentGame.Format = Format.TossupBonusesShootout;
+
+            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
+
+            await handler.EnableBonusesAsync();
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(
+                "Bonuses are already tracked.",
+                message,
+                $"Unexpected message");
+            Assert.AreEqual(Format.TossupBonusesShootout, currentGame.Format, "Unexpected format");
+            Assert.IsFalse(await currentGame.AddPlayer(buzzer, "Player"), "Shouldn't be able to add the player again");
+        }
+
         private static ulong GetExistingNonReaderUserId(ulong readerId = DefaultReaderId)
         {
             return DefaultIds.Except(new ulong[] { readerId }).First();
@@ -286,10 +461,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             GameStateManager manager = new GameStateManager();
             manager.TryCreate(DefaultChannelId, out game);
             game.TeamManager = new ByCommandTeamManager();
-            CommandMocks.CreateDatabaseActionFactory(
+            IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
                 this.botConfigurationfactory);
 
-            handler = new ReaderCommandHandler(commandContext, manager);
+            handler = new ReaderCommandHandler(commandContext, manager, dbActionFactory);
         }
     }
 }

@@ -43,13 +43,8 @@ namespace QuizBowlDiscordScoreTracker
 
         public Bot(IOptionsMonitor<BotConfiguration> options, IHubContext<MonitorHub> hubContext)
         {
-            if (options == null)
-            {
-                throw new ArgumentNullException(nameof(options));
-            }
-
             this.gameStateManager = new GameStateManager();
-            this.options = options;
+            this.options = options ?? throw new ArgumentNullException(nameof(options));
             this.dbActionFactory = new SqliteDatabaseActionFactory(this.options.CurrentValue.DatabaseDataSource);
             this.readerRejoinedMap = new Dictionary<IGuildUser, bool>();
 
@@ -155,8 +150,8 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            bool buzzScored = await this.messageHandler.TryScoreBuzz(state, guildUser, channel, message.Content);
-            if (buzzScored)
+            bool answersScored = await this.messageHandler.TryScore(state, guildUser, channel, message.Content);
+            if (answersScored)
             {
                 return;
             }

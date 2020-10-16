@@ -11,6 +11,7 @@ using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.TeamManager;
 using Serilog;
+using Format = QuizBowlDiscordScoreTracker.Format;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
@@ -95,7 +96,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             messageStore.VerifyChannelMessages(playerUser.Mention);
             messageStore.Clear();
 
-            await handler.TryScoreBuzz(state, readerUser, channel, "no penalty");
+            await handler.TryScore(state, readerUser, channel, "no penalty");
             IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
             PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, null);
             Assert.IsTrue(
@@ -118,13 +119,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             await state.AddPlayer(DefaultPlayerId, "Player");
 
-            bool scoredBuzz = await handler.TryScoreBuzz(state, playerUser, channel, "no penalty");
+            bool scoredBuzz = await handler.TryScore(state, playerUser, channel, "no penalty");
             Assert.IsFalse(scoredBuzz, "Player shouldn't be able to give points");
             IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
             PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, null);
             Assert.IsFalse(lastSplits.TryGetValue(pair, out _), "Scoring split shouldn't exist");
 
-            scoredBuzz = await handler.TryScoreBuzz(state, readerUser, channel, "10");
+            scoredBuzz = await handler.TryScore(state, readerUser, channel, "10");
             Assert.IsTrue(scoredBuzz, "Buzz wasn't scored");
             lastSplits = await state.GetLastScoringSplits();
             Assert.IsTrue(
@@ -213,6 +214,40 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.AreEqual(DefaultPlayerId, nextPlayerId, "Unexpected user prompted");
         }
 
+        [TestMethod]
+        public async Task CanScoreBonus()
+        {
+            this.CreateHandler(
+                out MessageHandler handler,
+                out GameState state,
+                out IGuildUser playerUser,
+                out IGuildUser readerUser,
+                out IGuildTextChannel channel,
+                out MessageStore messageStore);
+            state.Format = Format.TossupBonusesShootout;
+
+            await handler.HandlePlayerMessage(state, playerUser, channel, "buzz");
+            messageStore.VerifyChannelMessages(playerUser.Mention);
+            messageStore.Clear();
+
+            bool scoredBuzz = await handler.TryScore(state, readerUser, channel, "10");
+            Assert.IsTrue(scoredBuzz, "Buzz wasn't scored");
+            Assert.AreEqual(PhaseStage.Bonus, state.CurrentStage, "Unexpected stage after the buzz");
+            messageStore.VerifyChannelMessages("**Bonus for 1**");
+            messageStore.Clear();
+
+            // Post something that shouldn't be a bonus score, then post something that can be a bonus score
+            bool bonusScored = await handler.TryScore(state, readerUser, channel, "Some non-score text");
+            Assert.IsFalse(bonusScored);
+            Assert.AreEqual(PhaseStage.Bonus, state.CurrentStage, "Phase should not have changed");
+
+            bonusScored = await handler.TryScore(state, readerUser, channel, "10/10/0");
+            Assert.IsTrue(bonusScored, "Bonus wasn't scored");
+            Assert.AreEqual(PhaseStage.Tossup, state.CurrentStage, "Unexpected stage after the bonus was scored");
+            Assert.AreEqual(2, state.PhaseNumber, "Phase number didn't change");
+            messageStore.VerifyChannelMessages("**TU 2**");
+        }
+
         private async Task VerifyBuzzAndScore(int score)
         {
             this.CreateHandler(
@@ -227,7 +262,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             messageStore.VerifyChannelMessages(playerUser.Mention);
             messageStore.Clear();
 
-            bool scoredBuzz = await handler.TryScoreBuzz(
+            bool scoredBuzz = await handler.TryScore(
                 state, readerUser, channel, score.ToString(CultureInfo.InvariantCulture));
             Assert.IsTrue(scoredBuzz, "Buzz wasn't scored");
             IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();

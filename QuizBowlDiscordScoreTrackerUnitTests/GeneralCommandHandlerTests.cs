@@ -14,6 +14,7 @@ using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Commands;
 using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.TeamManager;
+using Format = QuizBowlDiscordScoreTracker.Format;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
@@ -283,6 +284,92 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task GetScoreShowsBonusStats()
+        {
+            const string playerName = "Player";
+            ulong buzzer = GetExistingNonReaderUserId();
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
+            this.Game.Format = Format.TossupBonusesShootout;
+
+            await this.Game.AddPlayer(buzzer, playerName);
+            this.Game.ScorePlayer(10);
+            Assert.IsTrue(this.Game.TryScoreBonus("10/0/0"), "First bonus should be scored");
+            await this.Game.AddPlayer(buzzer, playerName);
+            this.Game.ScorePlayer(15);
+            Assert.IsTrue(this.Game.TryScoreBonus("10/10/0"), "Second bonus should be scored");
+
+            await this.Handler.GetScoreAsync();
+            this.MessageStore.VerifyChannelMessages();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
+
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            Assert.IsTrue(
+                embed.Contains("🥇 Player: **55** (1/1/0)", StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find correct individual stats in embed\n{embed}");
+            Assert.IsTrue(
+                embed.Contains(
+                    "Bonuses heard: 2    Points: 30    PPB: 15.00", StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find bonus stats in embed\n{embed}");
+        }
+
+        [TestMethod]
+        public async Task BonusStatsRoundedToNearestHundreth()
+        {
+            const string playerName = "Player";
+            ulong buzzer = GetExistingNonReaderUserId();
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
+            this.Game.Format = Format.TossupBonusesShootout;
+
+            await this.Game.AddPlayer(buzzer, playerName);
+            this.Game.ScorePlayer(10);
+            Assert.IsTrue(this.Game.TryScoreBonus("0"), "First bonus should be scored");
+
+            await this.Handler.GetScoreAsync();
+            this.MessageStore.VerifyChannelMessages();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
+
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            Assert.IsTrue(
+                embed.Contains(
+                    "PPB: 0.00", StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find correct PPB after the first bonus in embed\n{embed}");
+            this.MessageStore.Clear();
+
+            await this.Game.AddPlayer(buzzer, playerName);
+            this.Game.ScorePlayer(10);
+            Assert.IsTrue(this.Game.TryScoreBonus("10/0/0"), "Second bonus should be scored");
+            await this.Game.AddPlayer(buzzer, playerName);
+            this.Game.ScorePlayer(10);
+            Assert.IsTrue(this.Game.TryScoreBonus("10/0/0"), "Third bonus should be scored");
+
+            await this.Handler.GetScoreAsync();
+            this.MessageStore.VerifyChannelMessages();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
+
+            embed = this.MessageStore.ChannelEmbeds.First();
+            Assert.IsTrue(
+                embed.Contains(
+                    "PPB: 6.67", StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find correct PPB after the third bonus in embed\n{embed}");
+            this.MessageStore.Clear();
+
+            await this.Game.AddPlayer(buzzer, playerName);
+            this.Game.ScorePlayer(10);
+            Assert.IsTrue(this.Game.TryScoreBonus("30"), "Fourth bonus should be scored");
+            await this.Handler.GetScoreAsync();
+            this.MessageStore.VerifyChannelMessages();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
+
+            embed = this.MessageStore.ChannelEmbeds.First();
+            Assert.IsTrue(
+                embed.Contains(
+                    "PPB: 12.50", StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find correct PPB after the fourth bonus in embed\n{embed}");
+        }
+
+        [TestMethod]
         public async Task GetScoreTitleShowsLimitWhenApplicable()
         {
             HashSet<ulong> existingIds = new HashSet<ulong>();
@@ -531,6 +618,50 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 3,
                 embed.Split(GeneralCommandHandler.Medals[2]).Length,
                 $"There weren't 2 3rd place medals after the 4th round of scoring in\n{embed}");
+        }
+
+        [TestMethod]
+        public async Task MedalsUseBonusScores()
+        {
+            const int playersCount = 5;
+            int firstId = (int)GetNonexistentUserId();
+
+            ulong[] players = Enumerable.Range(firstId, playersCount).Select(id => (ulong)id).ToArray();
+            this.InitializeHandler();
+            this.Game.ReaderId = 0;
+            this.Game.Format = Format.TossupBonusesShootout;
+
+            // All tied for 1st
+            for (int i = 0; i < 3; i++)
+            {
+                await this.Game.AddPlayer(players[i], $"Player {i}");
+                this.Game.ScorePlayer(10);
+                Assert.IsTrue(this.Game.TryScoreBonus("30"), $"Couldn't score the bonus for player {i}");
+            }
+
+            // This player should have a higher individual score, but a lower bonus one
+            await this.Game.AddPlayer(players[3], $"Player 3");
+            this.Game.ScorePlayer(15);
+            Assert.IsTrue(this.Game.TryScoreBonus("0"), "Couldn't score the bonus for player 3");
+
+            await this.Handler.GetScoreAsync();
+            Assert.AreEqual(
+                1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds after the first round of scoring");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+            this.MessageStore.Clear();
+            Assert.AreEqual(
+                4,
+                embed.Split(GeneralCommandHandler.Medals[0]).Length,
+                $"There weren't three 1st place medals in\n{embed}");
+            Assert.IsFalse(
+                embed.Contains(GeneralCommandHandler.Medals[1], StringComparison.OrdinalIgnoreCase),
+                $"2nd place medal appeared when it shouldn't have in\n{embed}");
+            Assert.IsFalse(
+                embed.Contains(GeneralCommandHandler.Medals[2], StringComparison.OrdinalIgnoreCase),
+                $"3rd place medal appeared when it shouldn't have in\n{embed}");
+            Assert.IsFalse(
+                embed.Contains("🥇 Player 3", StringComparison.InvariantCultureIgnoreCase),
+                "Player 3 shouldn't have a medal, since their total score is lower than the others");
         }
 
         [TestMethod]
@@ -803,7 +934,6 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 $"\"...\" wasn't found in\n {embed}");
         }
 
-        // TODO: Make a test for ByRole and ByCommand
         [TestMethod]
         public async Task GameReportWithTeamsLeadersSortedByScore()
         {
@@ -1106,6 +1236,120 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task GameReportNoTeamsWithBonuses()
+        {
+            const string firstPlayerName = "Player1";
+            const string secondPlayerName = "Player2";
+            const string firstBonusSplit = "10/10/0";
+            const string secondBonusSplit = "0/0/10";
+
+            this.InitializeHandler();
+            this.Game.ReaderId = DefaultReaderId;
+            this.Game.TeamManager = new SoloOnlyTeamManager();
+            this.Game.Format = Format.TossupBonusesShootout;
+
+            await this.Game.AddPlayer(1, firstPlayerName);
+            this.Game.ScorePlayer(10);
+            this.Game.TryScoreBonus(firstBonusSplit);
+            await this.Game.AddPlayer(2, secondPlayerName);
+            this.Game.ScorePlayer(15);
+            this.Game.TryScoreBonus(secondBonusSplit);
+
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+
+            int firstSplitIndex = embed.IndexOf(
+                $"Scored 20 on the bonus ({firstBonusSplit}).",
+                StringComparison.InvariantCultureIgnoreCase);
+            Assert.IsTrue(firstSplitIndex > 0, "First bonus score wasn't mentioned in the report in\n{embed}");
+            int secondSplitIndex = embed.IndexOf(
+                $"Scored 10 on the bonus ({secondBonusSplit}).",
+                StringComparison.InvariantCultureIgnoreCase);
+            Assert.IsTrue(secondSplitIndex > 0, "Second bonus score wasn't mentioned in the report in\n{embed}");
+            Assert.IsTrue(
+                secondSplitIndex > firstSplitIndex,
+                $"Second split ({secondSplitIndex}) should appear before the first split ({firstSplitIndex}) in\n{embed}");
+
+            // Also make sure that the tossup splits show up
+            Assert.IsTrue(
+                embed.Contains(
+                    $"**Question 1**: > Correctly answered by **{firstPlayerName}** (0/1/0)",
+                    StringComparison.InvariantCultureIgnoreCase),
+                $"First player buzz not in the report\n{embed}");
+            Assert.IsTrue(
+                embed.Contains(
+                    $"**Question 2**: > Powered by **{secondPlayerName}** (1/0/0)",
+                    StringComparison.InvariantCultureIgnoreCase),
+                $"Second player buzz not in the report\n{embed}");
+
+            // Make sure the leader message includes the bonus score
+            Assert.IsTrue(
+                embed.Contains("**Player1** is in the lead.", StringComparison.InvariantCultureIgnoreCase),
+                $"Player1 wasn't in the lead even though they had more points. Embed:\n{embed}");
+        }
+
+        [TestMethod]
+        public async Task GameReportWithTeamsAndBonuses()
+        {
+            const string playerName = "Player1";
+            const string firstBonusSplit = "10/10/0";
+            const string secondBonusSplit = "0/10/0";
+
+            await this.SetDefaultTeamRolePrefix();
+
+            int scoreCounter = 0;
+            this.InitializeHandlerWithTeamsByRole(
+                (mockUser) =>
+                {
+                    mockUser
+                        .Setup(user => user.RoleIds)
+                        .Returns(() =>
+                        {
+                            return scoreCounter switch
+                            {
+                                0 => Array.Empty<ulong>(),
+                                1 => new ulong[] { FirstTeamRoleId },
+                                _ => new ulong[] { SecondTeamRoleId },
+                            };
+                        });
+                });
+            this.Game.ReaderId = DefaultReaderId;
+            this.Game.Format = Format.TossupBonusesShootout;
+
+            await this.Game.AddPlayer(1, playerName);
+            this.Game.ScorePlayer(10);
+            this.Game.TryScoreBonus(firstBonusSplit);
+            scoreCounter++;
+
+            await this.Game.AddPlayer(2, playerName);
+            this.Game.ScorePlayer(15);
+            this.Game.TryScoreBonus(secondBonusSplit);
+            scoreCounter++;
+
+            await this.Handler.GetGameReportAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelEmbeds.Count, $"Unexpected number of embeds");
+            string embed = this.MessageStore.ChannelEmbeds.First();
+
+            int firstSplitIndex = embed.IndexOf(
+                $"Scored 20 on the bonus ({firstBonusSplit}).",
+                StringComparison.InvariantCultureIgnoreCase);
+            Assert.IsTrue(firstSplitIndex > 0, "First bonus score wasn't mentioned in the report in\n{embed}");
+            int secondSplitIndex = embed.IndexOf(
+                $"Scored 10 on the bonus ({secondBonusSplit}).",
+                StringComparison.InvariantCultureIgnoreCase);
+            Assert.IsTrue(secondSplitIndex > 0, "Second bonus score wasn't mentioned in the report in\n{embed}");
+            Assert.IsTrue(
+                secondSplitIndex > firstSplitIndex,
+                $"Second split ({secondSplitIndex}) should appear before the first split ({firstSplitIndex}) in\n{embed}");
+            Assert.IsTrue(
+                embed.Contains(
+                    $"Top scores: **{playerName}** 30, **{FirstTeamName}** 25",
+                    StringComparison.InvariantCultureIgnoreCase),
+                $"Top scores is incorrect in\n{embed}");
+        }
+
+        [TestMethod]
         public async Task JoinTeamSucceeds()
         {
             const ulong userId = 1;
@@ -1381,20 +1625,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             // TODO: Need to update the Mock User to specify RoleIds
             // And this needs to come from GetUserId
             ITeamManager teamManager = null;
-            switch (teamManagerType)
+            teamManager = teamManagerType switch
             {
-                case TeamManagerType.ByCommand:
-                    teamManager = new ByCommandTeamManager();
-                    break;
-                case TeamManagerType.ByRole:
-                    teamManager = new ByRoleTeamManager(commandContext.Guild, "Team ");
-                    break;
-                case TeamManagerType.Solo:
-                default:
-                    teamManager = SoloOnlyTeamManager.Instance;
-                    break;
-            }
-
+                TeamManagerType.ByCommand => new ByCommandTeamManager(),
+                TeamManagerType.ByRole => new ByRoleTeamManager(commandContext.Guild, "Team "),
+                _ => SoloOnlyTeamManager.Instance,
+            };
             game.TeamManager = teamManager;
 
             this.Game = game;

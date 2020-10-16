@@ -31,6 +31,20 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().ClearTeamRolePrefixAsync();
         }
 
+        [Command("disableBonusesAlways")]
+        [Summary("Ensures that bonuses are never tracked in this server.")]
+        public Task DisableBonusesAsync()
+        {
+            return this.GetHandler().DisableBonusesAlwaysAsync();
+        }
+
+        [Command("enableBonusesAlways")]
+        [Summary("Makes scoring bonuses in a game required in this server.")]
+        public Task EnableBonusesAsync()
+        {
+            return this.GetHandler().EnableBonusesAlwaysAsync();
+        }
+
         [Command("getPairedChannel")]
         [Summary("Gets the name of the paired voice channel, if it exists. Only server admins can invoke this.")]
         public Task GetPairedChannelAsync([Summary("Text channel mention (#textChannelName)")] ITextChannel textChannel)
@@ -44,6 +58,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
         public Task GetTeamRolePrefixAsync()
         {
             return this.GetHandler().GetTeamRolePrefixAsync();
+        }
+
+        [Command("getDefaultFormat")]
+        [Summary("Posts the default format for games in this server (such as if bonuses are used).")]
+        public Task GetDefaultFormatAsync()
+        {
+            return this.GetHandler().GetDefaultFormatAsync();
         }
 
         [Command("pairChannels")]
