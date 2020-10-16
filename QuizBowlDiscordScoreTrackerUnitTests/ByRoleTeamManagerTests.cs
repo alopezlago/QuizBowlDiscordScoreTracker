@@ -129,7 +129,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             mockNonexistentUser.Setup(user => user.RoleIds).Returns(new ulong[] { NonTeamRoleId });
             users.Add(mockNonexistentUser.Object);
 
-            IReadOnlyCollection<IGuildUser> readonlyUsers = (IReadOnlyCollection<IGuildUser>)users;
+            IReadOnlyCollection<IGuildUser> readonlyUsers = users;
             mockGuild
                 .Setup(guild => guild.GetUsersAsync(It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
                 .Returns<CacheMode, RequestOptions>((mode, options) => Task.FromResult(readonlyUsers));

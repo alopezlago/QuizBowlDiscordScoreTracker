@@ -55,7 +55,7 @@ namespace QBDiscordScoreTracker
             }
 
             // Add the remaining team.
-            if (combinedTeamNames[combinedTeamNames.Length - 1] == ',' && possibleCommaEscapeStart)
+            if (combinedTeamNames[^1] == ',' && possibleCommaEscapeStart)
             {
                 errorMessage = "team missing from addTeams (trailing comma)";
                 return false;

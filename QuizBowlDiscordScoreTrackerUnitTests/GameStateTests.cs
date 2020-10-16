@@ -232,6 +232,34 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task MixedTossupsAndBonusPhases()
+        {
+            const ulong id = 1234;
+            const ulong readerId = 12345;
+            GameState gameState = new GameState
+            {
+                ReaderId = readerId,
+                Format = Format.TossupBonusesShootout
+            };
+
+            Assert.AreEqual(PhaseStage.Tossup, gameState.CurrentStage, "Unexpected initial stage");
+            Assert.IsTrue(await gameState.AddPlayer(id, "Player"), "Add should succeed.");
+            gameState.ScorePlayer(10);
+            Assert.AreEqual(PhaseStage.Bonus, gameState.CurrentStage, "Unexpected stage after scoring the player");
+            Assert.IsTrue(gameState.TryScoreBonus("0"), "Should've been able to score the bonus");
+
+            Assert.AreEqual(PhaseStage.Tossup, gameState.CurrentStage, "Unexpected stage after scoring the bonus");
+            Assert.AreEqual(2, gameState.PhaseNumber, "Unexpected phase number after scoring the bonus");
+            gameState.Format = Format.TossupShootout;
+            Assert.IsTrue(await gameState.AddPlayer(id, "Player"), "Second add should succeed.");
+            gameState.ScorePlayer(10);
+
+            Assert.AreEqual(
+                PhaseStage.Tossup, gameState.CurrentStage, "Unexpected stage after scoring the second tossup");
+            Assert.AreEqual(3, gameState.PhaseNumber, "Unexpected phase number after scoring the second tossup");
+        }
+
+        [TestMethod]
         public async Task NextQuestionClearsQueueAndKeepsReader()
         {
             const ulong id = 1234;
@@ -253,6 +281,98 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             KeyValuePair<PlayerTeamPair, LastScoringSplit> splitPair = lastSplits.First();
             Assert.AreEqual(id, splitPair.Key.PlayerId, "Unexpected ID for the score.");
             Assert.AreEqual(-5, splitPair.Value.Split.Points, "Unexpected point total for the score.");
+        }
+
+        [TestMethod]
+        public async Task NextQuestionOnTossupPhaseSkipsBonus()
+        {
+            const ulong id = 1234;
+            const ulong readerId = 12345;
+            GameState gameState = new GameState
+            {
+                ReaderId = readerId,
+                Format = Format.TossupBonusesShootout
+            };
+
+            Assert.AreEqual(PhaseStage.Tossup, gameState.CurrentStage, "Unexpected initial stage");
+            Assert.IsTrue(await gameState.AddPlayer(id, "Player"), "Add should succeed.");
+            gameState.ScorePlayer(-5);
+            Assert.AreEqual(PhaseStage.Tossup, gameState.CurrentStage, "Unexpected stage after scoring the player");
+
+            gameState.NextQuestion();
+            Assert.AreEqual(PhaseStage.Tossup, gameState.CurrentStage, "Unexpected stage after calling nextQuestion");
+            IReadOnlyDictionary<string, BonusStats> bonusStats = await gameState.GetBonusStats();
+            Assert.AreEqual(0, bonusStats.Count, "There should be no bonus stats");
+        }
+
+        [TestMethod]
+        public async Task NextQuestionOnBonusZeroesBonus()
+        {
+            const ulong id = 1234;
+            const ulong readerId = 12345;
+            GameState gameState = new GameState
+            {
+                ReaderId = readerId,
+                Format = Format.TossupBonusesShootout
+            };
+
+            Assert.AreEqual(PhaseStage.Tossup, gameState.CurrentStage, "Unexpected initial stage");
+            Assert.IsTrue(await gameState.AddPlayer(id, "Player"), "Add should succeed.");
+            gameState.ScorePlayer(10);
+            Assert.AreEqual(PhaseStage.Bonus, gameState.CurrentStage, "Unexpected stage after scoring the player");
+
+            gameState.NextQuestion();
+            Assert.AreEqual(PhaseStage.Tossup, gameState.CurrentStage, "Unexpected stage after calling nextQuestion");
+            IReadOnlyDictionary<string, BonusStats> bonusStats = await gameState.GetBonusStats();
+            Assert.AreEqual(1, bonusStats.Count, "There should be no bonus stats");
+
+            BonusStats stats = bonusStats.Values.First();
+            Assert.AreEqual(1, stats.Heard, "Unexpected number of heard bonuses");
+            Assert.AreEqual(0, stats.Total, "Unexpected number of points for the bonus");
+        }
+
+        [TestMethod]
+        public void NextAddsNoPhaseAtMaximumPhaseCount()
+        {
+            const ulong readerId = 12345;
+            GameState gameState = new GameState
+            {
+                ReaderId = readerId
+            };
+
+            for (int i = 0; i < GameState.MaximumPhasesCount; i++)
+            {
+                gameState.NextQuestion();
+                Assert.AreEqual(i + 2, gameState.PhaseNumber, "Phase number didn't increase");
+            }
+
+            gameState.NextQuestion();
+            Assert.AreEqual(
+                GameState.MaximumPhasesCount + 1, gameState.PhaseNumber, "Phase number should've remained the same");
+        }
+
+        [TestMethod]
+        public async Task ScoringAddsNoPhaseAtMaximumPhaseCount()
+        {
+            const ulong id = 1234;
+            const ulong readerId = 12345;
+            GameState gameState = new GameState
+            {
+                ReaderId = readerId
+            };
+
+            for (int i = 0; i < GameState.MaximumPhasesCount; i++)
+            {
+                gameState.NextQuestion();
+                Assert.AreEqual(i + 2, gameState.PhaseNumber, "Phase number didn't increase");
+            }
+
+            Assert.AreEqual(
+                GameState.MaximumPhasesCount + 1, gameState.PhaseNumber, "Phase number should be at the limit");
+            Assert.IsTrue(await gameState.AddPlayer(id, "Player"), "Add should succeed.");
+            gameState.ScorePlayer(10);
+            Assert.AreEqual(
+                GameState.MaximumPhasesCount + 1, gameState.PhaseNumber, "Phase number should've remained the same");
         }
 
         [TestMethod]
@@ -437,6 +557,35 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task ScoringBonusSucceeds()
+        {
+            const ulong firstId = 1;
+
+            GameState gameState = new GameState
+            {
+                Format = Format.TossupBonusesShootout
+            };
+            Assert.IsTrue(await gameState.AddPlayer(firstId, "Player1"), "First add should succeed.");
+
+            gameState.ScorePlayer(10);
+            Assert.AreEqual(PhaseStage.Bonus, gameState.CurrentStage, "Unexpected stage after ansewering correctly");
+            IReadOnlyDictionary<string, BonusStats> statsMap = await gameState.GetBonusStats();
+            Assert.AreEqual(1, statsMap.Count, "Unexpected number of bonus stats");
+            Assert.IsTrue(
+                statsMap.TryGetValue(firstId.ToString(CultureInfo.InvariantCulture), out BonusStats bonusStats),
+                "Couldn't get the bonus stats from the player");
+            Assert.AreEqual(0, bonusStats.Total, "Unexpected bonus total before the bonus is scored");
+
+            Assert.IsTrue(gameState.TryScoreBonus("30"), "Couldn't score the bonus");
+            statsMap = await gameState.GetBonusStats();
+            Assert.AreEqual(1, statsMap.Count, "Unexpected number of bonus stats");
+            Assert.IsTrue(
+                statsMap.TryGetValue(firstId.ToString(CultureInfo.InvariantCulture), out bonusStats),
+                "Couldn't get the bonus stats from the player after scoring the bonus");
+            Assert.AreEqual(30, bonusStats.Total, "Unexpected bonus total after the bonus is scored");
+        }
+
+        [TestMethod]
         public async Task UndoOnNoScoreDoesNothing()
         {
             const ulong firstId = 1;
@@ -500,9 +649,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(await gameState.AddPlayer(firstId, "Player1"), "First add in second question should succeed.");
             gameState.ScorePlayer(15);
 
-            Assert.IsTrue(gameState.Undo(out ulong firstUndoId), "First undo should succeed.");
+            Assert.IsTrue(gameState.Undo(out ulong? firstUndoId), "First undo should succeed.");
             Assert.AreEqual(firstId, firstUndoId, "First ID returned by undo is incorrect.");
-            Assert.IsTrue(gameState.Undo(out ulong secondUndoId), "Second undo should succeed.");
+            Assert.IsTrue(gameState.Undo(out ulong? secondUndoId), "Second undo should succeed.");
             Assert.AreEqual(firstId, secondUndoId, "Second ID returned by undo is incorrect.");
 
             gameState.ScorePlayer(-5);
@@ -537,8 +686,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsFalse(
                 gameState.TryGetNextPlayer(out _),
                 "We shouldn't get any other players in the queue since they're on the same team");
-            Assert.IsTrue(gameState.Undo(out nextPlayerId), "Undo should've succeeded");
-            Assert.AreEqual(firstUserId, nextPlayerId, "Player returned by Undo should be the first one");
+            Assert.IsTrue(gameState.Undo(out ulong? nextUndonePlayerId), "Undo should've succeeded");
+            Assert.AreEqual(firstUserId, nextUndonePlayerId, "Player returned by Undo should be the first one");
 
             Assert.IsTrue(await gameState.WithdrawPlayer(firstUserId), "Withdrawing the first player should succeed.");
             Assert.IsTrue(
@@ -567,7 +716,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(scores.TryGetValue(firstId, out int score), "Unable to get score for the first player.");
             Assert.AreEqual(pointsFromBuzz + firstPointsFromBuzz, score, "Incorrect score.");
 
-            Assert.IsTrue(gameState.Undo(out ulong id), "Undo should return true.");
+            Assert.IsTrue(gameState.Undo(out ulong? id), "Undo should return true.");
             Assert.IsTrue(
                 gameState.TryGetNextPlayer(out ulong nextPlayerId),
                 "We should still have a player in the buzz queue.");
@@ -625,7 +774,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(scores.TryGetValue(firstId, out int score), "Unable to get score for the first player.");
             Assert.AreEqual(pointsFromBuzz + firstPointsFromBuzz, score, "Incorrect score.");
 
-            Assert.IsTrue(gameState.Undo(out ulong id), "Undo should return true.");
+            Assert.IsTrue(gameState.Undo(out ulong? id), "Undo should return true.");
             Assert.IsTrue(
                 gameState.TryGetNextPlayer(out ulong nextPlayerId),
                 "We should still have a player in the buzz queue.");

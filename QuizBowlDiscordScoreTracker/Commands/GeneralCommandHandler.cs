@@ -152,35 +152,35 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            IEnumerable<IEnumerable<ScoringSplitOnScoreAction>> scoresByPhases = await currentGame.GetScoringActionsByPhase();
+            IEnumerable<PhaseScore> phaseScores = await currentGame.GetPhaseScores();
 
             // If there's been no buzzes in the last question, don't show it in the report (could be end of the packet)
-            IEnumerable<ScoringSplitOnScoreAction> lastQuestion = scoresByPhases.LastOrDefault();
-            if (lastQuestion?.Any() != true)
+            PhaseScore lastQuestion = phaseScores.LastOrDefault();
+            if (lastQuestion?.ScoringSplitsOnActions?.Any() != true)
             {
-                scoresByPhases = scoresByPhases.SkipLast(1);
+                phaseScores = phaseScores.SkipLast(1);
             }
 
-            IEnumerable<ScoringSplit> splits = scoresByPhases
-                .SelectMany(pairs => pairs.Select(pair => pair.Split));
+            IEnumerable<ScoringSplit> splits = phaseScores
+                .SelectMany(pairs => pairs.ScoringSplitsOnActions.Select(pair => pair.Split));
             HighestPointsLevel highestPointsLevel = FindHighestPointLevel(splits);
 
             // Because we only have the scoring splits here, we have to rely on buzzes having a team ID
-            bool hasTeams = scoresByPhases
-                .Any(scoresInPhase => scoresInPhase.Any(pair => pair.Action.Buzz.TeamId != null));
+            bool hasTeams = phaseScores
+                .Any(scoresInPhase => scoresInPhase.ScoringSplitsOnActions.Any(pair => pair.Action.Buzz.TeamId != null));
             IReadOnlyDictionary<string, string> teamIdToName = await currentGame.TeamManager.GetTeamIdToNames();
 
-            int scoresByQuestionCount = scoresByPhases.Count();
+            int scoresByQuestionCount = phaseScores.Count();
             int questionsReported = await this.Context.Channel.SendAllEmbeds(
-                scoresByPhases,
+                phaseScores,
                 () => new EmbedBuilder()
                 {
                     Title = GameReportTitle,
                     Color = Color.Gold
                 },
-                (pairs, index) =>
+                (phaseScore, index) =>
                     GetEmbedFieldForPhase(
-                        currentGame, pairs, teamIdToName, highestPointsLevel, index, index == scoresByQuestionCount - 1));
+                        currentGame, phaseScore, teamIdToName, highestPointsLevel, index, index == scoresByQuestionCount - 1));
 
             if (questionsReported > 0)
             {
@@ -227,10 +227,12 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             // Prevent a cold start on the first buzz, and eagerly get the team prefix and channel pair
             string teamRolePrefix;
+            bool useBonuses;
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
             {
                 await action.GetPairedVoiceChannelIdOrNullAsync(this.Context.Channel.Id);
                 teamRolePrefix = await action.GetTeamRolePrefixAsync(this.Context.Guild.Id);
+                useBonuses = await action.GetUseBonuses(this.Context.Guild.Id);
             }
 
             // Set teams here, if they are using roles.
@@ -242,6 +244,9 @@ namespace QuizBowlDiscordScoreTracker.Commands
             {
                 state.TeamManager = new ByCommandTeamManager();
             }
+
+            // Set the format here. Eventually we'll want to use more information to determine the format
+            state.Format = useBonuses ? Format.TossupBonusesShootout : Format.TossupShootout;
 
             string baseMessage = this.Options.CurrentValue.WebBaseURL == null ?
                 $"{this.Context.User.Mention} is the reader." :
@@ -278,7 +283,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             bool hasTeams = scoringSplits.Any(kvp => kvp.Key.IsOnTeam);
             int embedsSentCount = hasTeams ?
                 await this.ShowScoreForTeams(currentGame, scoringSplits, highestPointsLevel) :
-                await this.ShowScoreForShootout(scoringSplits, highestPointsLevel);
+                await this.ShowScoreForShootout(currentGame, scoringSplits, highestPointsLevel);
 
             if (embedsSentCount == 0)
             {
@@ -289,9 +294,28 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private static async Task AppendIndividualLeadersMessage(GameState state, StringBuilder valueBuilder)
         {
             IEnumerable<LastScoringSplit> lastSplits = (await state.GetLastScoringSplits()).Values;
-            IGrouping<int, LastScoringSplit> topLastSplits = lastSplits
+            IReadOnlyDictionary<string, BonusStats> bonusStats = await state.GetBonusStats();
+
+            IDictionary<string, LastScoringSplit> playerIdSplitPairs = lastSplits
                 .Where(lastSplit => lastSplit.PlayerDisplayName != null)
-                .GroupBy(lastSplit => lastSplit.Split.Points)
+                .ToDictionary(
+                    lastSplit => lastSplit.PlayerId.ToString(CultureInfo.InvariantCulture),
+                    lastSplit => lastSplit);
+            IDictionary<LastScoringSplit, int> playerTotalPoints = new Dictionary<LastScoringSplit, int>(
+                playerIdSplitPairs.Count);
+            foreach (KeyValuePair<string, LastScoringSplit> playerIdSplitPair in playerIdSplitPairs)
+            {
+                int total = playerIdSplitPair.Value.Split.Points;
+                if (bonusStats.TryGetValue(playerIdSplitPair.Key, out BonusStats bonusStat))
+                {
+                    total += bonusStat.Total;
+                }
+
+                playerTotalPoints[playerIdSplitPair.Value] = total;
+            }
+
+            IGrouping<int, LastScoringSplit> topLastSplits = playerTotalPoints
+                .GroupBy(kvp => kvp.Value, kvp => kvp.Key)
                 .OrderByDescending(grouping => grouping.Key)
                 .FirstOrDefault();
             if (topLastSplits == null)
@@ -349,6 +373,17 @@ namespace QuizBowlDiscordScoreTracker.Commands
             valueBuilder.AppendLine($"> Top score{(teamScores.Count != 1 ? "s" : string.Empty)}: {teamScoresText}");
         }
 
+        private static void AddBonusStatline(StringBuilder valueBuilder, BonusStats bonusStats)
+        {
+            // This makes us always display the first two decimal places. Unfortunately, it shows 0 as .00, so we need
+            // to handle 0 as a special case
+            string pointsPerBonus = bonusStats.Total == 0 ?
+                "0.00" :
+                string.Format(CultureInfo.InvariantCulture, "{0:#.00}", bonusStats.PointsPerBonus);
+            valueBuilder.AppendLine(
+                $"Bonuses heard: {bonusStats.Heard}    Points: {bonusStats.Total}    PPB: {pointsPerBonus}");
+        }
+
         private static void AddSplits(
             StringBuilder valueBuilder, ScoringSplit split, HighestPointsLevel highestPointsLevel)
         {
@@ -402,7 +437,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         private static async Task<EmbedFieldBuilder> GetEmbedFieldForPhase(
             GameState state,
-            IEnumerable<ScoringSplitOnScoreAction> pairs,
+            PhaseScore phaseScore,
             IReadOnlyDictionary<string, string> teamIdToName,
             HighestPointsLevel highestPointsLevel,
             int index,
@@ -410,7 +445,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         {
             StringBuilder valueBuilder = new StringBuilder();
             bool answeredCorrectly = false;
-            foreach (ScoringSplitOnScoreAction pair in pairs)
+            foreach (ScoringSplitOnScoreAction pair in phaseScore.ScoringSplitsOnActions)
             {
                 valueBuilder.Append("> ");
                 switch (pair.Action.Score)
@@ -453,6 +488,17 @@ namespace QuizBowlDiscordScoreTracker.Commands
             {
                 valueBuilder.AppendLine("> Question went dead.");
             }
+            else if (phaseScore.BonusTeamId != null)
+            {
+                valueBuilder.Append("> ");
+
+                int totalPoints = phaseScore.BonusScores.Sum();
+                string splits = string.Join('/', phaseScore.BonusScores);
+                string text = teamIdToName.TryGetValue(phaseScore.BonusTeamId, out string teamName) ?
+                    $"**{teamName}** scored {totalPoints} on the bonus ({splits})." :
+                    $"Scored {totalPoints} on the bonus ({splits}).";
+                valueBuilder.AppendLine(text);
+            }
 
             if (isLastPhase)
             {
@@ -480,17 +526,29 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     .GroupBy(
                         kvp => kvp.Key.TeamId ?? kvp.Key.PlayerId.ToString(CultureInfo.InvariantCulture),
                         kvp => kvp.Value.Split.Points);
+            IDictionary<string, int> scores = lastScoringSplits
+                .ToDictionary(grouping => grouping.Key, grouping => grouping.Sum());
 
-            return lastScoringSplits.ToDictionary(grouping => grouping.Key, grouping => grouping.Sum());
+            IReadOnlyDictionary<string, BonusStats> bonusStats = await state.GetBonusStats();
+            foreach (KeyValuePair<string, BonusStats> kvp in bonusStats)
+            {
+                if (!scores.TryGetValue(kvp.Key, out int total))
+                {
+                    total = 0;
+                }
+
+                scores[kvp.Key] = total + kvp.Value.Total;
+            }
+
+            return scores;
         }
 
-        private static int[] GetTopThreeScores(
-            IOrderedEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> orderedScoringSplits)
+        private static int[] GetTopThreeScores(IOrderedEnumerable<KeyValuePair<string, int>> orderedTeamScores)
         {
             // We may not have 3 scorers in our splits, so fill in the values with the previous scores or 0
             int[] topThreeScores = new int[3];
-            int[] topExistingScores = orderedScoringSplits
-                .Select(kvp => kvp.Value.Split.Points)
+            int[] topExistingScores = orderedTeamScores
+                .Select(kvp => kvp.Value)
                 .Take(topThreeScores.Length)
                 .ToArray();
             int i = 0;
@@ -510,24 +568,38 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return topThreeScores;
         }
 
-        private Task<int> ShowScoreForShootout(
+        private async Task<int> ShowScoreForShootout(
+            GameState currentGame,
             IEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> scoringSplits,
             HighestPointsLevel highestPointsLevel)
         {
-            IOrderedEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> orderedScoringSplits = scoringSplits
+            IDictionary<string, int> teamScores = await GetTeamScores(currentGame);
+
+            IOrderedEnumerable<KeyValuePair<string, int>> orderedTeamScores = teamScores
+                .OrderByDescending(kvp => kvp.Value);
+            IDictionary<string, int> topOrderedTeamScoresMap = teamScores
+                .OrderByDescending(kvp => kvp.Value)
+                .Take(GameState.ScoresListLimit)
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+            // We should take the top ones from the "team", since it includes bonus points
+            IOrderedEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> topOrderedScoringSplits = scoringSplits
+                .Where(kvp => topOrderedTeamScoresMap.ContainsKey(kvp.Key.TeamId))
+                .OrderByDescending(kvp => topOrderedTeamScoresMap[kvp.Key.TeamId]);
+
+            IOrderedEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> orderedIndividualScoringSplits = scoringSplits
                 .OrderByDescending(kvp => kvp.Value.Split.Points);
-            IEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> topOrderedScoringSplits = orderedScoringSplits
-                .Take(GameState.ScoresListLimit);
-            int[] topThreeScores = GetTopThreeScores(orderedScoringSplits);
+            IReadOnlyDictionary<string, BonusStats> bonusStats = await currentGame.GetBonusStats();
+            int[] topThreeScores = GetTopThreeScores(orderedTeamScores);
 
             // We could have more than the embed limit, so split them up if necessary
-            return this.Context.Channel.SendAllEmbeds(
+            return await this.Context.Channel.SendAllEmbeds(
                 topOrderedScoringSplits,
                 () =>
                 {
                     return new EmbedBuilder
                     {
-                        Title = orderedScoringSplits.Take(checked(GameState.ScoresListLimit + 1)).Count() > GameState.ScoresListLimit ?
+                        Title = orderedIndividualScoringSplits.Take(checked(GameState.ScoresListLimit + 1)).Count() > GameState.ScoresListLimit ?
                             $"Top {GameState.ScoresListLimit} Scores" :
                             "Scores",
                         Color = Color.Gold
@@ -546,21 +618,39 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
                     string escapedName = EscapeText(name);
 
+                    if (!teamScores.TryGetValue(kvp.Key.TeamId, out int points))
+                    {
+                        points = split.Points;
+                    }
+
                     // If the player has one of the top three scores (or is tied with one of them), show the medal for
                     // it.
-                    int topScoreIndex = Array.IndexOf(topThreeScores, split.Points);
+                    int topScoreIndex = Array.IndexOf(topThreeScores, points);
                     if (topScoreIndex >= 0)
                     {
                         escapedName = $"{Medals[topScoreIndex]} {escapedName}";
                     }
 
-                    valueBuilder.Append($"**{split.Points}** ");
+                    if (!bonusStats.TryGetValue(kvp.Key.TeamId, out BonusStats bonusStat))
+                    {
+                        bonusStat = BonusStats.Default;
+                    }
+
+                    int totalPoints = split.Points + bonusStat.Total;
+
+                    valueBuilder.Append($"**{totalPoints}** ");
                     AddSplits(valueBuilder, split, highestPointsLevel);
 
                     int noPenalties = split.NoPenalties;
                     if (noPenalties > 0)
                     {
                         valueBuilder.Append($" ({noPenalties} no penalty buzz{(noPenalties != 1 ? "es" : "")})");
+                    }
+
+                    if (bonusStat != BonusStats.Default)
+                    {
+                        valueBuilder.AppendLine();
+                        AddBonusStatline(valueBuilder, bonusStat);
                     }
 
                     return new EmbedFieldBuilder()
@@ -577,30 +667,46 @@ namespace QuizBowlDiscordScoreTracker.Commands
             HighestPointsLevel highestPointsLevel)
         {
             IDictionary<string, int> teamScores = await GetTeamScores(state);
+            IDictionary<string, int> topOrderedTeamScoresMap = teamScores
+                .OrderByDescending(kvp => kvp.Value)
+                .Take(GameState.ScoresListLimit)
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
-            IOrderedEnumerable<IGrouping<string, LastScoringSplit>> orderedScoringSplits =
-                scoringSplits
-                    .GroupBy(
-                        kvp => kvp.Key.TeamId ?? kvp.Key.PlayerId.ToString(CultureInfo.InvariantCulture),
-                        kvp => kvp.Value)
-                    .OrderByDescending(grouping => grouping.Sum(value => value.Split.Points));
-            IEnumerable<IGrouping<string, LastScoringSplit>> topOrderedScoringSplits =
-                orderedScoringSplits.Take(GameState.ScoresListLimit);
+            // Order the splits by the team score, using the map of teams to scores.
+            IOrderedEnumerable<IGrouping<string, LastScoringSplit>> topOrderedScoringSplits = scoringSplits
+                .GroupBy(
+                    kvp => kvp.Key.TeamId ?? kvp.Key.PlayerId.ToString(CultureInfo.InvariantCulture),
+                    kvp => kvp.Value)
+                .Where(grouping => topOrderedTeamScoresMap.ContainsKey(grouping.Key))
+                .OrderByDescending(grouping => topOrderedTeamScoresMap[grouping.Key]);
+
             IReadOnlyDictionary<string, string> teamIdToName = await state.TeamManager.GetTeamIdToNames();
+            IReadOnlyDictionary<string, BonusStats> bonusStats = await state.GetBonusStats();
 
             // Show top teams in description
             (string teamName, int points)[] topTeamScores = await Task.WhenAll(topOrderedScoringSplits
                 .Select(async grouping =>
                 {
-                    int points = grouping.Sum(value => value.Split.Points);
+                    // This is where we should use teamScores
                     LastScoringSplit lastSplit = grouping.FirstOrDefault();
+                    string teamId = lastSplit == null ?
+                        grouping.Key :
+                        lastSplit.TeamId != null ?
+                            lastSplit.TeamId :
+                            lastSplit.PlayerId.ToString(CultureInfo.InvariantCulture);
+                    if (!teamScores.TryGetValue(teamId, out int points))
+                    {
+                        points = grouping?.Sum(value => value.Split.Points) ?? 0;
+                    }
+
+                    // TODO: See if we can simplify this
                     if (lastSplit == null)
                     {
                         // TODO: See if this will just show the player ID sometimes
                         return (EscapeText(grouping.Key), 0);
                     }
 
-                    if (lastSplit.TeamId != null && teamIdToName.TryGetValue(lastSplit.TeamId, out string teamName))
+                    if (teamIdToName.TryGetValue(teamId, out string teamName))
                     {
                         return (EscapeText(teamName), points);
                     }
@@ -659,6 +765,16 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     }
 
                     (string teamName, int points) = topTeamScores[index];
+                    if (bonusStats.TryGetValue(grouping.Key, out BonusStats bonusStat))
+                    {
+                        AddBonusStatline(valueBuilder, bonusStat);
+                    }
+                    else if (bonusStats.Count > 0)
+                    {
+                        // We do have bonuses, so add the default bonus statline
+                        AddBonusStatline(valueBuilder, BonusStats.Default);
+                    }
+
                     string score = $"**{teamName}** ({points})";
                     return new EmbedFieldBuilder()
                     {

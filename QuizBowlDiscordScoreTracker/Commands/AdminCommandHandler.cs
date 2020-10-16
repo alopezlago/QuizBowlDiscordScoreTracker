@@ -108,6 +108,51 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.Context.Channel.SendMessageAsync("Prefix unset. Roles no longer determine who is on a team.");
         }
 
+        public async Task DisableBonusesAlwaysAsync()
+        {
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                await action.SetUseBonuses(this.Context.Guild.Id, false);
+            }
+
+            Logger.Information($"Use Bonuses set to false in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
+            await this.Context.Channel.SendMessageAsync(
+                "Scoring bonuses will no longer be required for every game in this server.");
+        }
+
+        public async Task EnableBonusesAlwaysAsync()
+        {
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                await action.SetUseBonuses(this.Context.Guild.Id, true);
+            }
+
+            Logger.Information($"Use Bonuses set to true in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
+            await this.Context.Channel.SendMessageAsync("Scoring bonuses is now required for every game in this server.");
+        }
+
+        public async Task GetDefaultFormatAsync()
+        {
+            bool useBonuses;
+            string teamRolePrefix;
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                useBonuses = await action.GetUseBonuses(this.Context.Guild.Id);
+                teamRolePrefix = await action.GetTeamRolePrefixAsync(this.Context.Guild.Id);
+            }
+
+            Logger.Information($"getFormat called in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
+            EmbedBuilder builder = new EmbedBuilder()
+            {
+                Title = "Default Format",
+                Description = "The default settings for games in this server"
+            };
+            builder.AddField("Require scoring bonuses?", useBonuses ? "Yes" : "No");
+            builder.AddField("Team role prefix?", teamRolePrefix == null ? "None set" : @$"Yes: ""{teamRolePrefix}""");
+
+            await this.Context.Channel.SendMessageAsync(embed: builder.Build());
+        }
+
         public async Task GetPairedChannelAsync([Summary("Text channel mention (#textChannelName)")] ITextChannel textChannel)
         {
             if (textChannel == null)
