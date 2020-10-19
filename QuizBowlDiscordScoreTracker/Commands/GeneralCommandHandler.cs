@@ -691,9 +691,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     LastScoringSplit lastSplit = grouping.FirstOrDefault();
                     string teamId = lastSplit == null ?
                         grouping.Key :
-                        lastSplit.TeamId != null ?
-                            lastSplit.TeamId :
-                            lastSplit.PlayerId.ToString(CultureInfo.InvariantCulture);
+                        lastSplit.TeamId ?? lastSplit.PlayerId.ToString(CultureInfo.InvariantCulture);
                     if (!teamScores.TryGetValue(teamId, out int points))
                     {
                         points = grouping?.Sum(value => value.Split.Points) ?? 0;

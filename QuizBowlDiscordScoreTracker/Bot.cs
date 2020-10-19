@@ -78,6 +78,7 @@ namespace QuizBowlDiscordScoreTracker
 
             this.client.MessageReceived += this.OnMessageCreated;
             this.client.GuildMemberUpdated += this.OnPresenceUpdated;
+            this.client.JoinedGuild += this.OnGuildJoined;
 
             this.configurationChangeCallback = this.options.OnChange((configuration, value) =>
             {
@@ -123,6 +124,12 @@ namespace QuizBowlDiscordScoreTracker
         {
             this.Dispose();
             return base.StopAsync(cancellationToken);
+        }
+
+        private Task OnGuildJoined(SocketGuild guild)
+        {
+            return guild.DefaultChannel.SendMessageAsync(
+                "Thank you for adding the QuizBowlScoreTracker bot to your server. Post *!help* to see a list of commands that the bot supports.");
         }
 
         private async Task OnMessageCreated(SocketMessage message)

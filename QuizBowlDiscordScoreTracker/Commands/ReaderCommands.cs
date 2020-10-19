@@ -56,7 +56,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         [Command("setnewreader")]
         [Summary("Set another user as the reader.")]
-        public Task SetNewReaderAsync([Summary("Mention of the new reader")] IGuildUser newReader)
+        public Task SetNewReaderAsync([Summary("Mention of the new reader to switch to")] IGuildUser newReader)
         {
             return this.GetHandler().SetNewReaderAsync(newReader);
         }

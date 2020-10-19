@@ -313,8 +313,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task ChangingFormatToHaveBonusIncludesBonusInCurrentPhase()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            this.CreateHandler(out _, out GameState currentGame, out _);
             currentGame.Format = Format.TossupBonusesShootout;
 
             currentGame.ReaderId = DefaultReaderId;

@@ -90,7 +90,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         [Command("unpairChannel")]
         [Summary("Unpairs a text channel with its voice channel. Only server admins can invoke this.")]
         public Task UnpairChannelAsync(
-            [Summary("Text channel mention (#textChannelName)")] ITextChannel textChannel)
+            [Summary("Text channel mention (#textChannelName) of the text channel to unpair")] ITextChannel textChannel)
         {
             return this.GetHandler().UnpairChannelAsync(textChannel);
         }
