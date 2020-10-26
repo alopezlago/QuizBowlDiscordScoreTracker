@@ -97,8 +97,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             messageStore.Clear();
 
             await handler.TryScore(state, readerUser, channel, "no penalty");
-            IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
-            PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, null);
+            IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
+            PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, playerUser.Username, null);
             Assert.IsTrue(
                 lastSplits.TryGetValue(pair, out LastScoringSplit split),
                 "Couldn't get scoring split");
@@ -121,8 +121,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             bool scoredBuzz = await handler.TryScore(state, playerUser, channel, "no penalty");
             Assert.IsFalse(scoredBuzz, "Player shouldn't be able to give points");
-            IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
-            PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, null);
+            IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
+            PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, "Player", null);
             Assert.IsFalse(lastSplits.TryGetValue(pair, out _), "Scoring split shouldn't exist");
 
             scoredBuzz = await handler.TryScore(state, readerUser, channel, "10");
@@ -265,8 +265,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             bool scoredBuzz = await handler.TryScore(
                 state, readerUser, channel, score.ToString(CultureInfo.InvariantCulture));
             Assert.IsTrue(scoredBuzz, "Buzz wasn't scored");
-            IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
-            PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, null);
+            IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
+            PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, playerUser.Username, null);
             Assert.IsTrue(
                 lastSplits.TryGetValue(pair, out LastScoringSplit split),
                 "Couldn't get scoring split");

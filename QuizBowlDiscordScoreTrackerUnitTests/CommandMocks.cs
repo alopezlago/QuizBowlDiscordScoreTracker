@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Discord;
@@ -101,7 +102,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Mock<IGuildUser> mockBotUser = new Mock<IGuildUser>();
             mockBotUser
                 .Setup(user => user.GetPermissions(It.IsAny<IGuildChannel>()))
-                .Returns(new ChannelPermissions(viewChannel: true, sendMessages: true, embedLinks: true));
+                .Returns(new ChannelPermissions(viewChannel: true, sendMessages: true, embedLinks: true, attachFiles: true));
             mockGuild
                 .Setup(guild => guild.GetCurrentUserAsync(It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
                 .Returns(Task.FromResult(mockBotUser.Object));
@@ -234,6 +235,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             mockMessageChannel
                 .Setup(channel => channel.Name)
                 .Returns("gameChannel");
+            mockMessageChannel
+                .Setup(channel => channel.SendFileAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<Embed>(), It.IsAny<RequestOptions>(), It.IsAny<bool>()))
+                .Returns<Stream, string, string, bool, Embed, RequestOptions, bool>(
+                    (stream, filename, text, isTTS, embed, requestOptions, isSpoiler) =>
+                    {
+                        messageStore.Files.Add((stream, filename, text));
+                        return Task.FromResult(mockUserMessage.Object);
+                    });
 
             updateMock?.Invoke(mockMessageChannel);
             return mockMessageChannel;

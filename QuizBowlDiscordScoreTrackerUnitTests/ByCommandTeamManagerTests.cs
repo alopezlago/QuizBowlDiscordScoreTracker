@@ -14,6 +14,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         private const string SecondTeam = "Beta";
         private const ulong FirstPlayerId = 1;
         private const ulong SecondPlayerId = 2;
+        private const string FirstPlayerName = "Player1";
+        private const string SecondPlayerName = "Player2";
 
         [TestMethod]
         public async Task AddingPlayerToTeam()
@@ -22,7 +24,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(teamManager.TryAddTeam(FirstTeam, out _), "Couldn't add team");
 
             Assert.IsTrue(
-                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstTeam),
+                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstPlayerName, FirstTeam),
                 "Couldn't add player to team");
             IEnumerable<PlayerTeamPair> pairs = await teamManager.GetKnownPlayers();
             Assert.AreEqual(1, pairs.Count(), "Unexpected number of players");
@@ -38,22 +40,24 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(teamManager.TryAddTeam(FirstTeam, out _), "Couldn't add team");
 
             Assert.IsTrue(
-                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstTeam),
+                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstPlayerName, FirstTeam),
                 "Couldn't add player to team");
             IEnumerable<PlayerTeamPair> pairs = await teamManager.GetKnownPlayers();
             Assert.AreEqual(1, pairs.Count(), "Unexpected number of players");
             PlayerTeamPair pair = pairs.First();
             Assert.AreEqual(FirstPlayerId, pair.PlayerId, "Player should be known");
             Assert.AreEqual(FirstTeam, pair.TeamId, "Player should be on the first team");
+            Assert.AreEqual(FirstPlayerName, pair.PlayerDisplayName, "Player should have the same display name");
 
             Assert.IsTrue(
-                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstTeam),
+                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstPlayerName, FirstTeam),
                 "Should be able to add the same player to the same team (as a no-op)");
             pairs = await teamManager.GetKnownPlayers();
             Assert.AreEqual(1, pairs.Count(), "Unexpected number of players after the second add");
             pair = pairs.First();
             Assert.AreEqual(FirstPlayerId, pair.PlayerId, "Player should still be known");
             Assert.AreEqual(FirstTeam, pair.TeamId, "Player should still be on the first team");
+            Assert.AreEqual(FirstPlayerName, pair.PlayerDisplayName, "Player should still have the same display name");
         }
 
         [TestMethod]
@@ -64,7 +68,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(teamManager.TryAddTeam(SecondTeam, out _), "Couldn't add the second team");
 
             Assert.IsTrue(
-                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstTeam),
+                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstPlayerName, FirstTeam),
                 "Couldn't add player to team");
 
             IEnumerable<PlayerTeamPair> pairs = await teamManager.GetKnownPlayers();
@@ -72,14 +76,16 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             PlayerTeamPair pair = pairs.First();
             Assert.AreEqual(FirstPlayerId, pair.PlayerId, "Player should be known");
             Assert.AreEqual(FirstTeam, pair.TeamId, "Player should be on the first team");
+            Assert.AreEqual(FirstPlayerName, pair.PlayerDisplayName, "Player should have the same display name");
 
             Assert.IsTrue(
-                teamManager.TryAddPlayerToTeam(FirstPlayerId, SecondTeam),
+                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstPlayerName, SecondTeam),
                 "Should be able to add the same player to the same team (as a no-op)");
             pairs = await teamManager.GetKnownPlayers();
             Assert.AreEqual(1, pairs.Count(), "Unexpected number of players after the second add");
             pair = pairs.First();
             Assert.AreEqual(FirstPlayerId, pair.PlayerId, "Player should still be known");
+            Assert.AreEqual(FirstPlayerName, pair.PlayerDisplayName, "Player should still have the same display name");
             Assert.AreEqual(SecondTeam, pair.TeamId, "Player should be on the second team");
         }
 
@@ -90,7 +96,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(teamManager.TryAddTeam(FirstTeam, out _), "Couldn't add team");
 
             Assert.IsTrue(
-                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstTeam),
+                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstPlayerName, FirstTeam),
                 "Couldn't add player to team");
             Assert.IsTrue(teamManager.TryRemovePlayerFromTeam(FirstPlayerId), "Couldn't remove player from team");
 
@@ -105,7 +111,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(teamManager.TryAddTeam(FirstTeam, out _), "Couldn't add team");
 
             Assert.IsTrue(
-                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstTeam),
+                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstPlayerName, FirstTeam),
                 "Couldn't add player to team");
             Assert.IsFalse(teamManager.TryRemovePlayerFromTeam(SecondPlayerId), "Second player shouldn't be removable");
 
@@ -114,6 +120,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             PlayerTeamPair pair = pairs.First();
             Assert.AreEqual(FirstPlayerId, pair.PlayerId, "Player should be known");
             Assert.AreEqual(FirstTeam, pair.TeamId, "Player should be on the first team");
+            Assert.AreEqual(FirstPlayerName, pair.PlayerDisplayName, "Player should have a name");
         }
 
         [TestMethod]
@@ -154,13 +161,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(teamIdToName.ContainsKey(FirstTeam), "Couldn't find team after adding it");
 
             Assert.IsTrue(
-                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstTeam),
+                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstPlayerName, FirstTeam),
                 "Couldn't add player to team");
             IEnumerable<PlayerTeamPair> pairs = await teamManager.GetKnownPlayers();
             Assert.AreEqual(1, pairs.Count(), "Unexpected number of players");
             PlayerTeamPair pair = pairs.First();
             Assert.AreEqual(FirstPlayerId, pair.PlayerId, "Player should be known");
             Assert.AreEqual(FirstTeam, pair.TeamId, "Player should be on the first team");
+            Assert.AreEqual(FirstPlayerName, pair.PlayerDisplayName, "Player should have a name");
         }
 
         [TestMethod]
@@ -196,11 +204,32 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task CannotRemoveTeamWithPlayerOnIt()
+        {
+            const string playerName = "Alice";
+
+            ByCommandTeamManager teamManager = new ByCommandTeamManager();
+            Assert.IsTrue(teamManager.TryAddTeam(FirstTeam, out _), "Couldn't add the team");
+            Assert.IsTrue(teamManager.TryAddPlayerToTeam(1, playerName, FirstTeam), "Couldn't add the player");
+            Assert.IsFalse(
+                teamManager.TryRemoveTeam(FirstTeam, out string message),
+                "We shouldn't have been able to remove the team");
+            Assert.IsNotNull(message, "We should have an error message");
+
+            string playersTeamName = await teamManager.GetTeamIdOrNull(1);
+            Assert.AreEqual(FirstTeam, playersTeamName, "Player should still be on the team");
+
+            string teamNameFromId = await teamManager.GetTeamNameOrNull(FirstTeam);
+            Assert.IsNotNull(teamNameFromId, "Team should still be there");
+        }
+
+        [TestMethod]
         public async Task GetTeamIdOfPlayer()
         {
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
             Assert.IsTrue(teamManager.TryAddTeam(FirstTeam, out _), "Couldn't add the team");
-            Assert.IsTrue(teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstTeam), "Couldn't add the player");
+            Assert.IsTrue(
+                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstPlayerName, FirstTeam), "Couldn't add the player");
             Assert.AreEqual(
                 FirstTeam, await teamManager.GetTeamIdOrNull(FirstPlayerId), "Unexpected team ID");
         }
@@ -210,7 +239,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
             Assert.IsTrue(teamManager.TryAddTeam(FirstTeam, out _), "Couldn't add the team");
-            Assert.IsTrue(teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstTeam), "Couldn't add the player");
+            Assert.IsTrue(
+                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstPlayerName, FirstTeam), "Couldn't add the player");
             Assert.IsNull(await teamManager.GetTeamIdOrNull(SecondPlayerId), "Unexpected team ID");
         }
 
@@ -220,7 +250,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
             Assert.IsTrue(teamManager.TryAddTeam(FirstTeam, out _), "Couldn't add the team");
             Assert.IsTrue(
-                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstTeam), "Couldn't add the player");
+                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstPlayerName, FirstTeam), "Couldn't add the player");
             Assert.IsTrue(
                 teamManager.TryRemovePlayerFromTeam(FirstPlayerId), "Couldn't remove the player");
             Assert.IsNull(await teamManager.GetTeamIdOrNull(FirstPlayerId), "Unexpected team ID");
@@ -233,9 +263,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(teamManager.TryAddTeam(FirstTeam, out _), "Couldn't add the first team");
             Assert.IsTrue(
                 teamManager.TryAddTeam(SecondTeam, out _), "Couldn't add the second team");
-            Assert.IsTrue(teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstTeam), "Couldn't add the first player");
             Assert.IsTrue(
-                teamManager.TryAddPlayerToTeam(SecondPlayerId, SecondTeam),
+                teamManager.TryAddPlayerToTeam(FirstPlayerId, FirstPlayerName, FirstTeam), "Couldn't add the first player");
+            Assert.IsTrue(
+                teamManager.TryAddPlayerToTeam(SecondPlayerId, SecondPlayerName, SecondTeam),
                 "Couldn't add the second player");
 
             IEnumerable<PlayerTeamPair> pairs = await teamManager.GetKnownPlayers();
@@ -244,10 +275,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             PlayerTeamPair firstPair = pairs.FirstOrDefault(pair => pair.PlayerId == FirstPlayerId);
             Assert.IsNotNull(firstPair, "Couldn't find the first player");
             Assert.AreEqual(FirstTeam, firstPair.TeamId, "First player has the wrong team");
+            Assert.AreEqual(FirstPlayerName, firstPair.PlayerDisplayName, "First player has the wrong name");
 
             PlayerTeamPair secondPair = pairs.FirstOrDefault(pair => pair.PlayerId == SecondPlayerId);
             Assert.IsNotNull(secondPair, "Couldn't find the second player");
             Assert.AreEqual(SecondTeam, secondPair.TeamId, "First player has the wrong team");
+            Assert.AreEqual(SecondPlayerName, secondPair.PlayerDisplayName, "Second player has the wrong name");
         }
     }
 }

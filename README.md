@@ -9,6 +9,7 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 - Grant the bot the following permissions:
   - Read Text Channels & See Voice Messages
   - Embed Links
+  - Attach Files
   - Send Messages
   - Mute Members
 - If you want to mute the reader when someone buzzes in, use this command to pair your packet channel with the voice channel:
@@ -21,6 +22,7 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 - When someone buzzes in, give them a score (-5, 0, 10, 15, 20). If the person gets the question wrong, the next person in the queue will be prompted.
   - If no one got the question correct, type in !next
   - If the current question is in a bad state and you need to clear all answers and the queue, type in !clear
+  - If you are playing with bonuses, score them with splits (like 10/0/10) or binary (101).
 - You can type !score to get the current scores
 - If the reader needs to undo their last scoring action, use !undo
 - If you want to change readers, use !setnewreader @NewReadersMention
@@ -53,6 +55,7 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 - Run the .exe file
 - Grant your bot the following permissions:
   - Read Text Channels & See Voice Messages
+  - Attach Files
   - Embed Links
   - Send Messages
   - Mute Members

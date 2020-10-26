@@ -14,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using QuizBowlDiscordScoreTracker.Database;
+using QuizBowlDiscordScoreTracker.Scoresheet;
 using QuizBowlDiscordScoreTracker.Web;
 using Serilog;
 
@@ -59,6 +60,7 @@ namespace QuizBowlDiscordScoreTracker
             serviceCollection.AddSingleton(this.gameStateManager);
             serviceCollection.AddSingleton(this.options);
             serviceCollection.AddSingleton(this.dbActionFactory);
+            serviceCollection.AddSingleton<IFileScoresheetGenerator>(new ExcelFileScoresheetGenerator());
             this.serviceProvider = serviceCollection.BuildServiceProvider();
 
             this.commandService = new CommandService(new CommandServiceConfig()
@@ -78,6 +80,7 @@ namespace QuizBowlDiscordScoreTracker
 
             this.client.MessageReceived += this.OnMessageCreated;
             this.client.GuildMemberUpdated += this.OnPresenceUpdated;
+            this.client.JoinedGuild += this.OnGuildJoined;
 
             this.configurationChangeCallback = this.options.OnChange((configuration, value) =>
             {
@@ -125,6 +128,12 @@ namespace QuizBowlDiscordScoreTracker
             return base.StopAsync(cancellationToken);
         }
 
+        private Task OnGuildJoined(SocketGuild guild)
+        {
+            return guild.DefaultChannel.SendMessageAsync(
+                "Thank you for adding the QuizBowlScoreTracker bot to your server. Post *!help* to see a list of commands that the bot supports.");
+        }
+
         private async Task OnMessageCreated(SocketMessage message)
         {
             // Ignore messages from the bot or from non user messages (in channel or DMs).
@@ -136,6 +145,18 @@ namespace QuizBowlDiscordScoreTracker
             int argPosition = 0;
             if (userMessage.HasCharPrefix('!', ref argPosition))
             {
+                // Make sure the user isn't banned. Don't block unban, in case of an accidental self-ban
+                if (!userMessage.Content.StartsWith("!unban", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    using (DatabaseAction action = this.dbActionFactory.Create())
+                    {
+                        if (await action.GetCommandBannedAsync(message.Author.Id))
+                        {
+                            return;
+                        }
+                    }
+                }
+
                 ICommandContext context = new CommandContext(this.client, userMessage);
                 await this.commandService.ExecuteAsync(context, argPosition, this.serviceProvider);
                 return;

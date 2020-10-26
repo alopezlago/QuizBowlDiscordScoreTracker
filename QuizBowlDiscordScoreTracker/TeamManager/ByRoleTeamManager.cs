@@ -32,10 +32,13 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
         {
             IReadOnlyCollection<IGuildUser> users = await this.Guild.GetUsersAsync();
             return users
-                .Select(user => new KeyValuePair<ulong, ulong>(
-                    user.Id, user.RoleIds.FirstOrDefault(id => this.TeamIdToName.ContainsKey(id.ToString(CultureInfo.InvariantCulture)))))
-                .Where(kvp => kvp.Value != default)
-                .Select(kvp => new PlayerTeamPair(kvp.Key, kvp.Value.ToString(CultureInfo.InvariantCulture)));
+                .Select(user => new Tuple<ulong, ulong, string>(
+                    user.Id,
+                    user.RoleIds.FirstOrDefault(id => this.TeamIdToName.ContainsKey(id.ToString(CultureInfo.InvariantCulture))),
+                    user.Nickname ?? user.Username))
+                .Where(kvp => kvp.Item2 != default)
+                .Select(tuple => new PlayerTeamPair(
+                    tuple.Item1, tuple.Item3, tuple.Item2.ToString(CultureInfo.InvariantCulture)));
         }
 
         public async Task<string> GetTeamIdOrNull(ulong userId)

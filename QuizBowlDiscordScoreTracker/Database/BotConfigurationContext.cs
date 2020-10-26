@@ -43,6 +43,8 @@ namespace QuizBowlDiscordScoreTracker.Database
 
         public DbSet<TextChannelSetting> TextChannels { get; set; }
 
+        public DbSet<UserSetting> Users { get; set; }
+
         private string DataSource { get; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

@@ -12,14 +12,18 @@ namespace QuizBowlDiscordScoreTracker
         /// </summary>
         /// <param name="playerId"></param>
         /// <param name="teamId"></param>
-        public PlayerTeamPair(ulong playerId, string teamId)
+        public PlayerTeamPair(ulong playerId, string playerDisplayName, string teamId)
         {
+            this.PlayerDisplayName = playerDisplayName;
             this.PlayerId = playerId;
             this.TeamId = teamId ?? playerId.ToString(CultureInfo.InvariantCulture);
             this.IsOnTeam = teamId != null;
         }
 
         public bool IsOnTeam { get; }
+
+        // PlayerDisplayName shouldn't be used for equality
+        public string PlayerDisplayName { get; private set; }
 
         public ulong PlayerId { get; private set; }
 

@@ -23,6 +23,8 @@ namespace QuizBowlDiscordScoreTracker
             this.WaitForRejoinMs = 1000;
             this.MuteDelayMs = 500;
             this.DatabaseDataSource = null;
+            this.DailyGuildExportLimit = 1000;
+            this.DailyUserExportLimit = 50;
             this.BuzzEmojis = Array.Empty<string>();
             this.BotToken = string.Empty;
             this.WebBaseURL = null;
@@ -62,6 +64,18 @@ namespace QuizBowlDiscordScoreTracker
 #pragma warning disable CA1819 // Properties should not return arrays
         public string[] BuzzEmojis { get; set; }
 #pragma warning restore CA1819 // Properties should not return arrays
+
+        /// <summary>
+        /// The maximum number of export commands (inclusive) that can be called from a guild each day. The day is
+        /// reset at midnight GMT.
+        /// </summary>
+        public int DailyGuildExportLimit { get; set; }
+
+        /// <summary>
+        /// The maximum number of export commands (inclusive) that can be called by a specific user each day. The day
+        /// is reset at midnight GMT.
+        /// </summary>
+        public int DailyUserExportLimit { get; set; }
 
         public string BotToken { get; set; }
         public Uri WebBaseURL { get; set; }

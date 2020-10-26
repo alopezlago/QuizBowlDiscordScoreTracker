@@ -109,7 +109,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             foreach (ulong id in ids)
             {
                 ulong teamId = 100 + (id % 2);
-                teamManager.TryAddPlayerToTeam(id, teamId.ToString(CultureInfo.InvariantCulture));
+                teamManager.TryAddPlayerToTeam(id, $"User_{id}", teamId.ToString(CultureInfo.InvariantCulture));
 
                 Assert.IsTrue(
                     await gameState.AddPlayer(id, $"Player {id}"), $"Should be able to add {id} to the queue.");
@@ -275,7 +275,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsFalse(gameState.TryGetNextPlayer(out ulong _), "Queue should have been cleared.");
             Assert.IsTrue(await gameState.AddPlayer(id, "Player"), "Add should succeed after clear.");
             Assert.AreEqual(readerId, gameState.ReaderId, "Reader should remain the same.");
-            IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await gameState.GetLastScoringSplits();
+            IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await gameState.GetLastScoringSplits();
             Assert.AreEqual(1, lastSplits.Count, "Unexpected number of scores.");
 
             KeyValuePair<PlayerTeamPair, LastScoringSplit> splitPair = lastSplits.First();
@@ -415,7 +415,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             GameState gameState = new GameState();
             Assert.IsTrue(await gameState.AddPlayer(id, "Player"), "Add should succeed.");
             gameState.ScorePlayer(-5);
-            IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await gameState.GetLastScoringSplits();
+            IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await gameState.GetLastScoringSplits();
             Assert.AreEqual(1, lastSplits.Count, "Only one player should have a score.");
             KeyValuePair<PlayerTeamPair, LastScoringSplit> splitPair = lastSplits.First();
 
@@ -430,7 +430,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             GameState gameState = new GameState();
             Assert.IsTrue(await gameState.AddPlayer(id, "Player"), "Add should succeed.");
             gameState.ScorePlayer(10);
-            IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await gameState.GetLastScoringSplits();
+            IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await gameState.GetLastScoringSplits();
             Assert.AreEqual(1, lastSplits.Count, "Only one player should have a score.");
             KeyValuePair<PlayerTeamPair, LastScoringSplit> splitPair = lastSplits.First();
 
@@ -454,7 +454,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 }
             }
 
-            IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await gameState.GetLastScoringSplits();
+            IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await gameState.GetLastScoringSplits();
             Assert.AreEqual(1, lastSplits.Count, "Only one player should have a score.");
             KeyValuePair<PlayerTeamPair, LastScoringSplit> splitPair = lastSplits.First();
 
@@ -474,7 +474,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             gameState.ScorePlayer(-5);
             gameState.ScorePlayer(10);
 
-            IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await gameState.GetLastScoringSplits();
+            IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await gameState.GetLastScoringSplits();
             Assert.AreEqual(2, lastSplits.Count, "Two players should have scored.");
 
             KeyValuePair<PlayerTeamPair, LastScoringSplit> scoreGrouping = lastSplits
@@ -493,22 +493,25 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong firstPlayerId = 1;
             const ulong secondPlayerId = 2;
             const ulong otherTeamPlayerId = 3;
+            const string firstPlayerName = "Player1";
+            const string secondPlayerName = "Player2";
+            const string otherPlayerName = "Player3";
             const string firstTeamId = "Alpha";
             const string secondTeamId = "Beta";
 
             GameState gameState = CreateGameStateWithByCommandTeamManager(out ByCommandTeamManager teamManager);
             Assert.IsTrue(teamManager.TryAddTeam(firstTeamId, out _), "Couldn't add the first team");
             Assert.IsTrue(teamManager.TryAddTeam(secondTeamId, out _), "Couldn't add the second team");
-            teamManager.TryAddPlayerToTeam(firstPlayerId, firstTeamId);
-            teamManager.TryAddPlayerToTeam(secondPlayerId, firstTeamId);
-            teamManager.TryAddPlayerToTeam(otherTeamPlayerId, secondTeamId);
+            teamManager.TryAddPlayerToTeam(firstPlayerId, firstPlayerName, firstTeamId);
+            teamManager.TryAddPlayerToTeam(secondPlayerId, secondPlayerName, firstTeamId);
+            teamManager.TryAddPlayerToTeam(otherTeamPlayerId, otherPlayerName, secondTeamId);
 
             Assert.IsTrue(
-                await gameState.AddPlayer(firstPlayerId, "Player1"), "Add should succeed the first time");
+                await gameState.AddPlayer(firstPlayerId, firstPlayerName), "Add should succeed the first time");
             Assert.IsTrue(
-                await gameState.AddPlayer(secondPlayerId, "Player2"), "Add should succeed the second time");
+                await gameState.AddPlayer(secondPlayerId, secondPlayerName), "Add should succeed the second time");
             Assert.IsTrue(
-                await gameState.AddPlayer(otherTeamPlayerId, "Player3"), "Add should succeed the third time");
+                await gameState.AddPlayer(otherTeamPlayerId, otherPlayerName), "Add should succeed the third time");
 
             gameState.ScorePlayer(0);
             Assert.IsTrue(
@@ -524,32 +527,34 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong firstPlayerId = 1;
             const ulong secondPlayerId = 3;
+            const string firstPlayerName = "Player1";
+            const string secondPlayerName = "Player2";
             const string firstTeamId = "Team1";
             const string secondTeamId = "Team2";
 
             GameState gameState = CreateGameStateWithByCommandTeamManager(out ByCommandTeamManager teamManager);
             Assert.IsTrue(teamManager.TryAddTeam(firstTeamId, out _), "Couldn't add the first team");
             Assert.IsTrue(teamManager.TryAddTeam(secondTeamId, out _), "Couldn't add the second team");
-            teamManager.TryAddPlayerToTeam(firstPlayerId, firstTeamId);
-            teamManager.TryAddPlayerToTeam(secondPlayerId, secondTeamId);
+            teamManager.TryAddPlayerToTeam(firstPlayerId, firstPlayerName, firstTeamId);
+            teamManager.TryAddPlayerToTeam(secondPlayerId, secondPlayerName, secondTeamId);
 
             Assert.IsTrue(
-                await gameState.AddPlayer(firstPlayerId, "Player1"), "Add should succeed the first time");
+                await gameState.AddPlayer(firstPlayerId, firstPlayerName), "Add should succeed the first time");
             gameState.ScorePlayer(10);
 
             Assert.IsTrue(
-                await gameState.AddPlayer(secondPlayerId, "Player3"), "Add should succeed the third time");
+                await gameState.AddPlayer(secondPlayerId, secondPlayerName), "Add should succeed the third time");
             gameState.ScorePlayer(15);
 
-            IDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await gameState.GetLastScoringSplits();
-            PlayerTeamPair firstPair = new PlayerTeamPair(firstPlayerId, firstTeamId);
+            IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await gameState.GetLastScoringSplits();
+            PlayerTeamPair firstPair = new PlayerTeamPair(firstPlayerId, firstPlayerName, firstTeamId);
             Assert.IsTrue(
                 lastSplits.TryGetValue(firstPair, out LastScoringSplit split),
                 "Couldn't find split for the first player");
             Assert.AreEqual(10, split.Split.Points, "Unexpected score for the first player");
             Assert.AreEqual(firstTeamId, split.TeamId, "Unexpected team ID for the first player's buzz");
 
-            PlayerTeamPair secondPair = new PlayerTeamPair(secondPlayerId, secondTeamId);
+            PlayerTeamPair secondPair = new PlayerTeamPair(secondPlayerId, secondPlayerName, secondTeamId);
             Assert.IsTrue(
                 lastSplits.TryGetValue(secondPair, out split), "Couldn't find split for the second player");
             Assert.AreEqual(15, split.Split.Points, "Unexpected score for the second player");
@@ -665,17 +670,19 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong firstUserId = 1;
             const ulong secondUserId = 2;
             const string teamId = "Alpha";
+            string firstPlayerName = $"Player {firstUserId}";
+            string secondPlayerName = $"Player {secondUserId}";
 
             GameState gameState = CreateGameStateWithByCommandTeamManager(out ByCommandTeamManager teamManager);
             Assert.IsTrue(teamManager.TryAddTeam(teamId, out _), "Couldn't add the team");
-            teamManager.TryAddPlayerToTeam(firstUserId, teamId);
-            teamManager.TryAddPlayerToTeam(secondUserId, teamId);
+            teamManager.TryAddPlayerToTeam(firstUserId, firstPlayerName, teamId);
+            teamManager.TryAddPlayerToTeam(secondUserId, secondPlayerName, teamId);
 
             Assert.IsTrue(
-                await gameState.AddPlayer(firstUserId, $"Player {firstUserId}"),
+                await gameState.AddPlayer(firstUserId, firstPlayerName),
                 "Adding the first player should succeed.");
             Assert.IsTrue(
-                await gameState.AddPlayer(secondUserId, $"Player {secondUserId}"),
+                await gameState.AddPlayer(secondUserId, secondPlayerName),
                 "Adding the second player should succeed.");
             Assert.IsTrue(
                 gameState.TryGetNextPlayer(out ulong nextPlayerId),
@@ -748,6 +755,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const ulong firstId = 1;
             const ulong secondId = 2;
+            const string firstPlayerName = "Player1";
+            const string secondPlayerName = "Player2";
             const string firstTeamId = "1001";
             const string secondTeamId = "1002";
             const int firstPointsFromBuzz = 10;
@@ -755,17 +764,17 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             GameState gameState = CreateGameStateWithByCommandTeamManager(out ByCommandTeamManager teamManager);
             Assert.IsTrue(teamManager.TryAddTeam(firstTeamId, out _), "Couldn't add the first team");
             Assert.IsTrue(teamManager.TryAddTeam(secondTeamId, out _), "Couldn't add the second team");
-            teamManager.TryAddPlayerToTeam(firstId, firstTeamId);
-            teamManager.TryAddPlayerToTeam(secondId, secondTeamId);
+            teamManager.TryAddPlayerToTeam(firstId, firstPlayerName, firstTeamId);
+            teamManager.TryAddPlayerToTeam(secondId, secondPlayerName, secondTeamId);
 
             // To make sure we're not just clearing the field, give the first player points
-            Assert.IsTrue(await gameState.AddPlayer(firstId, "Player1"), "First add should succeed.");
+            Assert.IsTrue(await gameState.AddPlayer(firstId, firstPlayerName), "First add should succeed.");
             gameState.ScorePlayer(firstPointsFromBuzz);
 
             Assert.IsTrue(
-                await gameState.AddPlayer(firstId, "Player1"), "First add in second question should succeed.");
+                await gameState.AddPlayer(firstId, firstPlayerName), "First add in second question should succeed.");
             Assert.IsTrue(
-                await gameState.AddPlayer(secondId, "Player2"), "Second add in second question should succeed.");
+                await gameState.AddPlayer(secondId, secondPlayerName), "Second add in second question should succeed.");
 
             gameState.ScorePlayer(pointsFromBuzz);
             IDictionary<ulong, int> scores = (await gameState.GetLastScoringSplits())

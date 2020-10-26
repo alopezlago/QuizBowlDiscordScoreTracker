@@ -59,6 +59,12 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     "channel settings.");
             }
 
+            if (!channelPermissions.AttachFiles)
+            {
+                builder.AppendLine("> - Cannot attach files, so !exportToFile will fail. Add the \"Attach Files\" " +
+                    "permission in the guild or channel settings.");
+            }
+
             ulong? voiceChannelId;
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
             {

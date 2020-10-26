@@ -76,7 +76,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return this.Context.Channel.SendMessageAsync("Joining teams isn't supported in this mode.");
             }
 
-            if (!teamManager.TryAddPlayerToTeam(this.Context.User.Id, teamName))
+            if (!teamManager.TryAddPlayerToTeam(
+                this.Context.User.Id, guildUser.Nickname ?? guildUser.Username, teamName))
             {
                 return this.Context.Channel.SendMessageAsync(
                     $@"Couldn't join team ""{teamName}"". Make sure it is not misspelled.");
@@ -691,9 +692,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     LastScoringSplit lastSplit = grouping.FirstOrDefault();
                     string teamId = lastSplit == null ?
                         grouping.Key :
-                        lastSplit.TeamId != null ?
-                            lastSplit.TeamId :
-                            lastSplit.PlayerId.ToString(CultureInfo.InvariantCulture);
+                        lastSplit.TeamId ?? lastSplit.PlayerId.ToString(CultureInfo.InvariantCulture);
                     if (!teamScores.TryGetValue(teamId, out int points))
                     {
                         points = grouping?.Sum(value => value.Split.Points) ?? 0;

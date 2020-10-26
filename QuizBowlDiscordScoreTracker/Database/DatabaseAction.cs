@@ -20,6 +20,13 @@ namespace QuizBowlDiscordScoreTracker.Database
 
         private bool IsDisposed { get; set; }
 
+        public async Task AddCommandBannedUser(ulong userId)
+        {
+            UserSetting user = await this.AddOrGetUserAsync(userId);
+            user.CommandBanned = true;
+            await this.Context.SaveChangesAsync();
+        }
+
         public async Task ClearTeamRolePrefixAsync(ulong guildId)
         {
             GuildSetting guild = await this.Context.FindAsync<GuildSetting>(guildId);
@@ -56,6 +63,12 @@ namespace QuizBowlDiscordScoreTracker.Database
             return this.Context.Database.MigrateAsync();
         }
 
+        public async Task<bool> GetCommandBannedAsync(ulong userId)
+        {
+            UserSetting user = await this.Context.FindAsync<UserSetting>(userId);
+            return user?.CommandBanned ?? false;
+        }
+
         public async Task<ulong?> GetPairedVoiceChannelIdOrNullAsync(ulong textChannelId)
         {
             TextChannelSetting textChannel = await this.Context.FindAsync<TextChannelSetting>(textChannelId);
@@ -72,6 +85,68 @@ namespace QuizBowlDiscordScoreTracker.Database
         {
             GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
             return guild.UseBonuses;
+        }
+
+        public async Task<int> GetGuildExportCount(ulong guildId)
+        {
+            GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
+            int currentDay = DateTime.UtcNow.Day;
+            if (guild.LastExportDay != currentDay)
+            {
+                guild.LastExportDay = currentDay;
+                guild.ExportCount = 0;
+                await this.Context.SaveChangesAsync();
+            }
+
+            return guild.ExportCount;
+        }
+
+        public async Task<int> GetUserExportCount(ulong userId)
+        {
+            UserSetting user = await this.AddOrGetUserAsync(userId);
+            int currentDay = DateTime.UtcNow.Day;
+            if (user.LastExportDay != currentDay)
+            {
+                user.LastExportDay = currentDay;
+                user.ExportCount = 0;
+                await this.Context.SaveChangesAsync();
+            }
+
+            return user.ExportCount;
+        }
+
+        public async Task IncrementGuildExportCount(ulong guildId)
+        {
+            GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
+            int currentDay = DateTime.UtcNow.Day;
+            if (guild.LastExportDay != currentDay)
+            {
+                guild.LastExportDay = currentDay;
+                guild.ExportCount = 1;
+            }
+            else
+            {
+                guild.ExportCount++;
+            }
+
+            await this.Context.SaveChangesAsync();
+        }
+
+        public async Task IncrementUserExportCount(ulong userId)
+        {
+            UserSetting user = await this.AddOrGetUserAsync(userId);
+            int currentDay = DateTime.UtcNow.Day;
+            if (user.LastExportDay != currentDay)
+            {
+                user.LastExportDay = currentDay;
+                user.ExportCount = 1;
+            }
+            else
+            {
+                user.ExportCount++;
+            }
+
+            await this.Context.SaveChangesAsync();
         }
 
         public async Task PairChannelsAsync(ulong guildId, ulong textChannelId, ulong voiceChannelId)
@@ -92,6 +167,14 @@ namespace QuizBowlDiscordScoreTracker.Database
                 textChannels[i].VoiceChannelId = channelPairs[i].voiceChannelId;
             }
 
+            await this.Context.SaveChangesAsync();
+        }
+
+        public async Task RemoveCommandBannedUser(ulong userId)
+        {
+            UserSetting user = await this.AddOrGetUserAsync(userId);
+            user.CommandBanned = false;
+            this.RemoveUserIfEmptyAsync(user);
             await this.Context.SaveChangesAsync();
         }
 
@@ -162,6 +245,26 @@ namespace QuizBowlDiscordScoreTracker.Database
             return guild;
         }
 
+        private async Task<UserSetting> AddOrGetUserAsync(ulong userId)
+        {
+            UserSetting user = await this.Context.FindAsync<UserSetting>(userId);
+            if (user != null)
+            {
+                return user;
+            }
+
+            user = new UserSetting()
+            {
+                UserSettingId = userId,
+                ExportCount = 0,
+                LastExportDay = DateTime.UtcNow.Day
+            };
+            this.Context.Users.Add(user);
+
+            await this.Context.SaveChangesAsync();
+            return user;
+        }
+
         private async Task RemoveGuildIfEmptyAsync(GuildSetting guild)
         {
             if (guild.TeamRolePrefix != null)
@@ -173,7 +276,9 @@ namespace QuizBowlDiscordScoreTracker.Database
             GuildSetting guildWithTextChannels = await this.Context.Guilds
                 .Include(g => g.TextChannels)
                 .FirstOrDefaultAsync(g => g.GuildSettingId == guild.GuildSettingId);
-            if (guildWithTextChannels.TextChannels == null || guildWithTextChannels.TextChannels.Count == 0)
+            if ((guildWithTextChannels.TextChannels == null || guildWithTextChannels.TextChannels.Count == 0) &&
+                !guildWithTextChannels.UseBonuses &&
+                (guildWithTextChannels.ExportCount == 0 || guildWithTextChannels.LastExportDay != DateTime.UtcNow.Day))
             {
                 this.Context.Remove(guild);
             }
@@ -199,6 +304,16 @@ namespace QuizBowlDiscordScoreTracker.Database
 
             await this.Context.SaveChangesAsync();
             await this.RemoveGuildIfEmptyAsync(guild);
+        }
+
+        private void RemoveUserIfEmptyAsync(UserSetting user)
+        {
+            if (user.CommandBanned || user.LastExportDay == DateTime.UtcNow.Day)
+            {
+                return;
+            }
+
+            this.Context.Remove(user);
         }
     }
 }

@@ -5,7 +5,7 @@
     /// </summary>
     public interface ISelfManagedTeamManager : ITeamManager
     {
-        bool TryAddPlayerToTeam(ulong userId, string teamName);
+        bool TryAddPlayerToTeam(ulong userId, string playerDisplayName, string teamName);
         bool TryRemovePlayerFromTeam(ulong userId);
         bool TryAddTeam(string teamName, out string message);
         bool TryRemoveTeam(string teamName, out string message);
