@@ -14,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using QuizBowlDiscordScoreTracker.Database;
+using QuizBowlDiscordScoreTracker.Scoresheet;
 using QuizBowlDiscordScoreTracker.Web;
 using Serilog;
 
@@ -59,6 +60,7 @@ namespace QuizBowlDiscordScoreTracker
             serviceCollection.AddSingleton(this.gameStateManager);
             serviceCollection.AddSingleton(this.options);
             serviceCollection.AddSingleton(this.dbActionFactory);
+            serviceCollection.AddSingleton<IFileScoresheetGenerator>(new ExcelFileScoresheetGenerator());
             this.serviceProvider = serviceCollection.BuildServiceProvider();
 
             this.commandService = new CommandService(new CommandServiceConfig()
@@ -143,6 +145,18 @@ namespace QuizBowlDiscordScoreTracker
             int argPosition = 0;
             if (userMessage.HasCharPrefix('!', ref argPosition))
             {
+                // Make sure the user isn't banned. Don't block unban, in case of an accidental self-ban
+                if (!userMessage.Content.StartsWith("!unban", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    using (DatabaseAction action = this.dbActionFactory.Create())
+                    {
+                        if (await action.GetCommandBannedAsync(message.Author.Id))
+                        {
+                            return;
+                        }
+                    }
+                }
+
                 ICommandContext context = new CommandContext(this.client, userMessage);
                 await this.commandService.ExecuteAsync(context, argPosition, this.serviceProvider);
                 return;

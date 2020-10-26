@@ -1,7 +1,9 @@
 ﻿using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using Microsoft.Extensions.Options;
 using QuizBowlDiscordScoreTracker.Database;
+using QuizBowlDiscordScoreTracker.Scoresheet;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
@@ -9,15 +11,25 @@ namespace QuizBowlDiscordScoreTracker.Commands
     [RequireContext(ContextType.Guild)]
     public class ReaderCommands : ModuleBase
     {
-        public ReaderCommands(GameStateManager manager, IDatabaseActionFactory dbActionFactory)
+        public ReaderCommands(
+            GameStateManager manager,
+            IOptionsMonitor<BotConfiguration> options,
+            IDatabaseActionFactory dbActionFactory,
+            IFileScoresheetGenerator scoresheetGenerator)
         {
             this.Manager = manager;
+            this.Options = options;
             this.DatabaseActionFactory = dbActionFactory;
+            this.ScoresheetGenerator = scoresheetGenerator;
         }
 
         private IDatabaseActionFactory DatabaseActionFactory { get; }
 
         private GameStateManager Manager { get; }
+
+        private IOptionsMonitor<BotConfiguration> Options { get; }
+
+        private IFileScoresheetGenerator ScoresheetGenerator { get; }
 
         [Command("addTeam")]
         [Summary("Adds a team to the game (not available if the team role prefix is set).")]
@@ -75,6 +87,15 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().ClearAllAsync();
         }
 
+        [Command("exportToFile")]
+        [Summary("Exports the scoresheet to a spreadsheet file. The spreadsheet is based on NAQT's electronic " +
+            "scoresheet (© National Academic Quiz Tournaments, LLC). Export requires that one or two teams are " +
+            "playing, that each team has at most 6 players, and that at most 24 tossups have been played.")]
+        public Task ExportToFileAsync()
+        {
+            return this.GetHandler().ExportToFileAsync();
+        }
+
         [Command("clear")]
         [Summary("Clears the player queue and answers from this question, including scores from this question. This can only be used during the tossup stage.")]
         public Task ClearAsync()
@@ -99,7 +120,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private ReaderCommandHandler GetHandler()
         {
             // this.Context is null in the constructor, so create the handler in this method
-            return new ReaderCommandHandler(this.Context, this.Manager, this.DatabaseActionFactory);
+            return new ReaderCommandHandler(
+                this.Context, this.Manager, this.Options, this.DatabaseActionFactory, this.ScoresheetGenerator);
         }
     }
 }

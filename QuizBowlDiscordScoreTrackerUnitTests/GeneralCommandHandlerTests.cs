@@ -855,7 +855,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             this.Game.ReaderId = DefaultReaderId;
             ByCommandTeamManager teamManager = this.Game.TeamManager as ByCommandTeamManager;
             Assert.IsTrue(teamManager.TryAddTeam("Alpha", out _), "Couldn't add team");
-            teamManager.TryAddPlayerToTeam(0, "Alpha");
+            teamManager.TryAddPlayerToTeam(0, "Player 0", "Alpha");
 
             for (int i = 0; i < GeneralCommandHandler.MaxLeadersShown; i++)
             {
@@ -1396,7 +1396,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             this.InitializeHandler(DefaultIds, userId, TeamManagerType.ByCommand);
             ByCommandTeamManager teamManager = this.Game.TeamManager as ByCommandTeamManager;
             Assert.IsTrue(teamManager.TryAddTeam(FirstTeamName, out _), "Couldn't add team");
-            Assert.IsTrue(teamManager.TryAddPlayerToTeam(userId, FirstTeamName), "Couldn't add player");
+            Assert.IsTrue(
+                teamManager.TryAddPlayerToTeam(userId, $"User_{userId}", FirstTeamName), "Couldn't add player");
             Assert.AreEqual(
                 FirstTeamName,
                 await teamManager.GetTeamIdOrNull(userId),

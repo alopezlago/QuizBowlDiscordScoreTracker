@@ -18,7 +18,7 @@ namespace QuizBowlDiscordScoreTracker
         private ulong? readerId;
         private Format format;
 
-        private IDictionary<PlayerTeamPair, LastScoringSplit> cachedLastScoringSplit;
+        private IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> cachedLastScoringSplit;
         private IEnumerable<PhaseScore> cachedPhaseScoresPerPhase;
         private IDictionary<string, BonusStats> cachedBonusStats;
 
@@ -152,7 +152,7 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public async Task<IDictionary<PlayerTeamPair, LastScoringSplit>> GetLastScoringSplits()
+        public async Task<IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit>> GetLastScoringSplits()
         {
             IEnumerable<PlayerTeamPair> knownPlayers = await this.TeamManager.GetKnownPlayers();
 
@@ -301,7 +301,8 @@ namespace QuizBowlDiscordScoreTracker
                 foreach (ScoreAction scoreAction in phase.OrderedScoreActions)
                 {
                     // Try to get the split and clone it. If it doesn't exist, just make a new one.
-                    PlayerTeamPair pair = new PlayerTeamPair(scoreAction.Buzz.UserId, scoreAction.Buzz.TeamId);
+                    PlayerTeamPair pair = new PlayerTeamPair(
+                        scoreAction.Buzz.UserId, scoreAction.Buzz.PlayerDisplayName, scoreAction.Buzz.TeamId);
                     bool hasLastSplit = lastScoringSplits.TryGetValue(pair, out LastScoringSplit lastSplit);
                     ScoringSplit newSplit = hasLastSplit ? lastSplit.Split.Clone() : new ScoringSplit();
                     switch (scoreAction.Score)
@@ -372,7 +373,7 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             this.cachedPhaseScoresPerPhase = splitsPerPhase;
-            this.cachedLastScoringSplit = lastScoringSplits;
+            this.cachedLastScoringSplit = (IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit>)lastScoringSplits;
             this.cachedBonusStats = combinedBonusStats;
         }
 

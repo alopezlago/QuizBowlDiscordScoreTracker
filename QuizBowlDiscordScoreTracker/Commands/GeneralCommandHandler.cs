@@ -76,7 +76,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return this.Context.Channel.SendMessageAsync("Joining teams isn't supported in this mode.");
             }
 
-            if (!teamManager.TryAddPlayerToTeam(this.Context.User.Id, teamName))
+            if (!teamManager.TryAddPlayerToTeam(
+                this.Context.User.Id, guildUser.Nickname ?? guildUser.Username, teamName))
             {
                 return this.Context.Channel.SendMessageAsync(
                     $@"Couldn't join team ""{teamName}"". Make sure it is not misspelled.");

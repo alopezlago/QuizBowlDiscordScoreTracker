@@ -14,21 +14,22 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
 
         public ByCommandTeamManager()
         {
-            this.PlayerIdToTeamId = new Dictionary<ulong, string>();
+            this.PlayerIdToTeamId = new Dictionary<ulong, (string, string)>();
             this.TeamIdToName = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
         }
 
         public string JoinTeamDescription => @"No teams. Use ""!addTeam *teamName*"" to add a team.";
 
         // The Team ID is the team name, which must be unique
-        private IDictionary<ulong, string> PlayerIdToTeamId { get; }
+        private IDictionary<ulong, (string teamId, string playerName)> PlayerIdToTeamId { get; }
 
         // we use a dictionary instead of a Set to easilsy support the GetTeamIdToName method
         private IDictionary<string, string> TeamIdToName { get; }
 
         public Task<IEnumerable<PlayerTeamPair>> GetKnownPlayers()
         {
-            return Task.FromResult(this.PlayerIdToTeamId.Select(kvp => new PlayerTeamPair(kvp.Key, kvp.Value)));
+            return Task.FromResult(this.PlayerIdToTeamId.Select(
+                kvp => new PlayerTeamPair(kvp.Key, kvp.Value.playerName, kvp.Value.teamId)));
         }
 
         public Task<string> GetTeamIdOrNull(ulong userId)
@@ -36,10 +37,12 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
             string teamId;
             lock (this.collectionLock)
             {
-                if (!this.PlayerIdToTeamId.TryGetValue(userId, out teamId) || teamId == null)
+                if (!this.PlayerIdToTeamId.TryGetValue(userId, out (string teamId, string) tuple) || tuple.teamId == null)
                 {
                     return Task.FromResult<string>(null);
                 }
+
+                teamId = tuple.teamId;
             }
 
             return Task.FromResult(teamId);
@@ -57,7 +60,7 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
             return Task.FromResult(this.TeamIdToName.TryGetValue(teamId, out string teamName) ? teamName : null);
         }
 
-        public bool TryAddPlayerToTeam(ulong userId, string teamName)
+        public bool TryAddPlayerToTeam(ulong userId, string playerDisplayName, string teamName)
         {
             Verify.IsNotNull(teamName, nameof(teamName));
 
@@ -67,7 +70,7 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
                 return false;
             }
 
-            this.PlayerIdToTeamId[userId] = teamName;
+            this.PlayerIdToTeamId[userId] = (teamName, playerDisplayName);
             return true;
         }
 
@@ -100,6 +103,15 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
         public bool TryRemoveTeam(string teamName, out string message)
         {
             Verify.IsNotNull(teamName, nameof(teamName));
+
+            // If there are players on a team, we can't remove it
+            (string teamId, string playerName) = this.PlayerIdToTeamId.Values
+                .FirstOrDefault(pair => pair.teamId.Equals(teamName, StringComparison.InvariantCultureIgnoreCase));
+            if (playerName != default)
+            {
+                message = $"Cannot remove a team because at least one player (**{playerName}**) is still on it.";
+                return false;
+            }
 
             teamName = teamName.Trim();
             if (!this.TeamIdToName.Remove(teamName))

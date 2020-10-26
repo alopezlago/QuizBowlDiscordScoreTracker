@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.IO;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
@@ -10,6 +11,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             this.ChannelEmbeds = new List<string>();
             this.ChannelMessages = new List<string>();
             this.DirectMessages = new List<string>();
+            this.Files = new List<(Stream, string, string)>();
         }
 
         public IList<string> ChannelEmbeds { get; }
@@ -19,11 +21,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
         public IList<string> DirectMessages { get; }
 
+        public IList<(Stream stream, string filename, string text)> Files { get; }
+
         public void Clear()
         {
             this.ChannelEmbeds.Clear();
             this.ChannelMessages.Clear();
             this.DirectMessages.Clear();
+            this.Files.Clear();
         }
 
         public void VerifyChannelEmbeds(params string[] channelEmbed)

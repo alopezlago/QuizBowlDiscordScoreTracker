@@ -1,15 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Commands;
 using QuizBowlDiscordScoreTracker.Database;
+using QuizBowlDiscordScoreTracker.Scoresheet;
 using QuizBowlDiscordScoreTracker.TeamManager;
 using Format = QuizBowlDiscordScoreTracker.Format;
 
@@ -89,8 +93,11 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 messageStore, DefaultIds, DefaultGuildId, DefaultChannelId, DefaultReaderId);
             IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
                 this.botConfigurationfactory);
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            IFileScoresheetGenerator scoresheetGenerator = (new Mock<IFileScoresheetGenerator>()).Object;
 
-            ReaderCommandHandler handler = new ReaderCommandHandler(commandContext, manager, dbActionFactory);
+            ReaderCommandHandler handler = new ReaderCommandHandler(
+                commandContext, manager, options, dbActionFactory, scoresheetGenerator);
 
             await handler.ClearAllAsync();
 
@@ -199,7 +206,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
             currentGame.TeamManager = teamManager;
             Assert.IsTrue(teamManager.TryAddTeam("Alpha", out _), "Team should've been added");
-            Assert.IsTrue(teamManager.TryAddPlayerToTeam(buzzer, "Alpha"), "Should've been able to add the player");
+            Assert.IsTrue(
+                teamManager.TryAddPlayerToTeam(buzzer, nickname, "Alpha"), "Should've been able to add the player");
             Assert.IsNotNull(teamManager.GetTeamIdOrNull(buzzer), "Player should have a team");
 
             Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
@@ -431,6 +439,214 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsFalse(await currentGame.AddPlayer(buzzer, "Player"), "Shouldn't be able to add the player again");
         }
 
+        [TestMethod]
+        public async Task RemoveTeamSucceeds()
+        {
+            const string teamName = "Alpha";
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+
+            await handler.AddTeamAsync(teamName);
+            IReadOnlyDictionary<string, string> teamIdToNames = await currentGame.TeamManager.GetTeamIdToNames();
+            Assert.AreEqual(1, teamIdToNames.Count, "Unexpected number of teams after a team was added");
+            messageStore.Clear();
+
+            await handler.RemoveTeamAsync(teamName);
+            teamIdToNames = await currentGame.TeamManager.GetTeamIdToNames();
+            Assert.AreEqual(0, teamIdToNames.Count, "Unexpected number of teams after removal");
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages");
+            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(@$"Removed team ""{teamName}"".", message, "Unexpected message");
+        }
+
+        [TestMethod]
+        public async Task RemoveTeamFailsWhenPlayerScored()
+        {
+            const ulong playerId = 2;
+            const string playerName = "Alice";
+            const string teamName = "Alpha";
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+
+            await handler.AddTeamAsync(teamName);
+            ByCommandTeamManager teamManager = currentGame.TeamManager as ByCommandTeamManager;
+            Assert.IsTrue(
+                teamManager.TryAddPlayerToTeam(playerId, playerName, teamName),
+                "Couldn't add the player to the team");
+            Assert.IsTrue(await currentGame.AddPlayer(playerId, playerName), "Couldn't buzz in for the player");
+            currentGame.ScorePlayer(10);
+
+            Mock<IGuildUser> playerUser = new Mock<IGuildUser>();
+            playerUser.Setup(user => user.Id).Returns(playerId);
+            await handler.RemovePlayerAsync(playerUser.Object);
+
+            bool hasPlayers = (await teamManager.GetKnownPlayers()).Any();
+            Assert.IsFalse(hasPlayers, "Player should've been removed");
+
+            messageStore.Clear();
+
+            await handler.RemoveTeamAsync(teamName);
+            IReadOnlyDictionary<string, string> teamIdToNames = await currentGame.TeamManager.GetTeamIdToNames();
+            Assert.AreEqual(1, teamIdToNames.Count, "Unexpected number of teams after removal");
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages");
+            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(
+                @$"Unable to remove the team. **{playerName}** has already been scored, so the player cannot be removed without affecting the score.",
+                message,
+                "Unexpected message");
+        }
+
+        [TestMethod]
+        public async Task ExportToFileSucceeds()
+        {
+            const string streamText = "scoresheet";
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            Mock<IFileScoresheetGenerator> mockScoresheetGenerator = new Mock<IFileScoresheetGenerator>();
+
+            using (MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(streamText)))
+            {
+                Task<IResult<Stream>> result = Task.FromResult<IResult<Stream>>(new SuccessResult<Stream>(stream));
+                mockScoresheetGenerator
+                    .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<string>(), It.IsAny<string>()))
+                    .Returns(result);
+
+                this.CreateHandler(
+                    options,
+                    mockScoresheetGenerator.Object,
+                    out ReaderCommandHandler handler,
+                    out GameState currentGame,
+                    out MessageStore messageStore);
+                await handler.ExportToFileAsync();
+
+                string readerName = $"User_{DefaultReaderId}";
+                mockScoresheetGenerator
+                    .Verify(generator => generator.TryCreateScoresheet(currentGame, readerName, It.IsAny<string>()),
+                    Times.Once());
+                messageStore.VerifyChannelMessages();
+                Assert.AreEqual(1, messageStore.Files.Count, "Unexpected number of file attachments");
+                (Stream resultStream, string filename, string text) = messageStore.Files.First();
+                Assert.AreEqual($"Scoresheet_{readerName}_1.xlsx", filename, "Unexpected filename");
+
+                resultStream.Position = 0;
+                Assert.AreEqual(streamText.Length, resultStream.Length, "Unexpected stream length");
+                byte[] resultBytes = new byte[streamText.Length];
+                resultStream.Read(resultBytes, 0, resultBytes.Length);
+                string resultString = Encoding.UTF8.GetString(resultBytes);
+                Assert.AreEqual(streamText, resultString, "Unexpected result from the stream");
+            }
+        }
+
+        [TestMethod]
+        public async Task ExportToFileWhenGeneratorFails()
+        {
+            const string errorMessage = "Error!";
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            Mock<IFileScoresheetGenerator> mockScoresheetGenerator = new Mock<IFileScoresheetGenerator>();
+
+            Task<IResult<Stream>> result = Task.FromResult<IResult<Stream>>(new FailureResult<Stream>(errorMessage));
+            mockScoresheetGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<string>(), It.IsAny<string>()))
+                .Returns(result);
+
+            this.CreateHandler(
+                options,
+                mockScoresheetGenerator.Object,
+                out ReaderCommandHandler handler,
+                out GameState currentGame,
+                out MessageStore messageStore);
+            await handler.ExportToFileAsync();
+
+            string readerName = $"User_{DefaultReaderId}";
+            mockScoresheetGenerator
+                .Verify(generator => generator.TryCreateScoresheet(currentGame, readerName, It.IsAny<string>()),
+                Times.Once());
+            messageStore.VerifyChannelMessages($"Export failed. Error: {errorMessage}");
+        }
+
+        [TestMethod]
+        public async Task ExportToFileUserLimit()
+        {
+            const int userLimit = 2;
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            options.CurrentValue.DailyUserExportLimit = userLimit;
+            Mock<IFileScoresheetGenerator> mockScoresheetGenerator = new Mock<IFileScoresheetGenerator>();
+
+            using (MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes("scoresheet")))
+            {
+                Task<IResult<Stream>> result = Task.FromResult<IResult<Stream>>(new SuccessResult<Stream>(stream));
+                mockScoresheetGenerator
+                    .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<string>(), It.IsAny<string>()))
+                    .Returns(result);
+
+                this.CreateHandler(
+                    options,
+                    mockScoresheetGenerator.Object,
+                    out ReaderCommandHandler handler,
+                    out GameState currentGame,
+                    out MessageStore messageStore);
+
+                for (int i = 0; i < userLimit; i++)
+                {
+                    await handler.ExportToFileAsync();
+                }
+
+                messageStore.VerifyChannelMessages();
+                messageStore.Clear();
+
+                await handler.ExportToFileAsync();
+
+                string readerName = $"User_{DefaultReaderId}";
+                Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages");
+                string message = messageStore.ChannelMessages.First();
+                Assert.IsTrue(
+                    message.Contains("The user has already exceeded", StringComparison.InvariantCultureIgnoreCase),
+                    $"Couldn't find information on the user limit in the message '{message}'");
+                Assert.AreEqual(0, messageStore.Files.Count, "No files should've been attached");
+            }
+        }
+
+        [TestMethod]
+        public async Task ExportToFileGuildLimit()
+        {
+            const int guildLimit = 2;
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            options.CurrentValue.DailyGuildExportLimit = guildLimit;
+            Mock<IFileScoresheetGenerator> mockScoresheetGenerator = new Mock<IFileScoresheetGenerator>();
+
+            using (MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes("scoresheet")))
+            {
+                Task<IResult<Stream>> result = Task.FromResult<IResult<Stream>>(new SuccessResult<Stream>(stream));
+                mockScoresheetGenerator
+                    .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<string>(), It.IsAny<string>()))
+                    .Returns(result);
+
+                this.CreateHandler(
+                    options,
+                    mockScoresheetGenerator.Object,
+                    out ReaderCommandHandler handler,
+                    out GameState currentGame,
+                    out MessageStore messageStore);
+
+                for (int i = 0; i < guildLimit; i++)
+                {
+                    await handler.ExportToFileAsync();
+                }
+
+                messageStore.VerifyChannelMessages();
+                messageStore.Clear();
+
+                await handler.ExportToFileAsync();
+
+                string readerName = $"User_{DefaultReaderId}";
+                Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages");
+                string message = messageStore.ChannelMessages.First();
+                Assert.IsTrue(
+                    message.Contains("The server has already exceeded", StringComparison.InvariantCultureIgnoreCase),
+                    $"Couldn't find information on the user limit in the message '{message}'");
+                Assert.AreEqual(0, messageStore.Files.Count, "No files should've been attached");
+            }
+        }
+
         private static ulong GetExistingNonReaderUserId(ulong readerId = DefaultReaderId)
         {
             return DefaultIds.Except(new ulong[] { readerId }).First();
@@ -462,8 +678,35 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             game.TeamManager = new ByCommandTeamManager();
             IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
                 this.botConfigurationfactory);
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            IFileScoresheetGenerator scoresheetGenerator = (new Mock<IFileScoresheetGenerator>()).Object;
 
-            handler = new ReaderCommandHandler(commandContext, manager, dbActionFactory);
+            handler = new ReaderCommandHandler(commandContext, manager, options, dbActionFactory, scoresheetGenerator);
+        }
+
+        private void CreateHandler(
+            IOptionsMonitor<BotConfiguration> options,
+            IFileScoresheetGenerator scoresheetGenerator,
+            out ReaderCommandHandler handler,
+            out GameState game,
+            out MessageStore messageStore)
+        {
+            messageStore = new MessageStore();
+            ICommandContext commandContext = CommandMocks.CreateCommandContext(
+                messageStore,
+                DefaultIds,
+                DefaultGuildId,
+                DefaultChannelId,
+                userId: DefaultReaderId,
+                updateMockGuild: null,
+                out _);
+            GameStateManager manager = new GameStateManager();
+            manager.TryCreate(DefaultChannelId, out game);
+            game.TeamManager = new ByCommandTeamManager();
+            IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
+                this.botConfigurationfactory);
+
+            handler = new ReaderCommandHandler(commandContext, manager, options, dbActionFactory, scoresheetGenerator);
         }
     }
 }

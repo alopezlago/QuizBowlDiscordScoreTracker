@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Discord;
@@ -234,6 +235,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             mockMessageChannel
                 .Setup(channel => channel.Name)
                 .Returns("gameChannel");
+            mockMessageChannel
+                .Setup(channel => channel.SendFileAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<Embed>(), It.IsAny<RequestOptions>(), It.IsAny<bool>()))
+                .Returns<Stream, string, string, bool, Embed, RequestOptions, bool>(
+                    (stream, filename, text, isTTS, embed, requestOptions, isSpoiler) =>
+                    {
+                        messageStore.Files.Add((stream, filename, text));
+                        return Task.FromResult(mockUserMessage.Object);
+                    });
 
             updateMock?.Invoke(mockMessageChannel);
             return mockMessageChannel;
