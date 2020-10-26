@@ -102,7 +102,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Mock<IGuildUser> mockBotUser = new Mock<IGuildUser>();
             mockBotUser
                 .Setup(user => user.GetPermissions(It.IsAny<IGuildChannel>()))
-                .Returns(new ChannelPermissions(viewChannel: true, sendMessages: true, embedLinks: true));
+                .Returns(new ChannelPermissions(viewChannel: true, sendMessages: true, embedLinks: true, attachFiles: true));
             mockGuild
                 .Setup(guild => guild.GetCurrentUserAsync(It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
                 .Returns(Task.FromResult(mockBotUser.Object));

@@ -9,6 +9,7 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 - Grant the bot the following permissions:
   - Read Text Channels & See Voice Messages
   - Embed Links
+  - Attach Files
   - Send Messages
   - Mute Members
 - If you want to mute the reader when someone buzzes in, use this command to pair your packet channel with the voice channel:
@@ -54,6 +55,7 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 - Run the .exe file
 - Grant your bot the following permissions:
   - Read Text Channels & See Voice Messages
+  - Attach Files
   - Embed Links
   - Send Messages
   - Mute Members

@@ -193,7 +193,23 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
+            if (!(this.Context.Channel is IGuildChannel guildChannel))
+            {
+                return;
+            }
+
             Logger.Information($"User {this.Context.User.Id} attempting to export a scoresheet");
+
+            IGuildUser guildBotUser = await this.Context.Guild.GetCurrentUserAsync();
+            ChannelPermissions channelPermissions = guildBotUser.GetPermissions(guildChannel);
+            if (!channelPermissions.AttachFiles)
+            {
+                Logger.Information(
+                    $"User {this.Context.User.Id}'s export failed because channel {guildChannel.Id} didn't have the Attach Files permission");
+                await this.Context.Channel.SendMessageAsync(
+                    "This bot must have \"Attach Files\" permissions to export a scoresheet to a file");
+                return;
+            }
 
             int userExportCount;
             int guildExportCount;
