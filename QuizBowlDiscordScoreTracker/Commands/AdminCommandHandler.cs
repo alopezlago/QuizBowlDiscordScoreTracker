@@ -26,20 +26,20 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         private IDatabaseActionFactory DatabaseActionFactory { get; }
 
-        public async Task CheckPermissionsAsync()
+        public async Task CheckPermissionsAsync(IMessageChannel messageChannel)
         {
-            if (!(this.Context.Channel is IGuildChannel guildChannel))
+            messageChannel ??= this.Context.Channel;
+            if (!(messageChannel is IGuildChannel guildChannel))
             {
                 return;
             }
 
             IGuildUser guildBotUser = await this.Context.Guild.GetCurrentUserAsync();
             ChannelPermissions channelPermissions = guildBotUser.GetPermissions(guildChannel);
+            ChannelPermissions contextChannelPermissions = guildBotUser.GetPermissions(this.Context.Channel as IGuildChannel);
 
             StringBuilder builder = new StringBuilder();
-
-            // This is probably impossible to hit, since we must've heard the command in the guild. But maybe we'll add
-            // a version that accepts a channel argument.
+            
             if (!channelPermissions.ViewChannel)
             {
                 builder.AppendLine(
@@ -68,7 +68,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             ulong? voiceChannelId;
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
             {
-                voiceChannelId = await action.GetPairedVoiceChannelIdOrNullAsync(this.Context.Channel.Id);
+                voiceChannelId = await action.GetPairedVoiceChannelIdOrNullAsync(guildChannel.Id);
             }
 
             if (voiceChannelId.HasValue)
@@ -89,11 +89,12 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             if (builder.Length == 0)
             {
-                await this.Context.Channel.SendMessageAsync("All permissions are set up correctly.");
-                return;
+                builder.AppendLine("All permissions are set up correctly.");
             }
 
-            bool sendDm = !channelPermissions.ViewChannel || !channelPermissions.SendMessages;
+            // This does not need to check for ViewChannel from the context, as we are responding
+            // to the command
+            bool sendDm = !contextChannelPermissions.SendMessages;
             if (sendDm)
             {
                 await this.Context.User.SendMessageAsync(builder.ToString());
