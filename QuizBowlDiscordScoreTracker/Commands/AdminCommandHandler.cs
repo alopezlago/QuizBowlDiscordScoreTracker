@@ -26,9 +26,10 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         private IDatabaseActionFactory DatabaseActionFactory { get; }
 
-        public async Task CheckPermissionsAsync()
+        public async Task CheckPermissionsAsync([Summary("Text channel mention (#textChannelName)")] IMessageChannel messageChannel)
         {
-            if (!(this.Context.Channel is IGuildChannel guildChannel))
+            messageChannel ??= this.Context.Channel;
+            if (!(messageChannel is IGuildChannel guildChannel))
             {
                 return;
             }

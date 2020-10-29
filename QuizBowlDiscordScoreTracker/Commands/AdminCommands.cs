@@ -17,10 +17,11 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private IDatabaseActionFactory DatabaseActionFactory { get; }
 
         [Command("checkPermissions")]
-        [Summary("Checks if the bot has all the required permissions.")]
-        public Task CheckPermissionsAsync()
+        [Summary("Checks if the bot has all the required permissions. " + 
+                 "Omitting a channel mention will check the current channel's permissions.")]
+        public Task CheckPermissionsAsync([Summary("Text channel mention (#textChannelName)")] ITextChannel messageChannel)
         {
-            return this.GetHandler().CheckPermissionsAsync();
+            return this.GetHandler().CheckPermissionsAsync(messageChannel);
         }
 
         [Command("clearTeamRolePrefix")]
