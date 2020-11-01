@@ -218,6 +218,19 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
+            string readerRolePrefix;
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                readerRolePrefix = await action.GetReaderRolePrefixAsync(this.Context.Guild.Id);
+            }
+
+            if (!user.CanRead(this.Context.Guild, readerRolePrefix))
+            {
+                await this.Context.Channel.SendMessageAsync(
+                    @$"{user.Mention} can't read because they don't have a role starting with the prefix ""{readerRolePrefix}"".");
+                return;
+            }
+
             state.ReaderId = this.Context.User.Id;
 
             if (this.Context.Channel is IGuildChannel guildChannel)

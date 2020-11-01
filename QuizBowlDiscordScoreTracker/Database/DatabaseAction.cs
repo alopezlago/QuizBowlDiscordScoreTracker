@@ -27,6 +27,19 @@ namespace QuizBowlDiscordScoreTracker.Database
             await this.Context.SaveChangesAsync();
         }
 
+        public async Task ClearReaderRolePrefixAsync(ulong guildId)
+        {
+            GuildSetting guild = await this.Context.FindAsync<GuildSetting>(guildId);
+            if (guild == null)
+            {
+                return;
+            }
+
+            guild.ReaderRolePrefix = null;
+            await this.RemoveGuildIfEmptyAsync(guild);
+            await this.Context.SaveChangesAsync();
+        }
+
         public async Task ClearTeamRolePrefixAsync(ulong guildId)
         {
             GuildSetting guild = await this.Context.FindAsync<GuildSetting>(guildId);
@@ -75,16 +88,22 @@ namespace QuizBowlDiscordScoreTracker.Database
             return textChannel?.VoiceChannelId;
         }
 
+        public async Task<string> GetReaderRolePrefixAsync(ulong guildId)
+        {
+            GuildSetting guild = await this.Context.FindAsync<GuildSetting>(guildId);
+            return guild?.ReaderRolePrefix ?? null;
+        }
+
         public async Task<string> GetTeamRolePrefixAsync(ulong guildId)
         {
-            GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
-            return guild.TeamRolePrefix;
+            GuildSetting guild = await this.Context.FindAsync<GuildSetting>(guildId);
+            return guild?.TeamRolePrefix ?? null;
         }
 
         public async Task<bool> GetUseBonuses(ulong guildId)
         {
-            GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
-            return guild.UseBonuses;
+            GuildSetting guild = await this.Context.FindAsync<GuildSetting>(guildId);
+            return guild?.UseBonuses ?? false;
         }
 
         public async Task<int> GetGuildExportCount(ulong guildId)
@@ -178,6 +197,13 @@ namespace QuizBowlDiscordScoreTracker.Database
             await this.Context.SaveChangesAsync();
         }
 
+        public async Task SetReaderRolePrefixAsync(ulong guildId, string prefix)
+        {
+            GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
+            guild.ReaderRolePrefix = prefix;
+            await this.Context.SaveChangesAsync();
+        }
+
         public async Task SetTeamRolePrefixAsync(ulong guildId, string prefix)
         {
             GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
@@ -267,7 +293,10 @@ namespace QuizBowlDiscordScoreTracker.Database
 
         private async Task RemoveGuildIfEmptyAsync(GuildSetting guild)
         {
-            if (guild.TeamRolePrefix != null)
+            if (guild.TeamRolePrefix != null ||
+                guild.ReaderRolePrefix != null ||
+                guild.UseBonuses ||
+                (guild.ExportCount > 0 && guild.LastExportDay == DateTime.UtcNow.Day))
             {
                 return;
             }
@@ -276,9 +305,7 @@ namespace QuizBowlDiscordScoreTracker.Database
             GuildSetting guildWithTextChannels = await this.Context.Guilds
                 .Include(g => g.TextChannels)
                 .FirstOrDefaultAsync(g => g.GuildSettingId == guild.GuildSettingId);
-            if ((guildWithTextChannels.TextChannels == null || guildWithTextChannels.TextChannels.Count == 0) &&
-                !guildWithTextChannels.UseBonuses &&
-                (guildWithTextChannels.ExportCount == 0 || guildWithTextChannels.LastExportDay != DateTime.UtcNow.Day))
+            if (guildWithTextChannels.TextChannels == null || guildWithTextChannels.TextChannels.Count == 0)
             {
                 this.Context.Remove(guild);
             }

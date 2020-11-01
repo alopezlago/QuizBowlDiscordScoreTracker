@@ -110,6 +110,95 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task SetReaderRole()
+        {
+            const string prefix = "Reader";
+            const string newPrefix = "The Reader";
+
+            this.CreateHandler(
+                out AdminCommandHandler handler,
+                out MessageStore messageStore);
+            await handler.SetReaderRolePrefixAsync(prefix);
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+            string setMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                setMessage.Contains(prefix, StringComparison.InvariantCulture),
+                $"Prefix not in message \"{setMessage}\"");
+
+            messageStore.Clear();
+
+            await handler.GetReaderRolePrefixAsync();
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after getting the team role");
+            string getMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                getMessage.Contains(prefix, StringComparison.InvariantCulture),
+                $"Prefix not in message \"{getMessage}\"");
+            Assert.AreNotEqual(setMessage, getMessage, "Get and set messages should be different");
+
+            messageStore.Clear();
+
+            await handler.SetReaderRolePrefixAsync(newPrefix);
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
+            setMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                setMessage.Contains(newPrefix, StringComparison.InvariantCulture),
+                $"Prefix not in message \"{setMessage}\" after update");
+
+            messageStore.Clear();
+
+            await handler.GetReaderRolePrefixAsync();
+            Assert.AreEqual(
+                1,
+                messageStore.ChannelMessages.Count,
+                "Unexpected number of messages when getting the team role after the update");
+            getMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                getMessage.Contains(prefix, StringComparison.InvariantCulture),
+                $"Prefix not in message \"{getMessage}\" after update");
+            Assert.AreNotEqual(setMessage, getMessage, "Get and set messages should be different after update");
+        }
+
+        [TestMethod]
+        public async Task ClearReaderRolePrefix()
+        {
+            const string prefix = "Reader";
+            this.CreateHandler(
+                out AdminCommandHandler handler,
+                out MessageStore messageStore);
+
+            await handler.SetReaderRolePrefixAsync(prefix);
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+            string setMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                setMessage.Contains(prefix, StringComparison.InvariantCulture),
+                $"Prefix not in message \"{setMessage}\"");
+
+            messageStore.Clear();
+
+            await handler.ClearReaderRolePrefixAsync();
+            Assert.AreEqual(
+                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
+            string clearMessage = messageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                clearMessage.Contains("unset", StringComparison.InvariantCulture),
+                @$"""unset"" not in message ""{clearMessage}"" after update");
+
+            messageStore.Clear();
+
+            await handler.GetReaderRolePrefixAsync();
+            Assert.AreEqual(
+                1,
+                messageStore.ChannelMessages.Count,
+                "Unexpected number of messages when getting the team role after the update");
+            string getMessage = messageStore.ChannelMessages[0];
+            Assert.AreEqual("No reader prefix used", getMessage, $"The team role prefix was not cleared");
+        }
+
+        [TestMethod]
         public async Task SetTeamRole()
         {
             const string prefix = "Team #";

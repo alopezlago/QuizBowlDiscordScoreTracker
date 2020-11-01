@@ -33,6 +33,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         private const ulong ThirdTeamRoleId = FirstTeamRoleId + 2;
         private const string ThirdTeamName = "Gamma";
 
+        private const ulong DefaultReaderRoleId = 1001;
+        private const string DefaultReaderRoleName = "Readers";
+
         private InMemoryBotConfigurationContextFactory BotConfigurationfactory { get; set; }
 
         private GeneralCommandHandler Handler { get; set; }
@@ -88,6 +91,54 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             await this.Handler.SetReaderAsync();
 
             Assert.IsNull(this.Game.ReaderId, "Reader should not be set for nonexistent user.");
+        }
+
+        [TestMethod]
+        public async Task CanSetReaderToUserWithReaderRole()
+        {
+            this.InitializeHandler(DefaultIds, DefaultReaderId, TeamManagerType.Solo, (mockGuildUser) =>
+            {
+                mockGuildUser.Setup(user => user.RoleIds).Returns(new ulong[] { DefaultReaderRoleId });
+            });
+
+            using (BotConfigurationContext context = this.BotConfigurationfactory.Create())
+            using (DatabaseAction action = new DatabaseAction(context))
+            {
+                await action.SetReaderRolePrefixAsync(
+                    DefaultGuildId, DefaultReaderRoleName.Substring(0, DefaultReaderRoleName.Length - 1));
+            }
+
+            await this.Handler.SetReaderAsync();
+
+            Assert.AreEqual(DefaultReaderId, this.Game.ReaderId, "Reader ID was not set properly.");
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+            Assert.IsTrue(
+                this.MessageStore.ChannelMessages.First().Contains($"@User_{DefaultReaderId}", StringComparison.InvariantCulture),
+                "Message should include the Mention of the user.");
+        }
+
+        [TestMethod]
+        public async Task CannotSetReaderToUserWithoutReaderRole()
+        {
+            string readerRolePrefix = DefaultReaderRoleName.Substring(0, DefaultReaderRoleName.Length - 1);
+
+            this.InitializeHandler(DefaultIds, DefaultReaderId, TeamManagerType.Solo, (mockGuildUser) =>
+            {
+                mockGuildUser.Setup(user => user.RoleIds).Returns(Array.Empty<ulong>());
+            });
+
+            using (BotConfigurationContext context = this.BotConfigurationfactory.Create())
+            using (DatabaseAction action = new DatabaseAction(context))
+            {
+                await action.SetReaderRolePrefixAsync(DefaultGuildId, readerRolePrefix);
+            }
+
+            await this.Handler.SetReaderAsync();
+
+            Assert.IsNull(this.Game.ReaderId, "Reader should not be set for nonexistent user.");
+
+            this.MessageStore.VerifyChannelMessages(
+                @$"@User_{DefaultReaderId} can't read because they don't have a role starting with the prefix ""{readerRolePrefix}"".");
         }
 
         [TestMethod]
@@ -1586,10 +1637,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     Mock<IRole> mockRole3 = new Mock<IRole>();
                     mockRole3.Setup(role => role.Id).Returns(ThirdTeamRoleId);
                     mockRole3.Setup(role => role.Name).Returns($"Team {ThirdTeamName}");
+                    Mock<IRole> mockReaderRole = new Mock<IRole>();
+                    mockReaderRole.Setup(role => role.Id).Returns(DefaultReaderRoleId);
+                    mockReaderRole.Setup(role => role.Name).Returns(DefaultReaderRoleName);
 
                     IRole[] roles = new IRole[]
                     {
-                        mockRole.Object, mockRole2.Object, mockRole3.Object
+                        mockRole.Object, mockRole2.Object, mockRole3.Object, mockReaderRole.Object
                     };
                     mockGuild.Setup(guild => guild.Roles).Returns(roles);
 

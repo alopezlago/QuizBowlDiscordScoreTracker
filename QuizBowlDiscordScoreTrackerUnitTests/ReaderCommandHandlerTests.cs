@@ -27,6 +27,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
         private const ulong DefaultChannelId = 11;
         private const ulong DefaultGuildId = 9;
+        private const ulong DefaultReaderRoleId = 1001;
+        private const string DefaultReaderRoleName = "Readers";
 
         private InMemoryBotConfigurationContextFactory botConfigurationfactory;
 
@@ -71,16 +73,75 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task CanSetUserWithReaderRoleAsNewReader()
+        {
+            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            using (DatabaseAction action = new DatabaseAction(context))
+            {
+                await action.SetReaderRolePrefixAsync(DefaultGuildId, "Reader");
+            }
+
+            ulong newReaderId = GetExistingNonReaderUserId();
+            string newReaderMention = $"@User_{newReaderId}";
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            currentGame.ReaderId = DefaultReaderId;
+
+            Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
+            mockUser.Setup(user => user.Id).Returns(newReaderId);
+            mockUser.Setup(user => user.Mention).Returns(newReaderMention);
+            mockUser.Setup(user => user.RoleIds).Returns(new ulong[] { DefaultReaderRoleId });
+            await handler.SetNewReaderAsync(mockUser.Object);
+
+            Assert.AreEqual(newReaderId, currentGame.ReaderId, "Reader ID was not set correctly.");
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+
+            string expectedMessage = $"{newReaderMention} is now the reader.";
+            messageStore.VerifyChannelMessages(expectedMessage);
+        }
+
+        [TestMethod]
+        public async Task CannotSetUserWithoutReaderRoleAsNewReader()
+        {
+            const string readerRolePrefix = "Reader";
+            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            using (DatabaseAction action = new DatabaseAction(context))
+            {
+                await action.SetReaderRolePrefixAsync(DefaultGuildId, readerRolePrefix);
+            }
+
+            ulong newReaderId = GetExistingNonReaderUserId();
+            string newReaderMention = $"@User_{newReaderId}";
+            this.CreateHandler(
+                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            currentGame.ReaderId = DefaultReaderId;
+
+            Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
+            mockUser.Setup(user => user.Id).Returns(newReaderId);
+            mockUser.Setup(user => user.Mention).Returns(newReaderMention);
+            mockUser.Setup(user => user.RoleIds).Returns(new ulong[] { DefaultReaderRoleId + 1 });
+            await handler.SetNewReaderAsync(mockUser.Object);
+
+            Assert.AreEqual(DefaultReaderId, currentGame.ReaderId, "Reader ID was updated incorrectly.");
+            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+
+            string expectedMessage = $@"Cannot set {newReaderMention} as the reader because they do not have a role with the reader prefix ""{readerRolePrefix}""";
+            messageStore.VerifyChannelMessages(expectedMessage);
+        }
+
+        [TestMethod]
         public async Task ClearEmptiesQueue()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(out ReaderCommandHandler handler, out GameState currentGame, out _);
+            this.CreateHandler(out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
 
             await currentGame.AddPlayer(buzzer, "Player");
             await handler.ClearAsync();
 
             Assert.IsFalse(currentGame.TryGetNextPlayer(out ulong _), "Queue should've been cleared.");
             Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "We should be able to add the buzzer again.");
+
+            messageStore.VerifyChannelMessages("Current cycle cleared of all buzzes.");
         }
 
         [TestMethod]
@@ -671,7 +732,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 DefaultGuildId,
                 DefaultChannelId,
                 userId: DefaultReaderId,
-                updateMockGuild: null,
+                updateMockGuild: UpdateMockGuild,
                 out _);
             GameStateManager manager = new GameStateManager();
             manager.TryCreate(DefaultChannelId, out game);
@@ -698,7 +759,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 DefaultGuildId,
                 DefaultChannelId,
                 userId: DefaultReaderId,
-                updateMockGuild: null,
+                updateMockGuild: UpdateMockGuild,
                 out _);
             GameStateManager manager = new GameStateManager();
             manager.TryCreate(DefaultChannelId, out game);
@@ -707,6 +768,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 this.botConfigurationfactory);
 
             handler = new ReaderCommandHandler(commandContext, manager, options, dbActionFactory, scoresheetGenerator);
+        }
+
+        private static void UpdateMockGuild(Mock<IGuild> mockGuild, ITextChannel textChannel)
+        {
+            Mock<IRole> mockReaderRole = new Mock<IRole>();
+            mockReaderRole.Setup(role => role.Id).Returns(DefaultReaderRoleId);
+            mockReaderRole.Setup(role => role.Name).Returns(DefaultReaderRoleName);
+            mockGuild.Setup(guild => guild.Roles).Returns(new IRole[] { mockReaderRole.Object });
         }
     }
 }
