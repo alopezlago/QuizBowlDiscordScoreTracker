@@ -103,6 +103,17 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.Context.Channel.SendMessageAsync(builder.ToString());
         }
 
+        public async Task ClearReaderRolePrefixAsync()
+        {
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                await action.ClearReaderRolePrefixAsync(this.Context.Guild.Id);
+            }
+
+            Logger.Information($"Reader prefix cleared in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
+            await this.Context.Channel.SendMessageAsync("Prefix unset. Roles no longer determine who can use !read.");
+        }
+
         public async Task ClearTeamRolePrefixAsync()
         {
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
@@ -140,10 +151,14 @@ namespace QuizBowlDiscordScoreTracker.Commands
         public async Task GetDefaultFormatAsync()
         {
             bool useBonuses;
+            string readerRolePrefix;
             string teamRolePrefix;
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
             {
+                // TODO: Should we make this one call so we don't need to await on all of them (and we could do it
+                // with one SELECT instead of 3)?
                 useBonuses = await action.GetUseBonuses(this.Context.Guild.Id);
+                readerRolePrefix = await action.GetReaderRolePrefixAsync(this.Context.Guild.Id);
                 teamRolePrefix = await action.GetTeamRolePrefixAsync(this.Context.Guild.Id);
             }
 
@@ -154,6 +169,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 Description = "The default settings for games in this server"
             };
             builder.AddField("Require scoring bonuses?", useBonuses ? "Yes" : "No");
+            builder.AddField("Reader role prefix?", readerRolePrefix == null ? "None set" : @$"Yes: ""{readerRolePrefix}""");
             builder.AddField("Team role prefix?", teamRolePrefix == null ? "None set" : @$"Yes: ""{teamRolePrefix}""");
 
             await this.Context.Channel.SendMessageAsync(embed: builder.Build());
@@ -183,6 +199,18 @@ namespace QuizBowlDiscordScoreTracker.Commands
             string message = voiceChannel == null ?
                 "The paired voice channel no longer exists" :
                 @$"Paired voice channel: ""{voiceChannel.Name}""";
+            await this.Context.Channel.SendMessageAsync(message);
+        }
+
+        public async Task GetReaderRolePrefixAsync()
+        {
+            string prefix;
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                prefix = await action.GetReaderRolePrefixAsync(this.Context.Guild.Id);
+            }
+
+            string message = prefix == null ? "No reader prefix used" : @$"Reader prefix: ""{prefix}""";
             await this.Context.Channel.SendMessageAsync(message);
         }
 
@@ -225,6 +253,18 @@ namespace QuizBowlDiscordScoreTracker.Commands
             Logger.Information(
                 $"Channels {textChannel.Id} and {voiceChannel.Id} paired successfully by user {this.Context.User.Id}");
             await this.Context.Channel.SendMessageAsync("Text and voice channel paired successfully");
+        }
+
+        public async Task SetReaderRolePrefixAsync(string prefix)
+        {
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                await action.SetReaderRolePrefixAsync(this.Context.Guild.Id, prefix);
+            }
+
+            Logger.Information($"Reader prefix set in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
+            await this.Context.Channel.SendMessageAsync(
+                @$"Prefix set. Only users who have arole starting with ""{prefix}"" will be able to use !read.");
         }
 
         public async Task SetTeamRolePrefixAsync(string prefix)

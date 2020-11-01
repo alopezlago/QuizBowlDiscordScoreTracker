@@ -6,6 +6,7 @@ namespace QuizBowlDiscordScoreTracker.Database
     {
         // This should match the Guild ID
         public ulong GuildSettingId { get; set; }
+        public string ReaderRolePrefix { get; set; }
         public string TeamRolePrefix { get; set; }
         public bool UseBonuses { get; set; }
 

@@ -269,6 +269,19 @@ namespace QuizBowlDiscordScoreTracker.Commands
         {
             if (newReader != null && this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
             {
+                string readerRolePrefix;
+                using (DatabaseAction action = this.DatabaseActionFactory.Create())
+                {
+                    readerRolePrefix = await action.GetReaderRolePrefixAsync(this.Context.Guild.Id);
+                }
+
+                if (!newReader.CanRead(this.Context.Guild, readerRolePrefix))
+                {
+                    await this.Context.Channel.SendMessageAsync(
+                        @$"Cannot set {newReader.Mention} as the reader because they do not have a role with the reader prefix ""{readerRolePrefix}""");
+                    return;
+                }
+
                 game.ReaderId = newReader.Id;
                 await this.Context.Channel.SendMessageAsync($"{newReader.Mention} is now the reader.");
                 return;
@@ -307,12 +320,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         public Task ClearAsync()
         {
-            if (this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
             {
-                game.ClearCurrentRound();
+                return Task.CompletedTask;
             }
 
-            return Task.CompletedTask;
+            game.ClearCurrentRound();
+            return this.Context.Channel.SendMessageAsync("Current cycle cleared of all buzzes.");
         }
 
         public async Task NextAsync()

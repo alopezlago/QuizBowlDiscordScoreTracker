@@ -23,6 +23,14 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().CheckPermissionsAsync();
         }
 
+        [Command("clearReaderRolePrefix")]
+        [Summary("Disables restricting readers to those who have a role with the same prefix. Only server admins can" +
+            "invoke this.")]
+        public Task ClearReaderRolePrefixAsync()
+        {
+            return this.GetHandler().ClearReaderRolePrefixAsync();
+        }
+
         [Command("clearTeamRolePrefix")]
         [Summary("Disables pairing players together based on sharing a role with the same prefix. Only server " +
             "admins can invoke this.")]
@@ -52,6 +60,14 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().GetPairedChannelAsync(textChannel);
         }
 
+        [Command("getReaderRolePrefix")]
+        [Summary("Posts the prefix for the role name used to restrict who can read, if it exists. Only server admins " +
+            "can invoke this.")]
+        public Task GetReaderRolePrefixAsync()
+        {
+            return this.GetHandler().GetReaderRolePrefixAsync();
+        }
+
         [Command("getTeamRolePrefix")]
         [Summary("Posts the prefix for the role name used to assign teams, if it exists. Only server admins can " +
             "invoke this.")]
@@ -75,6 +91,16 @@ namespace QuizBowlDiscordScoreTracker.Commands
             [Remainder][Summary("Name of the voice channel (no # included)")] string voiceChannelName)
         {
             return this.GetHandler().PairChannelsAsync(textChannel, voiceChannelName);
+        }
+
+        [Command("setReaderRolePrefix")]
+        [Summary("Only users who have a role with this prefix will be allowed to use !read. For example, if a user " +
+            @"has the role ""Readers"", and the prefix is set to ""Reader"", then the user will be able to use !read." +
+            @"Only server admins can invoke this.")]
+        public Task SetReaderRolePrefixAsync(
+            [Remainder][Summary("Prefix for roles that are used to group players into teams")] string prefix)
+        {
+            return this.GetHandler().SetReaderRolePrefixAsync(prefix);
         }
 
         [Command("setTeamRolePrefix")]

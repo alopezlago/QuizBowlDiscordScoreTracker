@@ -49,6 +49,7 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 - Unzip the release
 - Create your own config file. Use the sampleConfig.txt file as an example. Your file should be called config.txt.
 - Go to https://discordapp.com/developers to register your instance of the bot
+  - Make sure that the bot has both the Presence and Server Members Intent, which you can set in the Bot pane of the application view
   - Update token.txt with the client secret from your registered Discord bot
   - Visit this site (with your bot's client ID) to add the bot to your channel
     - https://discordapp.com/oauth2/authorize?client_id=CLIENTID&scope=bot
