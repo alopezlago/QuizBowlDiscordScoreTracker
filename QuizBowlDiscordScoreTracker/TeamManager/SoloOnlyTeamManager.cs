@@ -27,5 +27,10 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
             IReadOnlyDictionary<string, string> teamIdToNames = new Dictionary<string, string>();
             return Task.FromResult(teamIdToNames);
         }
+
+        public void ReloadTeamRoles(out string message)
+        {
+            message = $@"Cannot reload team roles.";
+        }
     }
 }

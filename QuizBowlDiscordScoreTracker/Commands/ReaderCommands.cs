@@ -45,6 +45,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().RemoveTeamAsync(teamName);
         }
 
+        [Command("reloadTeamRoles")]
+        [Summary("Reload a teams of the game (not available if the team role prefix is set).")]
+        public Task ReloadTeamsAsync()
+        {
+            return this.GetHandler().ReloadTeamRoles();
+        }
+
         [Command("removePlayer")]
         [Summary("Removes a player from the given team (not available if the team role prefix is set).")]
         public Task RemovePlayerAsync([Summary("Mention of the user to remove")] IGuildUser player)
