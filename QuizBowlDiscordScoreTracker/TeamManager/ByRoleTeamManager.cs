@@ -7,7 +7,7 @@ using Discord;
 
 namespace QuizBowlDiscordScoreTracker.TeamManager
 {
-    public class ByRoleTeamManager : ITeamManager
+    public class ByRoleTeamManager : ITeamManager, IByRoleTeamManager
     {
         private readonly object teamIdToNameLock = new object();
 
@@ -58,6 +58,12 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
         {
             IReadOnlyDictionary<string, string> teamIdToName = (IReadOnlyDictionary<string, string>)this.TeamIdToName;
             return Task.FromResult(teamIdToName);
+        }
+
+        public void ReloadTeamRoles(out string message)
+        {
+            this.InitiailzeTeamIdToName();
+            message = $@"Reload team roles OK.";
         }
 
         private void InitiailzeTeamIdToName()

@@ -57,6 +57,11 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
             return Task.FromResult(this.TeamIdToName.TryGetValue(teamId, out string teamName) ? teamName : null);
         }
 
+        public void ReloadTeamRoles(out string message)
+        {
+            message = $@"Cannot reload team roles.";
+        }
+
         public bool TryAddPlayerToTeam(ulong userId, string teamName)
         {
             Verify.IsNotNull(teamName, nameof(teamName));

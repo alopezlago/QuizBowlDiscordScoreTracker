@@ -1,6 +1,7 @@
 ﻿using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.TeamManager;
 using Serilog;
 
@@ -10,13 +11,16 @@ namespace QuizBowlDiscordScoreTracker.Commands
     {
         private static readonly ILogger Logger = Log.ForContext(typeof(ReaderCommandHandler));
 
-        public ReaderCommandHandler(ICommandContext context, GameStateManager manager)
+        public ReaderCommandHandler(ICommandContext context, GameStateManager manager, IDatabaseActionFactory dbActionFactory)
         {
             this.Context = context;
             this.Manager = manager;
+            this.DatabaseActionFactory = dbActionFactory;
         }
 
         private ICommandContext Context { get; }
+
+        private IDatabaseActionFactory DatabaseActionFactory { get; }
 
         private GameStateManager Manager { get; }
 
@@ -58,6 +62,23 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.Context.Channel.SendMessageAsync(message);
         }
 
+        public async Task ReloadTeamRoles()
+        {
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
+            {
+                // This command only works during a game
+                return;
+            }
+
+            if (!(game.TeamManager is IByRoleTeamManager teamManager))
+            {
+                await this.Context.Channel.SendMessageAsync("Reload teamRoles isn't supported in this mode.");
+                return;
+            }
+
+            teamManager.ReloadTeamRoles(out string message);
+            await this.Context.Channel.SendMessageAsync(message);
+        }
         public async Task RemovePlayerAsync(IGuildUser player)
         {
             Verify.IsNotNull(player, nameof(player));
@@ -85,6 +106,59 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             await this.Context.Channel.SendMessageAsync(
                 $@"Player ""{playerName}"" removed from their team.");
+        }
+
+        public async Task DisableBonusesAsync()
+        {
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
+            {
+                // This command only works during a game
+                return;
+            }
+            else if (game.Format.HighestPhaseIndexWithBonus < 0)
+            {
+                await this.Context.Channel.SendMessageAsync("Bonuses are already untracked.");
+                return;
+            }
+
+            bool alwaysUseBonuses;
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                alwaysUseBonuses = await action.GetUseBonuses(this.Context.Guild.Id);
+            }
+
+            if (alwaysUseBonuses)
+            {
+                await this.Context.Channel.SendMessageAsync(
+                    "Bonuses are always tracked in this server. Run !disableBonusesAlways and restart the game to stop tracking bonuses.");
+                return;
+            }
+
+            // TODO: We should look into cloning the format and changing the HighestPhaseIndexWithBonus field. This
+            // would require another argument for the enable command, though, since it requires a number
+            game.Format = Format.TossupShootout;
+            await this.Context.Channel.SendMessageAsync(
+                "Bonuses are no longer being tracked. Scores for the current question have been cleared.");
+        }
+
+        public async Task EnableBonusesAsync()
+        {
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
+            {
+                // This command only works during a game
+                return;
+            }
+            else if (game.Format.HighestPhaseIndexWithBonus >= 0)
+            {
+                await this.Context.Channel.SendMessageAsync("Bonuses are already tracked.");
+                return;
+            }
+
+            // TODO: We should look into cloning the format and changing the HighestPhaseIndexWithBonus field. This
+            // would require an argument for how many bonuses to read
+            game.Format = Format.TossupBonusesShootout;
+            await this.Context.Channel.SendMessageAsync(
+                "Bonuses are now being tracked. Scores for the current question have been cleared.");
         }
 
         public async Task SetNewReaderAsync(IGuildUser newReader)
@@ -143,6 +217,10 @@ namespace QuizBowlDiscordScoreTracker.Commands
             {
                 return;
             }
+            else if (game.PhaseNumber >= GameState.MaximumPhasesCount)
+            {
+                await this.Context.Channel.SendMessageAsync($"Reached the limit for games ({GameState.MaximumPhasesCount} questions)");
+            }
 
             game.NextQuestion();
 
@@ -153,11 +231,18 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         public async Task UndoAsync()
         {
-            if (!(this.Manager.TryGet(this.Context.Channel.Id, out GameState game) && game.Undo(out ulong userId)))
+            if (!(this.Manager.TryGet(this.Context.Channel.Id, out GameState game) && game.Undo(out ulong? nextUserId)))
             {
                 return;
             }
 
+            if (nextUserId == null && game.CurrentStage == PhaseStage.Bonus)
+            {
+                await this.Context.Channel.SendMessageAsync($"**Bonus for TU {game.PhaseNumber}**");
+                return;
+            }
+
+            ulong userId = nextUserId.Value;
             IGuildUser user = await this.Context.Guild.GetUserAsync(userId);
             string name;
             string message;
@@ -174,7 +259,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 string nextPlayerMention = null;
                 while (game.TryGetNextPlayer(out ulong nextPlayerId))
                 {
-                    IGuildUser nextPlayerUser = await this.Context.Guild.GetUserAsync(userId);
+                    IGuildUser nextPlayerUser = await this.Context.Guild.GetUserAsync(nextPlayerId);
                     if (nextPlayerUser != null)
                     {
                         nextPlayerMention = nextPlayerUser.Mention;
@@ -186,7 +271,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 }
 
                 message = nextPlayerMention != null ?
-                    $"Undid scoring for {name}. {nextPlayerMention}. your answer?" :
+                    $"Undid scoring for {name}. {nextPlayerMention}, your answer?" :
                     $"Undid scoring for {name}.";
             }
             else
