@@ -182,6 +182,12 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         public async Task ExportToFileAsync()
         {
+            if (this.Context.User.IsBot)
+            {
+                // Cannot export to file as a bot
+                return;
+            }
+            
             if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
             {
                 // This command only works during a game
