@@ -13,6 +13,5 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
 
         Task<IReadOnlyDictionary<string, string>> GetTeamIdToNames();
 
-        public void ReloadTeamRoles(out string message);
     }
 }

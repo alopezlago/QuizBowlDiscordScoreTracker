@@ -46,7 +46,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         }
 
         [Command("reloadTeamRoles")]
-        [Summary("Reload a teams of the game (not available if the team role prefix is set).")]
+        [Summary("Reload the teams of the game (not available if the team role prefix isn't set).")]
         public Task ReloadTeamsAsync()
         {
             return this.GetHandler().ReloadTeamRoles();

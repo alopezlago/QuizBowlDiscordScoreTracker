@@ -108,7 +108,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             if (!(game.TeamManager is IByRoleTeamManager teamManager))
             {
-                await this.Context.Channel.SendMessageAsync("Reload teamRoles isn't supported in this mode.");
+                await this.Context.Channel.SendMessageAsync("Reloading team roles isn't supported in this mode.");
                 return;
             }
 
