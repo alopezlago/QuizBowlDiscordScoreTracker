@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
 using QuizBowlDiscordScoreTracker.Database;
@@ -17,10 +18,11 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private IDatabaseActionFactory DatabaseActionFactory { get; }
 
         [Command("checkPermissions")]
-        [Summary("Checks if the bot has all the required permissions.")]
-        public Task CheckPermissionsAsync()
+        [Summary("Checks if the bot has all the required permissions. " + 
+                 "Omitting a channel mention will check the current channel's permissions.")]
+        public Task CheckPermissionsAsync([Optional][Summary("Text channel mention (#textChannelName)")] ITextChannel messageChannel)
         {
-            return this.GetHandler().CheckPermissionsAsync();
+            return this.GetHandler().CheckPermissionsAsync(messageChannel);
         }
 
         [Command("clearReaderRolePrefix")]
