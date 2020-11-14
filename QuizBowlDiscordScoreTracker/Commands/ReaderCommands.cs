@@ -87,6 +87,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().ClearAllAsync();
         }
 
+        [HumanOnly]
         [Command("exportToFile")]
         [Summary("Exports the scoresheet to a spreadsheet file. The spreadsheet is based on NAQT's electronic " +
             "scoresheet (© National Academic Quiz Tournaments, LLC). Export requires that one or two teams are " +
