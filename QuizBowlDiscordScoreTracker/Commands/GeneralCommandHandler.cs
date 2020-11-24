@@ -61,29 +61,34 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.Context.Channel.SendMessageAsync(embed: embedBuilder.Build());
         }
 
-        public Task JoinTeamAsync(string teamName)
+        public async Task JoinTeamAsync(string teamName)
         {
             if (!(this.Manager.TryGet(this.Context.Channel.Id, out GameState game) &&
                 this.Context.User is IGuildUser guildUser))
             {
                 // This command only works during a game
-                return Task.CompletedTask;
+                return;
             }
 
             if (!(game.TeamManager is ISelfManagedTeamManager teamManager))
             {
                 // TODO: Should we look at the database and see if the team prefix is set?
-                return this.Context.Channel.SendMessageAsync("Joining teams isn't supported in this mode.");
+                await this.Context.Channel.SendMessageAsync("Joining teams isn't supported in this mode.");
+                return;
             }
 
             if (!teamManager.TryAddPlayerToTeam(
                 this.Context.User.Id, guildUser.Nickname ?? guildUser.Username, teamName))
             {
-                return this.Context.Channel.SendMessageAsync(
+                await this.Context.Channel.SendMessageAsync(
                     $@"Couldn't join team ""{teamName}"". Make sure it is not misspelled.");
+                return;
             }
 
-            return this.Context.Channel.SendMessageAsync($@"{guildUser.Mention} is on team ""{teamName}""");
+            string teamId = await game.TeamManager.GetTeamIdOrNull(this.Context.User.Id);
+            IReadOnlyDictionary<string,string> teamNames= await game.TeamManager.GetTeamIdToNames();
+            teamName = teamNames[teamId];
+            await this.Context.Channel.SendMessageAsync($@"{guildUser.Mention} is on team ""{teamName}""");
         }
 
         public Task LeaveTeamAsync()
