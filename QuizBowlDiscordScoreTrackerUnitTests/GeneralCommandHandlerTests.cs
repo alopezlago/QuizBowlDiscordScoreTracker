@@ -1415,6 +1415,21 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task JoinTeamCaseInsensitiveSucceeds()
+        {
+            const ulong userId = 1;
+            this.InitializeHandler(DefaultIds, userId, TeamManagerType.ByCommand);
+            ByCommandTeamManager teamManager = this.Game.TeamManager as ByCommandTeamManager;
+            Assert.IsTrue(teamManager.TryAddTeam(FirstTeamName, out _), "Couldn't add team");
+
+            Assert.IsNull(await teamManager.GetTeamIdOrNull(userId), "User shouldn't be on a team yet");
+            string upperFirstTeamName = FirstTeamName.ToUpper();
+            await this.Handler.JoinTeamAsync(upperFirstTeamName);
+            Assert.AreEqual(FirstTeamName, await teamManager.GetTeamIdOrNull(userId), "User didn't join the team");
+            this.MessageStore.VerifyChannelMessages($@"@User_{userId} is on team ""{FirstTeamName}""");
+        }
+        
+        [TestMethod]
         public async Task JoinNonexistentTeamFails()
         {
             const ulong userId = 1;

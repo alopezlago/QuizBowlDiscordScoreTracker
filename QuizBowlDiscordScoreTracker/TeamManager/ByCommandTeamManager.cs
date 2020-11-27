@@ -70,6 +70,8 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
                 return false;
             }
 
+            // Correct any case irregularities from the player by replacing with "default" casing
+            teamName = this.TeamIdToName[teamName];
             this.PlayerIdToTeamId[userId] = (teamName, playerDisplayName);
             return true;
         }
