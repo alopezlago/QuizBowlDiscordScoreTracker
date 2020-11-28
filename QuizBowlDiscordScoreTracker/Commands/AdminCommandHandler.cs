@@ -126,7 +126,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.Context.Channel.SendMessageAsync("Prefix unset. Roles no longer determine who is on a team.");
         }
 
-        public async Task DisableBonusesAlwaysAsync()
+        public async Task DisableBonusesByDefaultAsync()
         {
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
             {
@@ -135,10 +135,10 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             Logger.Information($"Use Bonuses set to false in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
             await this.Context.Channel.SendMessageAsync(
-                "Scoring bonuses will no longer be required for every game in this server.");
+                "Scoring bonuses will no longer be enabled for every game in this server.");
         }
 
-        public async Task EnableBonusesAlwaysAsync()
+        public async Task EnableBonusesByDefaultAsync()
         {
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
             {
@@ -146,7 +146,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             Logger.Information($"Use Bonuses set to true in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
-            await this.Context.Channel.SendMessageAsync("Scoring bonuses is now required for every game in this server.");
+            await this.Context.Channel.SendMessageAsync("Scoring bonuses is now enabled for every game in this server.");
         }
 
         public async Task GetDefaultFormatAsync()

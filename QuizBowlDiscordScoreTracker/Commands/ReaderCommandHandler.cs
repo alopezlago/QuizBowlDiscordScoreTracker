@@ -146,16 +146,18 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 alwaysUseBonuses = await action.GetUseBonuses(this.Context.Guild.Id);
             }
 
-            if (alwaysUseBonuses)
-            {
-                await this.Context.Channel.SendMessageAsync(
-                    "Bonuses are always tracked in this server. Run !disableBonusesAlways and restart the game to stop tracking bonuses.");
-                return;
-            }
-
             // TODO: We should look into cloning the format and changing the HighestPhaseIndexWithBonus field. This
             // would require another argument for the enable command, though, since it requires a number
             game.Format = Format.TossupShootout;
+            
+            if (alwaysUseBonuses)
+            {
+                await this.Context.Channel.SendMessageAsync(
+                    "Bonuses are no longer being tracked for this game only. Run !disableBonusesAlways to stop " +
+                    "tracking bonuses on this server by default.\nScores for the current question have been cleared.");
+                return;
+            }
+            
             await this.Context.Channel.SendMessageAsync(
                 "Bonuses are no longer being tracked. Scores for the current question have been cleared.");
         }

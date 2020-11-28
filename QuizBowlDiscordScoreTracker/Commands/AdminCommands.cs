@@ -41,18 +41,18 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().ClearTeamRolePrefixAsync();
         }
 
-        [Command("disableBonusesAlways")]
-        [Summary("Ensures that bonuses are never tracked in this server.")]
+        [Command("disableBonusesByDefault")]
+        [Summary("Ensures that bonuses are not tracked by default in this server.")]
         public Task DisableBonusesAsync()
         {
-            return this.GetHandler().DisableBonusesAlwaysAsync();
+            return this.GetHandler().DisableBonusesByDefaultAsync();
         }
 
-        [Command("enableBonusesAlways")]
-        [Summary("Makes scoring bonuses in a game required in this server.")]
+        [Command("enableBonusesByDefault")]
+        [Summary("Makes scoring bonuses in a game enabled by default in this server.")]
         public Task EnableBonusesAsync()
         {
-            return this.GetHandler().EnableBonusesAlwaysAsync();
+            return this.GetHandler().EnableBonusesByDefaultAsync();
         }
 
         [Command("getPairedChannel")]

@@ -415,7 +415,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
-        public async Task DisableBonusesFailsIfEnableBonusAlwaysSet()
+        public async Task DisableBonusesSucceedsIfEnableBonusSetByDefault()
         {
             this.CreateHandler(
                 out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
@@ -431,10 +431,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
             string message = messageStore.ChannelMessages.First();
             Assert.AreEqual(
-                "Bonuses are always tracked in this server. Run !disableBonusesAlways and restart the game to stop tracking bonuses.",
+                "Bonuses are no longer being tracked for this game only. Run !disableBonusesAlways to stop tracking bonuses on this server by default.",
                 message,
                 $"Unexpected message");
-            Assert.AreEqual(Format.TossupBonusesShootout, currentGame.Format, "Unexpected format");
+            Assert.AreEqual(Format.TossupShootout, currentGame.Format, "Unexpected format");
         }
 
         [TestMethod]

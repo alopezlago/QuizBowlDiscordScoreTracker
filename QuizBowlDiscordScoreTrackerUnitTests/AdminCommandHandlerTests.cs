@@ -63,7 +63,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 $"Enabled setting not in message \"{getEmbed}\"");
             messageStore.Clear();
 
-            await handler.DisableBonusesAlwaysAsync();
+            await handler.DisableBonusesByDefaultAsync();
             Assert.AreEqual(
                 1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
             string setMessage = messageStore.ChannelMessages[0];
@@ -84,12 +84,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
-        public async Task EnableBonusesAlways()
+        public async Task EnableBonusesByDefault()
         {
             this.CreateHandler(
                 out AdminCommandHandler handler,
                 out MessageStore messageStore);
-            await handler.EnableBonusesAlwaysAsync();
+            await handler.EnableBonusesByDefaultAsync();
             Assert.AreEqual(
                 1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
             string setMessage = messageStore.ChannelMessages[0];
