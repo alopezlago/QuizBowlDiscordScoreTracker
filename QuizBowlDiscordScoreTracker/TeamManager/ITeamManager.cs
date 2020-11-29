@@ -12,5 +12,6 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
         Task<string> GetTeamIdOrNull(ulong userId);
 
         Task<IReadOnlyDictionary<string, string>> GetTeamIdToNames();
+
     }
 }
