@@ -1,4 +1,4 @@
-This applies to the EntityFramework and Sqlite DLLs (Microsoft.EntityFramework.*.dll, SQLite*.dll)
+This applies to the Google Sheets, EntityFramework, and Sqlite DLLs (Microsoft.EntityFramework.*.dll, SQLite*.dll)
 
 
                                  Apache License

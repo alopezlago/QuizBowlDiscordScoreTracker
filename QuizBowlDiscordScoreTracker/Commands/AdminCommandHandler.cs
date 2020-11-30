@@ -1,11 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using Microsoft.Extensions.Options;
 using QuizBowlDiscordScoreTracker.Database;
+using QuizBowlDiscordScoreTracker.Scoresheet;
+using QuizBowlDiscordScoreTracker.TeamManager;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker.Commands
@@ -16,15 +20,25 @@ namespace QuizBowlDiscordScoreTracker.Commands
     {
         private static readonly ILogger Logger = Log.ForContext(typeof(AdminCommandHandler));
 
-        public AdminCommandHandler(ICommandContext context, IDatabaseActionFactory dbActionFactory)
+        public AdminCommandHandler(
+            ICommandContext context,
+            IOptionsMonitor<BotConfiguration> options,
+            IDatabaseActionFactory dbActionFactory,
+            IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory)
         {
             this.Context = context;
+            this.Options = options;
             this.DatabaseActionFactory = dbActionFactory;
+            this.GoogleSheetsGeneratorFactory = googleSheetsGeneratorFactory;
         }
 
         private ICommandContext Context { get; }
 
         private IDatabaseActionFactory DatabaseActionFactory { get; }
+
+        private IGoogleSheetsGeneratorFactory GoogleSheetsGeneratorFactory { get; }
+
+        private IOptionsMonitor<BotConfiguration> Options { get; }
 
         public async Task CheckPermissionsAsync(IMessageChannel messageChannel)
         {
@@ -39,7 +53,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             ChannelPermissions contextChannelPermissions = guildBotUser.GetPermissions(this.Context.Channel as IGuildChannel);
 
             StringBuilder builder = new StringBuilder();
-            
+
             if (!channelPermissions.ViewChannel)
             {
                 builder.AppendLine(
@@ -266,6 +280,46 @@ namespace QuizBowlDiscordScoreTracker.Commands
             Logger.Information($"Reader prefix set in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
             await this.Context.Channel.SendMessageAsync(
                 @$"Prefix set. Only users who have arole starting with ""{prefix}"" will be able to use !read.");
+        }
+
+        [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
+            Justification = "Discord.Net can't parse the argument directly as a URI")]
+        public async Task SetRostersFromRolesForUCSD(string sheetsUrl)
+        {
+            if (!Uri.TryCreate(sheetsUrl, UriKind.Absolute, out Uri sheetsUri))
+            {
+                await this.Context.Channel.SendMessageAsync(
+                    "The link to the Google Sheet wasn't understandable. Be sure to copy the full URL from the address bar.");
+                return;
+            }
+
+            Logger.Information($"User {this.Context.User.Id} attempting to export a UCSD scoresheet");
+
+            // TODO: Figure out an limitation story (count as export? Separate DB field?)
+            string teamRolePrefix;
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                teamRolePrefix = await action.GetTeamRolePrefixAsync(this.Context.Guild.Id);
+            }
+
+            if (string.IsNullOrEmpty(teamRolePrefix))
+            {
+                await this.Context.Channel.SendMessageAsync(
+                    "Couldn't export to the rosters sheet. This server is not using the team role prefix. Use !setTeamRolePrefix to set the prefix for role names to use for teams.");
+                return;
+            }
+
+            ITeamManager teamManager = new ByRoleTeamManager(this.Context.Guild, teamRolePrefix);
+            IGoogleSheetsGenerator generator = this.GoogleSheetsGeneratorFactory.Create(GoogleSheetsType.UCSD);
+            IResult<string> result = await generator.TryUpdateRosters(teamManager, sheetsUri);
+
+            if (!result.Success)
+            {
+                await this.Context.Channel.SendMessageAsync(result.ErrorMessage);
+                return;
+            }
+
+            await this.Context.Channel.SendMessageAsync("Rosters updated.");
         }
 
         public async Task SetTeamRolePrefixAsync(string prefix)

@@ -1423,7 +1423,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(teamManager.TryAddTeam(FirstTeamName, out _), "Couldn't add team");
 
             Assert.IsNull(await teamManager.GetTeamIdOrNull(userId), "User shouldn't be on a team yet");
-            string upperFirstTeamName = FirstTeamName.ToUpper();
+            string upperFirstTeamName = FirstTeamName.ToUpper(CultureInfo.InvariantCulture);
             await this.Handler.JoinTeamAsync(upperFirstTeamName);
             Assert.AreEqual(FirstTeamName, await teamManager.GetTeamIdOrNull(userId), "User didn't join the team");
             this.MessageStore.VerifyChannelMessages($@"@User_{userId} is on team ""{FirstTeamName}""");

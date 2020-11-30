@@ -26,6 +26,7 @@ This is a Discord bot which keeps track of who buzzed in, as well as each player
 - You can type !score to get the current scores
 - If the reader needs to undo their last scoring action, use !undo
 - If you want to change readers, use !setnewreader @NewReadersMention
+- If you want to export the results to a scoresheet, use one of the export commands, like !exportToFile
 - When you're done reading, type !end
 - To see the list of all the commands, type !help
 

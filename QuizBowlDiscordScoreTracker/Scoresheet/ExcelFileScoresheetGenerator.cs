@@ -49,7 +49,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             IEnumerable<PhaseScore> phaseScores = await game.GetPhaseScores();
             int phaseScoresCount = phaseScores.Count();
             if (phaseScoresCount > PhasesLimit + 1 ||
-                (phaseScoresCount == PhasesLimit && phaseScores.Last().ScoringSplitsOnActions.Any()))
+                (phaseScoresCount == PhasesLimit + 1 && phaseScores.Last().ScoringSplitsOnActions.Any()))
             {
                 return new FailureResult<Stream>(
                     "Export only currently works if there are at most 24 tosusps answered in a game.");

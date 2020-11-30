@@ -211,18 +211,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            if (!(this.Manager.TryGet(this.Context.Channel.Id, out GameState state) ||
-                this.Manager.TryCreate(this.Context.Channel.Id, out state)))
-            {
-                // Couldn't add a new reader.
-                return;
-            }
-            else if (state.ReaderId != null)
-            {
-                // We already have a reader, so do nothing.
-                return;
-            }
-
+            // This needs to happen before we try creating a game
             string readerRolePrefix;
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
             {
@@ -233,6 +222,18 @@ namespace QuizBowlDiscordScoreTracker.Commands
             {
                 await this.Context.Channel.SendMessageAsync(
                     @$"{user.Mention} can't read because they don't have a role starting with the prefix ""{readerRolePrefix}"".");
+                return;
+            }
+
+            if (!(this.Manager.TryGet(this.Context.Channel.Id, out GameState state) ||
+                this.Manager.TryCreate(this.Context.Channel.Id, out state)))
+            {
+                // Couldn't add a new reader.
+                return;
+            }
+            else if (state.ReaderId != null)
+            {
+                // We already have a reader, so do nothing.
                 return;
             }
 

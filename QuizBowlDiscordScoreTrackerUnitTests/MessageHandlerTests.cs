@@ -31,6 +31,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         private const ulong DefaultGuildId = 9;
         private const ulong DefaultChannelId = 11;
         private const ulong DefaultVoiceChannelId = 222;
+        private const ulong BotId = 80;
 
         private InMemoryBotConfigurationContextFactory botConfigurationfactory;
 
@@ -92,11 +93,11 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out IGuildTextChannel channel,
                 out MessageStore messageStore);
 
-            await handler.HandlePlayerMessage(state, playerUser, channel, "buzz");
+            await handler.HandlePlayerMessage(state, playerUser, channel, BotId, "buzz");
             messageStore.VerifyChannelMessages(playerUser.Mention);
             messageStore.Clear();
 
-            await handler.TryScore(state, readerUser, channel, "no penalty");
+            await handler.TryScore(state, readerUser, channel, BotId, "no penalty");
             IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
             PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, playerUser.Username, null);
             Assert.IsTrue(
@@ -119,13 +120,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             await state.AddPlayer(DefaultPlayerId, "Player");
 
-            bool scoredBuzz = await handler.TryScore(state, playerUser, channel, "no penalty");
+            bool scoredBuzz = await handler.TryScore(state, playerUser, channel, BotId, "no penalty");
             Assert.IsFalse(scoredBuzz, "Player shouldn't be able to give points");
             IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
             PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, "Player", null);
             Assert.IsFalse(lastSplits.TryGetValue(pair, out _), "Scoring split shouldn't exist");
 
-            scoredBuzz = await handler.TryScore(state, readerUser, channel, "10");
+            scoredBuzz = await handler.TryScore(state, readerUser, channel, BotId, "10");
             Assert.IsTrue(scoredBuzz, "Buzz wasn't scored");
             lastSplits = await state.GetLastScoringSplits();
             Assert.IsTrue(
@@ -147,12 +148,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out MessageStore messageStore);
             IGuildUser secondPlayerUser = CommandMocks.CreateGuildUser(DefaultSecondPlayerId);
 
-            await handler.HandlePlayerMessage(state, firstPlayerUser, channel, "buzz");
-            await handler.HandlePlayerMessage(state, secondPlayerUser, channel, "buzz");
+            await handler.HandlePlayerMessage(state, firstPlayerUser, channel, BotId, "buzz");
+            await handler.HandlePlayerMessage(state, secondPlayerUser, channel, BotId, "buzz");
             messageStore.VerifyChannelMessages(firstPlayerUser.Mention);
             messageStore.Clear();
 
-            await handler.HandlePlayerMessage(state, firstPlayerUser, channel, "wd");
+            await handler.HandlePlayerMessage(state, firstPlayerUser, channel, BotId, "wd");
             messageStore.VerifyChannelMessages(secondPlayerUser.Mention);
 
             Assert.IsTrue(state.TryGetNextPlayer(out ulong nextPlayerId), "Couldn't get another player");
@@ -171,12 +172,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out MessageStore messageStore);
             IGuildUser secondPlayerUser = CommandMocks.CreateGuildUser(DefaultSecondPlayerId);
 
-            await handler.HandlePlayerMessage(state, firstPlayerUser, channel, "buzz");
-            await handler.HandlePlayerMessage(state, secondPlayerUser, channel, "buzz");
+            await handler.HandlePlayerMessage(state, firstPlayerUser, channel, BotId, "buzz");
+            await handler.HandlePlayerMessage(state, secondPlayerUser, channel, BotId, "buzz");
             messageStore.VerifyChannelMessages(firstPlayerUser.Mention);
             messageStore.Clear();
 
-            await handler.HandlePlayerMessage(state, secondPlayerUser, channel, "wd");
+            await handler.HandlePlayerMessage(state, secondPlayerUser, channel, BotId, "wd");
             messageStore.VerifyChannelMessages();
 
             Assert.IsTrue(state.TryGetNextPlayer(out ulong nextPlayerId), "Couldn't get another player");
@@ -197,15 +198,15 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out IGuildTextChannel channel,
                 out MessageStore messageStore);
 
-            await handler.HandlePlayerMessage(state, playerUser, channel, "buzz");
+            await handler.HandlePlayerMessage(state, playerUser, channel, BotId, "buzz");
             messageStore.VerifyChannelMessages(playerUser.Mention);
             messageStore.Clear();
 
-            await handler.HandlePlayerMessage(state, playerUser, channel, "wd");
+            await handler.HandlePlayerMessage(state, playerUser, channel, BotId, "wd");
             messageStore.VerifyChannelMessages($"{playerUser.Mention} has withdrawn.");
             messageStore.Clear();
 
-            await handler.HandlePlayerMessage(state, playerUser, channel, "buzz");
+            await handler.HandlePlayerMessage(state, playerUser, channel, BotId, "buzz");
             messageStore.VerifyChannelMessages(playerUser.Mention);
 
             Assert.IsTrue(
@@ -226,22 +227,22 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out MessageStore messageStore);
             state.Format = Format.TossupBonusesShootout;
 
-            await handler.HandlePlayerMessage(state, playerUser, channel, "buzz");
+            await handler.HandlePlayerMessage(state, playerUser, channel, BotId, "buzz");
             messageStore.VerifyChannelMessages(playerUser.Mention);
             messageStore.Clear();
 
-            bool scoredBuzz = await handler.TryScore(state, readerUser, channel, "10");
+            bool scoredBuzz = await handler.TryScore(state, readerUser, channel, BotId, "10");
             Assert.IsTrue(scoredBuzz, "Buzz wasn't scored");
             Assert.AreEqual(PhaseStage.Bonus, state.CurrentStage, "Unexpected stage after the buzz");
             messageStore.VerifyChannelMessages("**Bonus for 1**");
             messageStore.Clear();
 
             // Post something that shouldn't be a bonus score, then post something that can be a bonus score
-            bool bonusScored = await handler.TryScore(state, readerUser, channel, "Some non-score text");
+            bool bonusScored = await handler.TryScore(state, readerUser, channel, BotId, "Some non-score text");
             Assert.IsFalse(bonusScored);
             Assert.AreEqual(PhaseStage.Bonus, state.CurrentStage, "Phase should not have changed");
 
-            bonusScored = await handler.TryScore(state, readerUser, channel, "10/10/0");
+            bonusScored = await handler.TryScore(state, readerUser, channel, BotId, "10/10/0");
             Assert.IsTrue(bonusScored, "Bonus wasn't scored");
             Assert.AreEqual(PhaseStage.Tossup, state.CurrentStage, "Unexpected stage after the bonus was scored");
             Assert.AreEqual(2, state.PhaseNumber, "Phase number didn't change");
@@ -258,12 +259,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out IGuildTextChannel channel,
                 out MessageStore messageStore);
 
-            await handler.HandlePlayerMessage(state, playerUser, channel, "buzz");
+            await handler.HandlePlayerMessage(state, playerUser, channel, BotId, "buzz");
             messageStore.VerifyChannelMessages(playerUser.Mention);
             messageStore.Clear();
 
             bool scoredBuzz = await handler.TryScore(
-                state, readerUser, channel, score.ToString(CultureInfo.InvariantCulture));
+                state, readerUser, channel, BotId, score.ToString(CultureInfo.InvariantCulture));
             Assert.IsTrue(scoredBuzz, "Buzz wasn't scored");
             IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> lastSplits = await state.GetLastScoringSplits();
             PlayerTeamPair pair = new PlayerTeamPair(DefaultPlayerId, playerUser.Username, null);

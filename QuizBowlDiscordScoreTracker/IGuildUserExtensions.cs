@@ -8,7 +8,7 @@ namespace QuizBowlDiscordScoreTracker
     {
         public static bool CanRead(this IGuildUser user, IGuild guild, string readerRolePrefix)
         {
-            return user != null && guild != null && 
+            return user != null && guild != null &&
                 (readerRolePrefix == null || guild.Roles
                 .Where(role => role.Name.StartsWith(readerRolePrefix, StringComparison.InvariantCultureIgnoreCase))
                 .Select(role => role.Id)

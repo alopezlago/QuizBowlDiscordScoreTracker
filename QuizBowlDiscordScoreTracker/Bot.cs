@@ -61,6 +61,11 @@ namespace QuizBowlDiscordScoreTracker
             serviceCollection.AddSingleton(this.options);
             serviceCollection.AddSingleton(this.dbActionFactory);
             serviceCollection.AddSingleton<IFileScoresheetGenerator>(new ExcelFileScoresheetGenerator());
+
+            IGoogleSheetsApi googleSheetsApi = new GoogleSheetsApi(this.options);
+            serviceCollection.AddSingleton<IGoogleSheetsGeneratorFactory>(
+                new GoogleSheetsGeneratorFactory(googleSheetsApi));
+
             this.serviceProvider = serviceCollection.BuildServiceProvider();
 
             this.commandService = new CommandService(new CommandServiceConfig()
@@ -76,7 +81,8 @@ namespace QuizBowlDiscordScoreTracker
 
             Task.WaitAll(this.commandService.AddModulesAsync(Assembly.GetExecutingAssembly(), this.serviceProvider));
 
-            this.messageHandler = new MessageHandler(this.options, this.dbActionFactory, hubContext, this.logger);
+            this.messageHandler = new MessageHandler(
+                this.options, this.dbActionFactory, hubContext, this.logger);
 
             this.client.MessageReceived += this.OnMessageCreated;
             this.client.GuildMemberUpdated += this.OnPresenceUpdated;
@@ -130,6 +136,11 @@ namespace QuizBowlDiscordScoreTracker
 
         private Task OnGuildJoined(SocketGuild guild)
         {
+            if (!guild.CurrentUser.GuildPermissions.SendMessages)
+            {
+                return Task.CompletedTask;
+            }
+
             return guild.DefaultChannel.SendMessageAsync(
                 "Thank you for adding the QuizBowlScoreTracker bot to your server. Post *!help* to see a list of commands that the bot supports.");
         }
@@ -171,14 +182,16 @@ namespace QuizBowlDiscordScoreTracker
                 return;
             }
 
-            bool answersScored = await this.messageHandler.TryScore(state, guildUser, channel, message.Content);
+            ulong botId = this.client.CurrentUser.Id;
+            bool answersScored = await this.messageHandler.TryScore(state, guildUser, channel, botId, message.Content);
             if (answersScored)
             {
                 return;
             }
 
             // Don't block on this
-            _ = Task.Run(() => this.messageHandler.HandlePlayerMessage(state, guildUser, channel, message.Content));
+            _ = Task.Run(() => this.messageHandler.HandlePlayerMessage(
+                state, guildUser, channel, botId, message.Content));
         }
 
         private Task OnLogAsync(LogMessage logMessage)

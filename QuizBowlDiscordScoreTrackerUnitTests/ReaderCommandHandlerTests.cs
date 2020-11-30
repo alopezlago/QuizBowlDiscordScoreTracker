@@ -32,6 +32,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
         private InMemoryBotConfigurationContextFactory botConfigurationfactory;
 
+        private ReaderCommandHandler Handler { get; set; }
+
+        private GameState Game { get; set; }
+
+        private IGoogleSheetsGeneratorFactory GoogleSheetsGeneratorFactory { get; set; }
+
+        private MessageStore MessageStore { get; set; }
+
         [TestInitialize]
         public void InitializeTest()
         {
@@ -42,6 +50,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             {
                 context.Database.Migrate();
             }
+
+            // Clear out the old fields
+            this.Handler = null;
+            this.Game = null;
+            this.GoogleSheetsGeneratorFactory = null;
+            this.MessageStore = null;
         }
 
         [TestCleanup]
@@ -55,20 +69,20 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong newReaderId = GetExistingNonReaderUserId();
             string newReaderMention = $"@User_{newReaderId}";
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
-            currentGame.ReaderId = DefaultReaderId;
+            this.InitializeHandler();
+
+            this.Game.ReaderId = DefaultReaderId;
 
             Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
             mockUser.Setup(user => user.Id).Returns(newReaderId);
             mockUser.Setup(user => user.Mention).Returns(newReaderMention);
-            await handler.SetNewReaderAsync(mockUser.Object);
+            await this.Handler.SetNewReaderAsync(mockUser.Object);
 
-            Assert.AreEqual(newReaderId, currentGame.ReaderId, "Reader ID was not set correctly.");
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+            Assert.AreEqual(newReaderId, this.Game.ReaderId, "Reader ID was not set correctly.");
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
 
             Assert.IsTrue(
-                messageStore.ChannelMessages.First().Contains(newReaderMention, StringComparison.InvariantCulture),
+                this.MessageStore.ChannelMessages.First().Contains(newReaderMention, StringComparison.InvariantCulture),
                 "Message should include the Mention of the user.");
         }
 
@@ -83,21 +97,20 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             ulong newReaderId = GetExistingNonReaderUserId();
             string newReaderMention = $"@User_{newReaderId}";
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
-            currentGame.ReaderId = DefaultReaderId;
+            this.InitializeHandler();
+            this.Game.ReaderId = DefaultReaderId;
 
             Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
             mockUser.Setup(user => user.Id).Returns(newReaderId);
             mockUser.Setup(user => user.Mention).Returns(newReaderMention);
             mockUser.Setup(user => user.RoleIds).Returns(new ulong[] { DefaultReaderRoleId });
-            await handler.SetNewReaderAsync(mockUser.Object);
+            await this.Handler.SetNewReaderAsync(mockUser.Object);
 
-            Assert.AreEqual(newReaderId, currentGame.ReaderId, "Reader ID was not set correctly.");
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+            Assert.AreEqual(newReaderId, this.Game.ReaderId, "Reader ID was not set correctly.");
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
 
             string expectedMessage = $"{newReaderMention} is now the reader.";
-            messageStore.VerifyChannelMessages(expectedMessage);
+            this.MessageStore.VerifyChannelMessages(expectedMessage);
         }
 
         [TestMethod]
@@ -112,43 +125,42 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             ulong newReaderId = GetExistingNonReaderUserId();
             string newReaderMention = $"@User_{newReaderId}";
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
-            currentGame.ReaderId = DefaultReaderId;
+            this.InitializeHandler();
+            this.Game.ReaderId = DefaultReaderId;
 
             Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
             mockUser.Setup(user => user.Id).Returns(newReaderId);
             mockUser.Setup(user => user.Mention).Returns(newReaderMention);
             mockUser.Setup(user => user.RoleIds).Returns(new ulong[] { DefaultReaderRoleId + 1 });
-            await handler.SetNewReaderAsync(mockUser.Object);
+            await this.Handler.SetNewReaderAsync(mockUser.Object);
 
-            Assert.AreEqual(DefaultReaderId, currentGame.ReaderId, "Reader ID was updated incorrectly.");
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+            Assert.AreEqual(DefaultReaderId, this.Game.ReaderId, "Reader ID was updated incorrectly.");
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
 
             string expectedMessage = $@"Cannot set {newReaderMention} as the reader because they do not have a role with the reader prefix ""{readerRolePrefix}""";
-            messageStore.VerifyChannelMessages(expectedMessage);
+            this.MessageStore.VerifyChannelMessages(expectedMessage);
         }
 
         [TestMethod]
         public async Task ClearEmptiesQueue()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            this.InitializeHandler();
 
-            await currentGame.AddPlayer(buzzer, "Player");
-            await handler.ClearAsync();
+            await this.Game.AddPlayer(buzzer, "Player");
+            await this.Handler.ClearAsync();
 
-            Assert.IsFalse(currentGame.TryGetNextPlayer(out ulong _), "Queue should've been cleared.");
-            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "We should be able to add the buzzer again.");
+            Assert.IsFalse(this.Game.TryGetNextPlayer(out ulong _), "Queue should've been cleared.");
+            Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "We should be able to add the buzzer again.");
 
-            messageStore.VerifyChannelMessages("Current cycle cleared of all buzzes.");
+            this.MessageStore.VerifyChannelMessages("Current cycle cleared of all buzzes.");
         }
 
         [TestMethod]
         public async Task ClearAllRemovesGame()
         {
             GameStateManager manager = new GameStateManager();
-            manager.TryCreate(DefaultChannelId, out GameState currentGame);
+            manager.TryCreate(DefaultChannelId, out _);
             MessageStore messageStore = new MessageStore();
             ICommandContext commandContext = CommandMocks.CreateCommandContext(
                 messageStore, DefaultIds, DefaultGuildId, DefaultChannelId, DefaultReaderId);
@@ -156,9 +168,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 this.botConfigurationfactory);
             IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
             IFileScoresheetGenerator scoresheetGenerator = (new Mock<IFileScoresheetGenerator>()).Object;
+            IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory = (new Mock<IGoogleSheetsGeneratorFactory>()).Object;
 
             ReaderCommandHandler handler = new ReaderCommandHandler(
-                commandContext, manager, options, dbActionFactory, scoresheetGenerator);
+                commandContext, manager, options, dbActionFactory, scoresheetGenerator, googleSheetsGeneratorFactory);
 
             await handler.ClearAllAsync();
 
@@ -172,34 +185,33 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task NextQuestionClears()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(out ReaderCommandHandler handler, out GameState currentGame, out _);
+            this.InitializeHandler();
 
-            await currentGame.AddPlayer(buzzer, "Player");
-            await handler.NextAsync();
+            await this.Game.AddPlayer(buzzer, "Player");
+            await this.Handler.NextAsync();
 
-            Assert.IsFalse(currentGame.TryGetNextPlayer(out ulong _), "Queue should've been cleared.");
-            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "We should be able to add the buzzer again.");
+            Assert.IsFalse(this.Game.TryGetNextPlayer(out ulong _), "Queue should've been cleared.");
+            Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "We should be able to add the buzzer again.");
         }
 
         [TestMethod]
         public async Task CanUndoWithReader()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            this.InitializeHandler();
 
-            currentGame.ReaderId = DefaultReaderId;
-            await currentGame.AddPlayer(buzzer, "Player");
-            currentGame.ScorePlayer(10);
-            await handler.UndoAsync();
+            this.Game.ReaderId = DefaultReaderId;
+            await this.Game.AddPlayer(buzzer, "Player");
+            this.Game.ScorePlayer(10);
+            await this.Handler.UndoAsync();
 
             Assert.IsTrue(
-                currentGame.TryGetNextPlayer(out ulong nextPlayerId),
+                this.Game.TryGetNextPlayer(out ulong nextPlayerId),
                 "Queue should be restored, so we should have a player.");
             Assert.AreEqual(buzzer, nextPlayerId, "Incorrect player in the queue.");
 
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.IsTrue(
                 message.Contains($"@User_{buzzer}", StringComparison.InvariantCulture),
                 "Mention should be included in undo message as a prompt.");
@@ -209,20 +221,19 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task UndoAfterScoringBonusPromptsForBonus()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
-            currentGame.Format = Format.TossupBonusesShootout;
+            this.InitializeHandler();
+            this.Game.Format = Format.TossupBonusesShootout;
 
-            currentGame.ReaderId = DefaultReaderId;
-            await currentGame.AddPlayer(buzzer, "Player");
-            currentGame.ScorePlayer(10);
-            Assert.IsTrue(currentGame.TryScoreBonus("0"), "Couldn't score the bonus");
-            await handler.UndoAsync();
+            this.Game.ReaderId = DefaultReaderId;
+            await this.Game.AddPlayer(buzzer, "Player");
+            this.Game.ScorePlayer(10);
+            Assert.IsTrue(this.Game.TryScoreBonus("0"), "Couldn't score the bonus");
+            await this.Handler.UndoAsync();
 
-            Assert.AreEqual(PhaseStage.Bonus, currentGame.CurrentStage, "We should be in the bonus stage");
-            Assert.AreEqual(1, currentGame.PhaseNumber, "We should be back to the first question");
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(PhaseStage.Bonus, this.Game.CurrentStage, "We should be in the bonus stage");
+            Assert.AreEqual(1, this.Game.PhaseNumber, "We should be back to the first question");
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual(
                 "**Bonus for TU 1**", message, "Mention should be included in undo message as a prompt.");
         }
@@ -232,23 +243,22 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong buzzer = GetExistingNonReaderUserId();
             ulong buzzerWhoLeft = 999999;
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            this.InitializeHandler();
 
-            currentGame.ReaderId = DefaultReaderId;
-            Assert.IsTrue(await currentGame.AddPlayer(buzzerWhoLeft, "Player2"), "Couldn't add initial buzz");
-            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Couldn't add second buzzer");
-            currentGame.ScorePlayer(10);
+            this.Game.ReaderId = DefaultReaderId;
+            Assert.IsTrue(await this.Game.AddPlayer(buzzerWhoLeft, "Player2"), "Couldn't add initial buzz");
+            Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Couldn't add second buzzer");
+            this.Game.ScorePlayer(10);
 
-            await handler.UndoAsync();
+            await this.Handler.UndoAsync();
 
             Assert.IsTrue(
-                currentGame.TryGetNextPlayer(out ulong nextPlayerId),
+                this.Game.TryGetNextPlayer(out ulong nextPlayerId),
                 "Queue should be restored, so we should have a player.");
             Assert.AreEqual(buzzer, nextPlayerId, "Incorrect player in the queue.");
 
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual(
                 $"Undid scoring for <Unknown>. @User_{buzzer}, your answer?",
                 message,
@@ -260,12 +270,11 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong buzzer = GetExistingNonReaderUserId();
             string nickname = $"User_{buzzer}";
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            this.InitializeHandler();
 
-            currentGame.ReaderId = DefaultReaderId;
+            this.Game.ReaderId = DefaultReaderId;
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
-            currentGame.TeamManager = teamManager;
+            this.Game.TeamManager = teamManager;
             Assert.IsTrue(teamManager.TryAddTeam("Alpha", out _), "Team should've been added");
             Assert.IsTrue(
                 teamManager.TryAddPlayerToTeam(buzzer, nickname, "Alpha"), "Should've been able to add the player");
@@ -275,12 +284,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             mockUser.Setup(user => user.Id).Returns(buzzer);
             mockUser.Setup(user => user.Nickname).Returns(nickname);
 
-            await handler.RemovePlayerAsync(mockUser.Object);
+            await this.Handler.RemovePlayerAsync(mockUser.Object);
 
             IEnumerable<PlayerTeamPair> players = await teamManager.GetKnownPlayers();
             Assert.IsFalse(players.Any(), "There should be no players left");
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.IsTrue(
                 message.Contains(nickname, StringComparison.InvariantCulture),
                 $"Couldn't find username in message\n{message}");
@@ -291,24 +300,23 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong buzzer = GetExistingNonReaderUserId();
             string nickname = $"User_{buzzer}";
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            this.InitializeHandler();
 
-            currentGame.ReaderId = DefaultReaderId;
+            this.Game.ReaderId = DefaultReaderId;
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
-            currentGame.TeamManager = teamManager;
+            this.Game.TeamManager = teamManager;
             Assert.IsTrue(teamManager.TryAddTeam("Alpha", out _), "Team should've been added");
 
             Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
             mockUser.Setup(user => user.Id).Returns(buzzer);
             mockUser.Setup(user => user.Nickname).Returns(nickname);
 
-            await handler.RemovePlayerAsync(mockUser.Object);
+            await this.Handler.RemovePlayerAsync(mockUser.Object);
 
             IEnumerable<PlayerTeamPair> players = await teamManager.GetKnownPlayers();
             Assert.IsFalse(players.Any(), "There should be no players");
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.IsTrue(
                 message.Contains($@"Couldn't remove player ""{nickname}""", StringComparison.InvariantCulture),
                 $"Couldn't find failure message in message\n{message}");
@@ -319,23 +327,22 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong buzzer = GetExistingNonReaderUserId();
             string nickname = $"User_{buzzer}";
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            this.InitializeHandler();
 
-            currentGame.ReaderId = DefaultReaderId;
+            this.Game.ReaderId = DefaultReaderId;
 
             Mock<IGuild> mockGuild = new Mock<IGuild>();
             mockGuild.Setup(guild => guild.Roles).Returns(Array.Empty<IRole>());
-            currentGame.TeamManager = new ByRoleTeamManager(mockGuild.Object, "Team");
+            this.Game.TeamManager = new ByRoleTeamManager(mockGuild.Object, "Team");
 
             Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
             mockUser.Setup(user => user.Id).Returns(buzzer);
             mockUser.Setup(user => user.Nickname).Returns(nickname);
 
-            await handler.RemovePlayerAsync(mockUser.Object);
+            await this.Handler.RemovePlayerAsync(mockUser.Object);
 
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual("Removing players isn't supported in this mode.", message, $"Unexpected message");
         }
 
@@ -343,18 +350,17 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task CanAddTeam()
         {
             const string teamName = "My Team";
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            this.InitializeHandler();
             ISelfManagedTeamManager teamManager = new ByCommandTeamManager();
-            currentGame.TeamManager = teamManager;
+            this.Game.TeamManager = teamManager;
 
-            await handler.AddTeamAsync(teamName);
+            await this.Handler.AddTeamAsync(teamName);
 
             IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
             Assert.IsTrue(teamIdToName.ContainsKey(teamName), "Team name wasn't added");
 
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual($@"Added team ""{teamName}"".", message, $"Unexpected message");
         }
 
@@ -362,19 +368,18 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task CannotAddTeamWithByRoleTeamManager()
         {
             const string teamName = "My Team";
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            this.InitializeHandler();
             Mock<IGuild> mockGuild = new Mock<IGuild>();
             mockGuild.Setup(guild => guild.Roles).Returns(Array.Empty<IRole>());
-            currentGame.TeamManager = new ByRoleTeamManager(mockGuild.Object, "Team");
+            this.Game.TeamManager = new ByRoleTeamManager(mockGuild.Object, "Team");
 
-            await handler.AddTeamAsync(teamName);
+            await this.Handler.AddTeamAsync(teamName);
 
-            IReadOnlyDictionary<string, string> teamIdToName = await currentGame.TeamManager.GetTeamIdToNames();
+            IReadOnlyDictionary<string, string> teamIdToName = await this.Game.TeamManager.GetTeamIdToNames();
             Assert.IsFalse(teamIdToName.ContainsKey(teamName), "Team name wasn't added");
 
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual("Adding teams isn't supported in this mode.", message, $"Unexpected message");
         }
 
@@ -382,44 +387,42 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task ChangingFormatToHaveBonusIncludesBonusInCurrentPhase()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(out _, out GameState currentGame, out _);
-            currentGame.Format = Format.TossupBonusesShootout;
+            this.InitializeHandler();
+            this.Game.Format = Format.TossupBonusesShootout;
 
-            currentGame.ReaderId = DefaultReaderId;
-            await currentGame.AddPlayer(buzzer, "Player");
-            currentGame.ScorePlayer(10);
+            this.Game.ReaderId = DefaultReaderId;
+            await this.Game.AddPlayer(buzzer, "Player");
+            this.Game.ScorePlayer(10);
             Assert.AreEqual(
-                PhaseStage.Bonus, currentGame.CurrentStage, "We should be in a bonus stage in the current phase");
-            Assert.AreEqual(1, currentGame.PhaseNumber, "We should still be in the first phase");
+                PhaseStage.Bonus, this.Game.CurrentStage, "We should be in a bonus stage in the current phase");
+            Assert.AreEqual(1, this.Game.PhaseNumber, "We should still be in the first phase");
         }
 
         [TestMethod]
         public async Task DisableBonuses()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
-            currentGame.Format = Format.TossupBonusesShootout;
+            this.InitializeHandler();
+            this.Game.Format = Format.TossupBonusesShootout;
 
-            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
+            Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
 
-            await handler.DisableBonusesAsync();
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            await this.Handler.DisableBonusesAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual(
                 "Bonuses are no longer being tracked. Scores for the current question have been cleared.",
                 message,
                 $"Unexpected message");
-            Assert.AreEqual(Format.TossupShootout, currentGame.Format, "Unexpected format");
-            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Should've been able to add the player again");
+            Assert.AreEqual(Format.TossupShootout, this.Game.Format, "Unexpected format");
+            Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Should've been able to add the player again");
         }
 
         [TestMethod]
         public async Task DisableBonusesSucceedsIfEnableBonusSetByDefault()
         {
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
-            currentGame.Format = Format.TossupBonusesShootout;
+            this.InitializeHandler();
+            this.Game.Format = Format.TossupBonusesShootout;
 
             using (BotConfigurationContext context = this.botConfigurationfactory.Create())
             using (DatabaseAction action = new DatabaseAction(context))
@@ -427,96 +430,92 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 await action.SetUseBonuses(DefaultGuildId, true);
             }
 
-            await handler.DisableBonusesAsync();
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            await this.Handler.DisableBonusesAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual(
-                "Bonuses are no longer being tracked for this game only. Run !disableBonusesAlways to stop tracking bonuses on this server by default.",
+                "Bonuses are no longer being tracked for this game only. Run !disableBonusesByDefault to stop tracking bonuses on this server by default.\nScores for the current question have been cleared.",
                 message,
                 $"Unexpected message");
-            Assert.AreEqual(Format.TossupShootout, currentGame.Format, "Unexpected format");
+            Assert.AreEqual(Format.TossupShootout, this.Game.Format, "Unexpected format");
         }
 
         [TestMethod]
         public async Task DisableBonusesWhenAlreadyDisabled()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
-            currentGame.Format = Format.TossupShootout;
+            this.InitializeHandler();
+            this.Game.Format = Format.TossupShootout;
 
-            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
+            Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
 
-            await handler.DisableBonusesAsync();
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            await this.Handler.DisableBonusesAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual(
                 "Bonuses are already untracked.",
                 message,
                 $"Unexpected message");
-            Assert.AreEqual(Format.TossupShootout, currentGame.Format, "Unexpected format");
-            Assert.IsFalse(await currentGame.AddPlayer(buzzer, "Player"), "Shouldn't be able to add the player again");
+            Assert.AreEqual(Format.TossupShootout, this.Game.Format, "Unexpected format");
+            Assert.IsFalse(await this.Game.AddPlayer(buzzer, "Player"), "Shouldn't be able to add the player again");
         }
 
         [TestMethod]
         public async Task EnableBonuses()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
-            currentGame.Format = Format.TossupShootout;
+            this.InitializeHandler();
+            this.Game.Format = Format.TossupShootout;
 
-            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
+            Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
 
-            await handler.EnableBonusesAsync();
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            await this.Handler.EnableBonusesAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual(
                 "Bonuses are now being tracked. Scores for the current question have been cleared.",
                 message,
                 $"Unexpected message");
-            Assert.AreEqual(Format.TossupBonusesShootout, currentGame.Format, "Unexpected format");
-            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Should've been able to add the player again");
+            Assert.AreEqual(Format.TossupBonusesShootout, this.Game.Format, "Unexpected format");
+            Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Should've been able to add the player again");
         }
 
         [TestMethod]
         public async Task EnableBonusesWhenAlreadyEnabled()
         {
             ulong buzzer = GetExistingNonReaderUserId();
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
-            currentGame.Format = Format.TossupBonusesShootout;
+            this.InitializeHandler();
+            this.Game.Format = Format.TossupBonusesShootout;
 
-            Assert.IsTrue(await currentGame.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
+            Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
 
-            await handler.EnableBonusesAsync();
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
-            string message = messageStore.ChannelMessages.First();
+            await this.Handler.EnableBonusesAsync();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual(
                 "Bonuses are already tracked.",
                 message,
                 $"Unexpected message");
-            Assert.AreEqual(Format.TossupBonusesShootout, currentGame.Format, "Unexpected format");
-            Assert.IsFalse(await currentGame.AddPlayer(buzzer, "Player"), "Shouldn't be able to add the player again");
+            Assert.AreEqual(Format.TossupBonusesShootout, this.Game.Format, "Unexpected format");
+            Assert.IsFalse(await this.Game.AddPlayer(buzzer, "Player"), "Shouldn't be able to add the player again");
         }
 
         [TestMethod]
         public async Task RemoveTeamSucceeds()
         {
             const string teamName = "Alpha";
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            this.InitializeHandler();
 
-            await handler.AddTeamAsync(teamName);
-            IReadOnlyDictionary<string, string> teamIdToNames = await currentGame.TeamManager.GetTeamIdToNames();
+            await this.Handler.AddTeamAsync(teamName);
+            IReadOnlyDictionary<string, string> teamIdToNames = await this.Game.TeamManager.GetTeamIdToNames();
             Assert.AreEqual(1, teamIdToNames.Count, "Unexpected number of teams after a team was added");
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.RemoveTeamAsync(teamName);
-            teamIdToNames = await currentGame.TeamManager.GetTeamIdToNames();
+            await this.Handler.RemoveTeamAsync(teamName);
+            teamIdToNames = await this.Game.TeamManager.GetTeamIdToNames();
             Assert.AreEqual(0, teamIdToNames.Count, "Unexpected number of teams after removal");
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages");
-            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual(@$"Removed team ""{teamName}"".", message, "Unexpected message");
         }
 
@@ -526,31 +525,30 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const ulong playerId = 2;
             const string playerName = "Alice";
             const string teamName = "Alpha";
-            this.CreateHandler(
-                out ReaderCommandHandler handler, out GameState currentGame, out MessageStore messageStore);
+            this.InitializeHandler();
 
-            await handler.AddTeamAsync(teamName);
-            ByCommandTeamManager teamManager = currentGame.TeamManager as ByCommandTeamManager;
+            await this.Handler.AddTeamAsync(teamName);
+            ByCommandTeamManager teamManager = this.Game.TeamManager as ByCommandTeamManager;
             Assert.IsTrue(
                 teamManager.TryAddPlayerToTeam(playerId, playerName, teamName),
                 "Couldn't add the player to the team");
-            Assert.IsTrue(await currentGame.AddPlayer(playerId, playerName), "Couldn't buzz in for the player");
-            currentGame.ScorePlayer(10);
+            Assert.IsTrue(await this.Game.AddPlayer(playerId, playerName), "Couldn't buzz in for the player");
+            this.Game.ScorePlayer(10);
 
             Mock<IGuildUser> playerUser = new Mock<IGuildUser>();
             playerUser.Setup(user => user.Id).Returns(playerId);
-            await handler.RemovePlayerAsync(playerUser.Object);
+            await this.Handler.RemovePlayerAsync(playerUser.Object);
 
             bool hasPlayers = (await teamManager.GetKnownPlayers()).Any();
             Assert.IsFalse(hasPlayers, "Player should've been removed");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.RemoveTeamAsync(teamName);
-            IReadOnlyDictionary<string, string> teamIdToNames = await currentGame.TeamManager.GetTeamIdToNames();
+            await this.Handler.RemoveTeamAsync(teamName);
+            IReadOnlyDictionary<string, string> teamIdToNames = await this.Game.TeamManager.GetTeamIdToNames();
             Assert.AreEqual(1, teamIdToNames.Count, "Unexpected number of teams after removal");
-            Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages");
-            string message = messageStore.ChannelMessages.First();
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
+            string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual(
                 @$"Unable to remove the team. **{playerName}** has already been scored, so the player cannot be removed without affecting the score.",
                 message,
@@ -571,21 +569,18 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<string>(), It.IsAny<string>()))
                     .Returns(result);
 
-                this.CreateHandler(
+                this.InitializeHandler(
                     options,
-                    mockScoresheetGenerator.Object,
-                    out ReaderCommandHandler handler,
-                    out GameState currentGame,
-                    out MessageStore messageStore);
-                await handler.ExportToFileAsync();
+                    mockScoresheetGenerator.Object);
+                await this.Handler.ExportToFileAsync();
 
                 string readerName = $"User_{DefaultReaderId}";
                 mockScoresheetGenerator
-                    .Verify(generator => generator.TryCreateScoresheet(currentGame, readerName, It.IsAny<string>()),
+                    .Verify(generator => generator.TryCreateScoresheet(this.Game, readerName, It.IsAny<string>()),
                     Times.Once());
-                messageStore.VerifyChannelMessages();
-                Assert.AreEqual(1, messageStore.Files.Count, "Unexpected number of file attachments");
-                (Stream resultStream, string filename, string text) = messageStore.Files.First();
+                this.MessageStore.VerifyChannelMessages();
+                Assert.AreEqual(1, this.MessageStore.Files.Count, "Unexpected number of file attachments");
+                (Stream resultStream, string filename, string text) = this.MessageStore.Files.First();
                 Assert.AreEqual($"Scoresheet_{readerName}_1.xlsx", filename, "Unexpected filename");
 
                 resultStream.Position = 0;
@@ -609,19 +604,16 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<string>(), It.IsAny<string>()))
                 .Returns(result);
 
-            this.CreateHandler(
+            this.InitializeHandler(
                 options,
-                mockScoresheetGenerator.Object,
-                out ReaderCommandHandler handler,
-                out GameState currentGame,
-                out MessageStore messageStore);
-            await handler.ExportToFileAsync();
+                mockScoresheetGenerator.Object);
+            await this.Handler.ExportToFileAsync();
 
             string readerName = $"User_{DefaultReaderId}";
             mockScoresheetGenerator
-                .Verify(generator => generator.TryCreateScoresheet(currentGame, readerName, It.IsAny<string>()),
+                .Verify(generator => generator.TryCreateScoresheet(this.Game, readerName, It.IsAny<string>()),
                 Times.Once());
-            messageStore.VerifyChannelMessages($"Export failed. Error: {errorMessage}");
+            this.MessageStore.VerifyChannelMessages($"Export failed. Error: {errorMessage}");
         }
 
         [TestMethod]
@@ -639,30 +631,27 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<string>(), It.IsAny<string>()))
                     .Returns(result);
 
-                this.CreateHandler(
+                this.InitializeHandler(
                     options,
-                    mockScoresheetGenerator.Object,
-                    out ReaderCommandHandler handler,
-                    out GameState currentGame,
-                    out MessageStore messageStore);
+                    mockScoresheetGenerator.Object);
 
                 for (int i = 0; i < userLimit; i++)
                 {
-                    await handler.ExportToFileAsync();
+                    await this.Handler.ExportToFileAsync();
                 }
 
-                messageStore.VerifyChannelMessages();
-                messageStore.Clear();
+                this.MessageStore.VerifyChannelMessages();
+                this.MessageStore.Clear();
 
-                await handler.ExportToFileAsync();
+                await this.Handler.ExportToFileAsync();
 
                 string readerName = $"User_{DefaultReaderId}";
-                Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages");
-                string message = messageStore.ChannelMessages.First();
+                Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
+                string message = this.MessageStore.ChannelMessages.First();
                 Assert.IsTrue(
                     message.Contains("The user has already exceeded", StringComparison.InvariantCultureIgnoreCase),
                     $"Couldn't find information on the user limit in the message '{message}'");
-                Assert.AreEqual(0, messageStore.Files.Count, "No files should've been attached");
+                Assert.AreEqual(0, this.MessageStore.Files.Count, "No files should've been attached");
             }
         }
 
@@ -681,31 +670,218 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<string>(), It.IsAny<string>()))
                     .Returns(result);
 
-                this.CreateHandler(
+                this.InitializeHandler(
                     options,
-                    mockScoresheetGenerator.Object,
-                    out ReaderCommandHandler handler,
-                    out GameState currentGame,
-                    out MessageStore messageStore);
+                    mockScoresheetGenerator.Object);
 
                 for (int i = 0; i < guildLimit; i++)
                 {
-                    await handler.ExportToFileAsync();
+                    await this.Handler.ExportToFileAsync();
                 }
 
-                messageStore.VerifyChannelMessages();
-                messageStore.Clear();
+                this.MessageStore.VerifyChannelMessages();
+                this.MessageStore.Clear();
 
-                await handler.ExportToFileAsync();
+                await this.Handler.ExportToFileAsync();
 
                 string readerName = $"User_{DefaultReaderId}";
-                Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages");
-                string message = messageStore.ChannelMessages.First();
+                Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
+                string message = this.MessageStore.ChannelMessages.First();
                 Assert.IsTrue(
                     message.Contains("The server has already exceeded", StringComparison.InvariantCultureIgnoreCase),
                     $"Couldn't find information on the user limit in the message '{message}'");
-                Assert.AreEqual(0, messageStore.Files.Count, "No files should've been attached");
+                Assert.AreEqual(0, this.MessageStore.Files.Count, "No files should've been attached");
             }
+        }
+
+        [TestMethod]
+        public async Task ExportToUCSDFails()
+        {
+            const string errorMessage = "Too many teams";
+
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
+                .Returns(Task.FromResult<IResult<string>>(new FailureResult<string>(errorMessage)))
+                .Verifiable();
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+            await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", 1);
+
+            mockFactory.Verify();
+            this.MessageStore.VerifyChannelMessages(errorMessage);
+        }
+
+        [TestMethod]
+        public async Task ExportToUCSDSucceeds()
+        {
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)))
+                .Verifiable();
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+            await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", 1);
+
+            mockFactory.Verify();
+            this.MessageStore.VerifyChannelMessages("Game written to the scoresheet Round 1");
+
+            // Make sure it succeeds at the limit (15) too
+            this.MessageStore.Clear();
+            await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", 15);
+
+            this.MessageStore.VerifyChannelMessages("Game written to the scoresheet Round 15");
+        }
+
+        [TestMethod]
+        public async Task ExportToUCSDUserLimit()
+        {
+            const int userLimit = 2;
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            options.CurrentValue.DailyUserExportLimit = userLimit;
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+
+            for (int i = 0; i < userLimit; i++)
+            {
+                await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", i + 1);
+                this.MessageStore.VerifyChannelMessages($"Game written to the scoresheet Round {i + 1}");
+                this.MessageStore.Clear();
+            }
+
+            await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", userLimit + 1);
+
+            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Exactly(userLimit));
+
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
+            string message = this.MessageStore.ChannelMessages.First();
+            Assert.IsTrue(
+                message.Contains("The user has already exceeded", StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find information on the user limit in the message '{message}'");
+        }
+
+        [TestMethod]
+        public async Task ExportToUCSDGuildLimit()
+        {
+            const int guildLimit = 2;
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            options.CurrentValue.DailyGuildExportLimit = guildLimit;
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+
+            for (int i = 0; i < guildLimit; i++)
+            {
+                await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", i + 1);
+                this.MessageStore.VerifyChannelMessages($"Game written to the scoresheet Round {i + 1}");
+                this.MessageStore.Clear();
+            }
+
+            await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", guildLimit + 1);
+
+            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Exactly(guildLimit));
+
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
+            string message = this.MessageStore.ChannelMessages.First();
+            Assert.IsTrue(
+                message.Contains("The server has already exceeded", StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find information on the user limit in the message '{message}'");
+        }
+
+        [TestMethod]
+        public async Task ExportToUCSDWithBadUrlFails()
+        {
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+            await this.Handler.ExportToUCSD("this is a bad URL", 1);
+
+            this.MessageStore.VerifyChannelMessages(
+                "The link to the Google Sheet wasn't understandable. Be sure to copy the full URL from the address bar.");
+            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Never);
+        }
+
+        [TestMethod]
+        public async Task ExportToUCSDWithRoundBelowOneFails()
+        {
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+            await this.Handler.ExportToUCSD("https://localhost/sheets", 0);
+
+            this.MessageStore.VerifyChannelMessages(
+                "The round is out of range. The round number must be between 1 and 15 (inclusive).");
+            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Never);
+        }
+
+        [TestMethod]
+        public async Task ExportToUCSDWithRoundAboveFifteenFails()
+        {
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+            await this.Handler.ExportToUCSD("https://localhost/sheets", 16);
+
+            this.MessageStore.VerifyChannelMessages(
+                "The round is out of range. The round number must be between 1 and 15 (inclusive).");
+            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Never);
         }
 
         private static ulong GetExistingNonReaderUserId(ulong readerId = DefaultReaderId)
@@ -713,21 +889,16 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             return DefaultIds.Except(new ulong[] { readerId }).First();
         }
 
-        private void CreateHandler(
-            out ReaderCommandHandler handler, out GameState game, out MessageStore messageStore)
+        private void InitializeHandler()
         {
-            this.CreateHandler(DefaultIds, out handler, out game, out messageStore);
+            this.InitializeHandler(DefaultIds);
         }
 
-        private void CreateHandler(
-            HashSet<ulong> existingIds,
-            out ReaderCommandHandler handler,
-            out GameState game,
-            out MessageStore messageStore)
+        private void InitializeHandler(HashSet<ulong> existingIds)
         {
-            messageStore = new MessageStore();
+            this.MessageStore = new MessageStore();
             ICommandContext commandContext = CommandMocks.CreateCommandContext(
-                messageStore,
+                this.MessageStore,
                 existingIds,
                 DefaultGuildId,
                 DefaultChannelId,
@@ -735,26 +906,31 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 updateMockGuild: UpdateMockGuild,
                 out _);
             GameStateManager manager = new GameStateManager();
-            manager.TryCreate(DefaultChannelId, out game);
+            manager.TryCreate(DefaultChannelId, out GameState game);
             game.TeamManager = new ByCommandTeamManager();
+            this.Game = game;
+
             IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
                 this.botConfigurationfactory);
             IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
             IFileScoresheetGenerator scoresheetGenerator = (new Mock<IFileScoresheetGenerator>()).Object;
+            this.GoogleSheetsGeneratorFactory = (new Mock<IGoogleSheetsGeneratorFactory>()).Object;
 
-            handler = new ReaderCommandHandler(commandContext, manager, options, dbActionFactory, scoresheetGenerator);
+            this.Handler = new ReaderCommandHandler(
+                commandContext,
+                manager,
+                options,
+                dbActionFactory,
+                scoresheetGenerator,
+                this.GoogleSheetsGeneratorFactory);
         }
 
-        private void CreateHandler(
-            IOptionsMonitor<BotConfiguration> options,
-            IFileScoresheetGenerator scoresheetGenerator,
-            out ReaderCommandHandler handler,
-            out GameState game,
-            out MessageStore messageStore)
+        private void InitializeHandler(
+            IOptionsMonitor<BotConfiguration> options, IFileScoresheetGenerator scoresheetGenerator)
         {
-            messageStore = new MessageStore();
+            this.MessageStore = new MessageStore();
             ICommandContext commandContext = CommandMocks.CreateCommandContext(
-                messageStore,
+                this.MessageStore,
                 DefaultIds,
                 DefaultGuildId,
                 DefaultChannelId,
@@ -762,12 +938,52 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 updateMockGuild: UpdateMockGuild,
                 out _);
             GameStateManager manager = new GameStateManager();
-            manager.TryCreate(DefaultChannelId, out game);
+            manager.TryCreate(DefaultChannelId, out GameState game);
             game.TeamManager = new ByCommandTeamManager();
+            this.Game = game;
+
             IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
                 this.botConfigurationfactory);
+            this.GoogleSheetsGeneratorFactory = (new Mock<IGoogleSheetsGeneratorFactory>()).Object;
 
-            handler = new ReaderCommandHandler(commandContext, manager, options, dbActionFactory, scoresheetGenerator);
+            this.Handler = new ReaderCommandHandler(
+                commandContext,
+                manager,
+                options,
+                dbActionFactory,
+                scoresheetGenerator,
+                this.GoogleSheetsGeneratorFactory);
+        }
+
+        private void InitializeHandler(
+            IOptionsMonitor<BotConfiguration> options, IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory)
+        {
+            this.MessageStore = new MessageStore();
+            ICommandContext commandContext = CommandMocks.CreateCommandContext(
+                this.MessageStore,
+                DefaultIds,
+                DefaultGuildId,
+                DefaultChannelId,
+                userId: DefaultReaderId,
+                updateMockGuild: UpdateMockGuild,
+                out _);
+            GameStateManager manager = new GameStateManager();
+            manager.TryCreate(DefaultChannelId, out GameState game);
+            game.TeamManager = new ByCommandTeamManager();
+            this.Game = game;
+
+            IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
+                this.botConfigurationfactory);
+            IFileScoresheetGenerator scoresheetGenerator = (new Mock<IFileScoresheetGenerator>()).Object;
+            this.GoogleSheetsGeneratorFactory = googleSheetsGeneratorFactory;
+
+            this.Handler = new ReaderCommandHandler(
+                commandContext,
+                manager,
+                options,
+                dbActionFactory,
+                scoresheetGenerator,
+                this.GoogleSheetsGeneratorFactory);
         }
 
         private static void UpdateMockGuild(Mock<IGuild> mockGuild, ITextChannel textChannel)
