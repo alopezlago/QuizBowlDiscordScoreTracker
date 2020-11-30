@@ -270,3 +270,4 @@ QuizBowlDiscordScoreTracker/config.txt
 vendor/
 
 /QuizBowlDiscordScoreTracker/Properties/launchsettings.json
+/QuizBowlDiscordScoreTracker/Properties/PublishProfiles/IISProfile.pubxml

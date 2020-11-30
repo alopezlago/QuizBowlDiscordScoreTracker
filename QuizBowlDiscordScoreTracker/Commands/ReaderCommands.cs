@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
 using Microsoft.Extensions.Options;
@@ -15,15 +16,19 @@ namespace QuizBowlDiscordScoreTracker.Commands
             GameStateManager manager,
             IOptionsMonitor<BotConfiguration> options,
             IDatabaseActionFactory dbActionFactory,
-            IFileScoresheetGenerator scoresheetGenerator)
+            IFileScoresheetGenerator scoresheetGenerator,
+            IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory)
         {
             this.Manager = manager;
             this.Options = options;
             this.DatabaseActionFactory = dbActionFactory;
             this.ScoresheetGenerator = scoresheetGenerator;
+            this.GoogleSheetsGeneratorFactory = googleSheetsGeneratorFactory;
         }
 
         private IDatabaseActionFactory DatabaseActionFactory { get; }
+
+        private IGoogleSheetsGeneratorFactory GoogleSheetsGeneratorFactory { get; }
 
         private GameStateManager Manager { get; }
 
@@ -97,6 +102,19 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().ExportToFileAsync();
         }
 
+        [HumanOnly]
+        [Command("exportToUCSD")]
+        [Summary("Exports the scoresheet to the UCSD Scoresheet. Export requires that one or two teams are " +
+            "playing, that each team has at most 6 players, and that at most 24 tossups have been played.")]
+        [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
+            Justification = "Discord.Net can't parse the argument directly as a URI")]
+        public Task ExportToUCSDAsync(
+            [Summary("The URL to the UCSD Google Sheet. For example, https://docs.google.com/spreadsheets/d/00000-0oVdTQYtgzHPI7L8kf3xePu5fyi_u-00000000/edit#gid=12345678")] string sheetsUrl,
+            [Summary("The round number, starting from 1")][Remainder] int round)
+        {
+            return this.GetHandler().ExportToUCSD(sheetsUrl, round);
+        }
+
         [Command("clear")]
         [Summary("Clears the player queue and answers from this question, including scores from this question. This can only be used during the tossup stage.")]
         public Task ClearAsync()
@@ -122,7 +140,12 @@ namespace QuizBowlDiscordScoreTracker.Commands
         {
             // this.Context is null in the constructor, so create the handler in this method
             return new ReaderCommandHandler(
-                this.Context, this.Manager, this.Options, this.DatabaseActionFactory, this.ScoresheetGenerator);
+                this.Context,
+                this.Manager,
+                this.Options,
+                this.DatabaseActionFactory,
+                this.ScoresheetGenerator,
+                this.GoogleSheetsGeneratorFactory);
         }
     }
 }

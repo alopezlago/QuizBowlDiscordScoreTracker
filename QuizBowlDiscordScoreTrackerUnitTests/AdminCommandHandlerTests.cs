@@ -1,13 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Commands;
 using QuizBowlDiscordScoreTracker.Database;
+using QuizBowlDiscordScoreTracker.Scoresheet;
+using QuizBowlDiscordScoreTracker.TeamManager;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
@@ -16,11 +21,21 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
     {
         private const ulong DefaultReaderId = 1;
         private static readonly HashSet<ulong> DefaultIds = new HashSet<ulong>(new ulong[] { 1, 2, 3 });
+        private static readonly string[] DefaultRoles = new string[] { $"{TeamRolePrefix} A", $"{TeamRolePrefix} B" };
 
         private const ulong DefaultChannelId = 11;
         private const ulong DefaultGuildId = 9;
+        private const string TeamRolePrefix = "Team";
 
         private InMemoryBotConfigurationContextFactory botConfigurationfactory;
+
+        private AdminCommandHandler Handler { get; set; }
+
+        private IGoogleSheetsGeneratorFactory GoogleSheetsGeneratorFactory { get; set; }
+
+        private IGuildTextChannel GuildTextChannel { get; set; }
+
+        private MessageStore MessageStore { get; set; }
 
         [TestInitialize]
         public void InitializeTest()
@@ -32,6 +47,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             {
                 context.Database.Migrate();
             }
+
+            // Clear out the old fields
+            this.Handler = null;
+            this.GoogleSheetsGeneratorFactory = null;
+            this.GuildTextChannel = null;
+            this.MessageStore = null;
         }
 
         [TestCleanup]
@@ -43,9 +64,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public async Task DisableBonusesAlways()
         {
-            this.CreateHandler(
-                out AdminCommandHandler handler,
-                out MessageStore messageStore);
+            this.InitializeHandler();
 
             // Enable, then disable the bonuses
             using (BotConfigurationContext context = this.botConfigurationfactory.Create())
@@ -54,30 +73,30 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 await action.SetUseBonuses(DefaultGuildId, true);
             }
 
-            await handler.GetDefaultFormatAsync();
+            await this.Handler.GetDefaultFormatAsync();
             Assert.AreEqual(
-                1, messageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the team role");
-            string getEmbed = messageStore.ChannelEmbeds[0];
+                1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the team role");
+            string getEmbed = this.MessageStore.ChannelEmbeds[0];
             Assert.IsTrue(
                 getEmbed.Contains("Require scoring bonuses?: Yes", StringComparison.InvariantCulture),
                 $"Enabled setting not in message \"{getEmbed}\"");
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.DisableBonusesByDefaultAsync();
+            await this.Handler.DisableBonusesByDefaultAsync();
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
-            string setMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+            string setMessage = this.MessageStore.ChannelMessages[0];
             Assert.AreEqual(
-                "Scoring bonuses will no longer be required for every game in this server.",
+                "Scoring bonuses will no longer be enabled for every game in this server.",
                 setMessage,
                 "Unexpected message when enabled");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.GetDefaultFormatAsync();
+            await this.Handler.GetDefaultFormatAsync();
             Assert.AreEqual(
-                1, messageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the team role");
-            getEmbed = messageStore.ChannelEmbeds[0];
+                1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the team role");
+            getEmbed = this.MessageStore.ChannelEmbeds[0];
             Assert.IsTrue(
                 getEmbed.Contains("Require scoring bonuses?: No", StringComparison.InvariantCulture),
                 $"Disabled setting not in message \"{getEmbed}\"");
@@ -86,24 +105,22 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public async Task EnableBonusesByDefault()
         {
-            this.CreateHandler(
-                out AdminCommandHandler handler,
-                out MessageStore messageStore);
-            await handler.EnableBonusesByDefaultAsync();
+            this.InitializeHandler();
+            await this.Handler.EnableBonusesByDefaultAsync();
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
-            string setMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+            string setMessage = this.MessageStore.ChannelMessages[0];
             Assert.AreEqual(
-                "Scoring bonuses is now required for every game in this server.",
+                "Scoring bonuses is now enabled for every game in this server.",
                 setMessage,
                 "Unexpected message when enabled");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.GetDefaultFormatAsync();
+            await this.Handler.GetDefaultFormatAsync();
             Assert.AreEqual(
-                1, messageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the team role");
-            string getEmbed = messageStore.ChannelEmbeds[0];
+                1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the team role");
+            string getEmbed = this.MessageStore.ChannelEmbeds[0];
             Assert.IsTrue(
                 getEmbed.Contains("Require scoring bonuses?: Yes", StringComparison.InvariantCulture),
                 $"Enabled setting not in message \"{getEmbed}\"");
@@ -115,46 +132,44 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const string prefix = "Reader";
             const string newPrefix = "The Reader";
 
-            this.CreateHandler(
-                out AdminCommandHandler handler,
-                out MessageStore messageStore);
-            await handler.SetReaderRolePrefixAsync(prefix);
+            this.InitializeHandler();
+            await this.Handler.SetReaderRolePrefixAsync(prefix);
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
-            string setMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+            string setMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 setMessage.Contains(prefix, StringComparison.InvariantCulture),
                 $"Prefix not in message \"{setMessage}\"");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.GetReaderRolePrefixAsync();
+            await this.Handler.GetReaderRolePrefixAsync();
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after getting the team role");
-            string getMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after getting the team role");
+            string getMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 getMessage.Contains(prefix, StringComparison.InvariantCulture),
                 $"Prefix not in message \"{getMessage}\"");
             Assert.AreNotEqual(setMessage, getMessage, "Get and set messages should be different");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.SetReaderRolePrefixAsync(newPrefix);
+            await this.Handler.SetReaderRolePrefixAsync(newPrefix);
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
-            setMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
+            setMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 setMessage.Contains(newPrefix, StringComparison.InvariantCulture),
                 $"Prefix not in message \"{setMessage}\" after update");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.GetReaderRolePrefixAsync();
+            await this.Handler.GetReaderRolePrefixAsync();
             Assert.AreEqual(
                 1,
-                messageStore.ChannelMessages.Count,
+                this.MessageStore.ChannelMessages.Count,
                 "Unexpected number of messages when getting the team role after the update");
-            getMessage = messageStore.ChannelMessages[0];
+            getMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 getMessage.Contains(prefix, StringComparison.InvariantCulture),
                 $"Prefix not in message \"{getMessage}\" after update");
@@ -165,36 +180,34 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task ClearReaderRolePrefix()
         {
             const string prefix = "Reader";
-            this.CreateHandler(
-                out AdminCommandHandler handler,
-                out MessageStore messageStore);
+            this.InitializeHandler();
 
-            await handler.SetReaderRolePrefixAsync(prefix);
+            await this.Handler.SetReaderRolePrefixAsync(prefix);
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
-            string setMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+            string setMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 setMessage.Contains(prefix, StringComparison.InvariantCulture),
                 $"Prefix not in message \"{setMessage}\"");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.ClearReaderRolePrefixAsync();
+            await this.Handler.ClearReaderRolePrefixAsync();
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
-            string clearMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
+            string clearMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 clearMessage.Contains("unset", StringComparison.InvariantCulture),
                 @$"""unset"" not in message ""{clearMessage}"" after update");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.GetReaderRolePrefixAsync();
+            await this.Handler.GetReaderRolePrefixAsync();
             Assert.AreEqual(
                 1,
-                messageStore.ChannelMessages.Count,
+                this.MessageStore.ChannelMessages.Count,
                 "Unexpected number of messages when getting the team role after the update");
-            string getMessage = messageStore.ChannelMessages[0];
+            string getMessage = this.MessageStore.ChannelMessages[0];
             Assert.AreEqual("No reader prefix used", getMessage, $"The team role prefix was not cleared");
         }
 
@@ -204,46 +217,44 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const string prefix = "Team #";
             const string newPrefix = "New Team #";
 
-            this.CreateHandler(
-                out AdminCommandHandler handler,
-                out MessageStore messageStore);
-            await handler.SetTeamRolePrefixAsync(prefix);
+            this.InitializeHandler();
+            await this.Handler.SetTeamRolePrefixAsync(prefix);
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
-            string setMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+            string setMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 setMessage.Contains(prefix, StringComparison.InvariantCulture),
                 $"Prefix not in message \"{setMessage}\"");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.GetTeamRolePrefixAsync();
+            await this.Handler.GetTeamRolePrefixAsync();
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after getting the team role");
-            string getMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after getting the team role");
+            string getMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 getMessage.Contains(prefix, StringComparison.InvariantCulture),
                 $"Prefix not in message \"{getMessage}\"");
             Assert.AreNotEqual(setMessage, getMessage, "Get and set messages should be different");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.SetTeamRolePrefixAsync(newPrefix);
+            await this.Handler.SetTeamRolePrefixAsync(newPrefix);
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
-            setMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
+            setMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 setMessage.Contains(newPrefix, StringComparison.InvariantCulture),
                 $"Prefix not in message \"{setMessage}\" after update");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.GetTeamRolePrefixAsync();
+            await this.Handler.GetTeamRolePrefixAsync();
             Assert.AreEqual(
                 1,
-                messageStore.ChannelMessages.Count,
+                this.MessageStore.ChannelMessages.Count,
                 "Unexpected number of messages when getting the team role after the update");
-            getMessage = messageStore.ChannelMessages[0];
+            getMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 getMessage.Contains(prefix, StringComparison.InvariantCulture),
                 $"Prefix not in message \"{getMessage}\" after update");
@@ -254,36 +265,34 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task ClearTeamRole()
         {
             const string prefix = "Team #";
-            this.CreateHandler(
-                out AdminCommandHandler handler,
-                out MessageStore messageStore);
+            this.InitializeHandler();
 
-            await handler.SetTeamRolePrefixAsync(prefix);
+            await this.Handler.SetTeamRolePrefixAsync(prefix);
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
-            string setMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+            string setMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 setMessage.Contains(prefix, StringComparison.InvariantCulture),
                 $"Prefix not in message \"{setMessage}\"");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.ClearTeamRolePrefixAsync();
+            await this.Handler.ClearTeamRolePrefixAsync();
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
-            string clearMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after updating the team role");
+            string clearMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 clearMessage.Contains("unset", StringComparison.InvariantCulture),
                 @$"""unset"" not in message ""{clearMessage}"" after update");
 
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.GetTeamRolePrefixAsync();
+            await this.Handler.GetTeamRolePrefixAsync();
             Assert.AreEqual(
                 1,
-                messageStore.ChannelMessages.Count,
+                this.MessageStore.ChannelMessages.Count,
                 "Unexpected number of messages when getting the team role after the update");
-            string getMessage = messageStore.ChannelMessages[0];
+            string getMessage = this.MessageStore.ChannelMessages[0];
             Assert.AreEqual("No team prefix used", getMessage, $"The team role prefix was not cleared");
         }
 
@@ -293,30 +302,25 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             const string voiceChannelName = "Packet Voice";
             const ulong voiceChannelId = DefaultChannelId + 10;
 
-            this.CreateHandler(
-                voiceChannelId,
-                voiceChannelName,
-                out AdminCommandHandler handler,
-                out MessageStore messageStore,
-                out IGuildTextChannel textChannel);
+            this.InitializeHandler(voiceChannelId, voiceChannelName);
 
-            await handler.PairChannelsAsync(textChannel, voiceChannelName);
+            await this.Handler.PairChannelsAsync(this.GuildTextChannel, voiceChannelName);
 
             // TODO: Check the exact string once this issue is fixed:
             // https://github.com/alopezlago/QuizBowlDiscordScoreTracker/issues/23
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
-            string setMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
+            string setMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 setMessage.Contains("success", StringComparison.InvariantCulture),
                 @$"Pairing message doesn't mention ""success"". Message: {setMessage}");
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.GetPairedChannelAsync(textChannel);
+            await this.Handler.GetPairedChannelAsync(this.GuildTextChannel);
 
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
-            string getMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
+            string getMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 getMessage.Contains(voiceChannelName, StringComparison.InvariantCulture),
                 $"Voice channel name not found in get message. Message: {getMessage}");
@@ -327,57 +331,147 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const string voiceChannelName = "Packet Voice";
             const ulong voiceChannelId = DefaultChannelId + 10;
-            this.CreateHandler(
-                voiceChannelId,
-                voiceChannelName,
-                out AdminCommandHandler handler,
-                out MessageStore messageStore,
-                out IGuildTextChannel textChannel);
+            this.InitializeHandler(voiceChannelId, voiceChannelName);
 
-            await handler.PairChannelsAsync(textChannel, voiceChannelName);
+            await this.Handler.PairChannelsAsync(this.GuildTextChannel, voiceChannelName);
 
             // TODO: Check the exact string once this issue is fixed:
             // https://github.com/alopezlago/QuizBowlDiscordScoreTracker/issues/23
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
-            string setMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
+            string setMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 setMessage.Contains("success", StringComparison.InvariantCultureIgnoreCase),
                 @$"Pairing message doesn't mention ""success"". Message: {setMessage}");
-            messageStore.Clear();
+            this.MessageStore.Clear();
 
-            await handler.UnpairChannelAsync(textChannel);
+            await this.Handler.UnpairChannelAsync(this.GuildTextChannel);
 
             Assert.AreEqual(
-                1, messageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
-            string getMessage = messageStore.ChannelMessages[0];
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after pairing channels");
+            string getMessage = this.MessageStore.ChannelMessages[0];
             Assert.IsTrue(
                 getMessage.Contains("unpair", StringComparison.InvariantCultureIgnoreCase),
                 @$"Unpairing message doesn't mention ""unpaired"". Message: {getMessage}");
         }
 
-        private void CreateHandler(
-            out AdminCommandHandler handler,
-            out MessageStore messageStore)
+        [TestMethod]
+        public async Task SetRostersFromRolesForUCSDFails()
         {
-            this.CreateHandler(
-                9999,
-                "Voice",
-                out handler,
-                out messageStore,
-                out _);
+            const string errorMessage = "API call failed";
+
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryUpdateRosters(It.IsAny<ITeamManager>(), It.IsAny<Uri>()))
+                .Returns(Task.FromResult<IResult<string>>(new FailureResult<string>(errorMessage)))
+                .Verifiable();
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(googleSheetsGeneratorFactory: mockFactory.Object);
+
+            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            using (DatabaseAction action = new DatabaseAction(context))
+            {
+                await action.SetTeamRolePrefixAsync(DefaultGuildId, TeamRolePrefix);
+            }
+
+            await this.Handler.SetRostersFromRolesForUCSD("http://localhost/sheetsUrl");
+
+            mockFactory.Verify();
+            this.MessageStore.VerifyChannelMessages(errorMessage);
         }
 
-        private void CreateHandler(
-            ulong voiceChannelId,
-            string voiceChannelName,
-            out AdminCommandHandler handler,
-            out MessageStore messageStore,
-            out IGuildTextChannel guildTextChannel)
+        [TestMethod]
+        public async Task SetRostersFromRolesForUCSDSucceeds()
         {
-            messageStore = new MessageStore();
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryUpdateRosters(It.IsAny<ITeamManager>(), It.IsAny<Uri>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)))
+                .Verifiable();
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(googleSheetsGeneratorFactory: mockFactory.Object);
+
+            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            using (DatabaseAction action = new DatabaseAction(context))
+            {
+                await action.SetTeamRolePrefixAsync(DefaultGuildId, TeamRolePrefix);
+            }
+
+            await this.Handler.SetRostersFromRolesForUCSD("http://localhost/sheetsUrl");
+
+            mockFactory.Verify();
+            this.MessageStore.VerifyChannelMessages("Rosters updated.");
+        }
+
+        [TestMethod]
+        public async Task SetRostersFromRolesForUCSDWithoutByRoleTeamsFails()
+        {
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryUpdateRosters(It.IsAny<ITeamManager>(), It.IsAny<Uri>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)))
+                .Verifiable();
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(googleSheetsGeneratorFactory: mockFactory.Object);
+
+            await this.Handler.SetRostersFromRolesForUCSD("http://localhost/sheetsUrl");
+
+            this.MessageStore.VerifyChannelMessages(
+                "Couldn't export to the rosters sheet. This server is not using the team role prefix. Use !setTeamRolePrefix to set the prefix for role names to use for teams.");
+            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Never);
+        }
+
+        [TestMethod]
+        public async Task SetRostersFromRolesForUCSDWithBadUrlFails()
+        {
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryUpdateRosters(It.IsAny<ITeamManager>(), It.IsAny<Uri>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(googleSheetsGeneratorFactory: mockFactory.Object);
+
+            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            using (DatabaseAction action = new DatabaseAction(context))
+            {
+                await action.SetTeamRolePrefixAsync(DefaultGuildId, TeamRolePrefix);
+            }
+
+            await this.Handler.SetRostersFromRolesForUCSD("this URL does not parse");
+
+            this.MessageStore.VerifyChannelMessages(
+                "The link to the Google Sheet wasn't understandable. Be sure to copy the full URL from the address bar.");
+            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Never);
+        }
+
+        private void InitializeHandler(
+            ulong voiceChannelId = 9999,
+            string voiceChannelName = "Voice",
+            IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory = null)
+        {
+            this.MessageStore = new MessageStore();
             ICommandContext commandContext = CommandMocks.CreateCommandContext(
-                messageStore,
+                this.MessageStore,
                 DefaultIds,
                 DefaultGuildId,
                 DefaultChannelId,
@@ -398,12 +492,28 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     mockGuild
                         .Setup(guild => guild.GetVoiceChannelsAsync(It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
                         .Returns(Task.FromResult<IReadOnlyCollection<IVoiceChannel>>(voiceChannels));
+                    mockGuild
+                        .Setup(guild => guild.Roles)
+                        .Returns(DefaultRoles.Select((role, index) =>
+                        {
+                            Mock<IRole> mockRole = new Mock<IRole>();
+                            mockRole
+                                .Setup(r => r.Name)
+                                .Returns(role);
+                            mockRole
+                                .Setup(r => r.Id)
+                                .Returns((ulong)index);
+                            return mockRole.Object;
+                        }).ToArray());
                 },
-                out guildTextChannel);
+                out IGuildTextChannel guildTextChannel);
+            this.GuildTextChannel = guildTextChannel;
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
             IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
                 this.botConfigurationfactory);
+            this.GoogleSheetsGeneratorFactory = googleSheetsGeneratorFactory ?? (new Mock<IGoogleSheetsGeneratorFactory>()).Object;
 
-            handler = new AdminCommandHandler(commandContext, dbActionFactory);
+            this.Handler = new AdminCommandHandler(commandContext, options, dbActionFactory, this.GoogleSheetsGeneratorFactory);
         }
     }
 }

@@ -56,7 +56,7 @@ namespace QuizBowlDiscordScoreTracker
         // TODO: Investigate if it makes sense to move the logic for deciding if we have a command here
 
         public async Task HandlePlayerMessage(
-            GameState state, IGuildUser messageAuthor, ITextChannel channel, string messageContent)
+            GameState state, IGuildUser messageAuthor, ITextChannel channel, ulong botId, string messageContent)
         {
             Verify.IsNotNull(state, nameof(state));
             Verify.IsNotNull(messageAuthor, nameof(messageAuthor));
@@ -72,7 +72,7 @@ namespace QuizBowlDiscordScoreTracker
             {
                 if (state.TryGetNextPlayer(out nextPlayerId) && nextPlayerId == messageAuthor.Id)
                 {
-                    await this.PromptNextPlayerAsync(state, channel);
+                    await this.PromptNextPlayerAsync(state, channel, botId);
                 }
 
                 return;
@@ -88,7 +88,7 @@ namespace QuizBowlDiscordScoreTracker
                 if (state.TryGetNextPlayer(out _))
                 {
                     // There's another player, so prompt them
-                    await this.PromptNextPlayerAsync(state, channel);
+                    await this.PromptNextPlayerAsync(state, channel, botId);
                 }
                 else
                 {
@@ -101,7 +101,7 @@ namespace QuizBowlDiscordScoreTracker
         }
 
         public Task<bool> TryScore(
-            GameState state, IGuildUser messageAuthor, ITextChannel channel, string messageContent)
+            GameState state, IGuildUser messageAuthor, ITextChannel channel, ulong botId, string messageContent)
         {
             Verify.IsNotNull(state, nameof(state));
             Verify.IsNotNull(messageAuthor, nameof(messageAuthor));
@@ -121,7 +121,7 @@ namespace QuizBowlDiscordScoreTracker
 
             return state.CurrentStage switch
             {
-                PhaseStage.Tossup => this.TryScoreBuzz(state, channel, messageContent),
+                PhaseStage.Tossup => this.TryScoreBuzz(state, channel, botId, messageContent),
                 PhaseStage.Bonus => TryScoreBonus(state, channel, messageContent),
 
                 // Can't score when the game is over
@@ -180,7 +180,8 @@ namespace QuizBowlDiscordScoreTracker
             return BuzzRegex.IsMatch(buzzText) || this.BuzzEmojisRegex.Any(regex => regex.IsMatch(buzzText));
         }
 
-        private async Task<Tuple<IVoiceChannel, IGuildUser>> MuteReader(ITextChannel textChannel, ulong? readerId)
+        private async Task<Tuple<IVoiceChannel, IGuildUser>> MuteReader(
+            ITextChannel textChannel, ulong botId, ulong? readerId)
         {
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
@@ -204,6 +205,12 @@ namespace QuizBowlDiscordScoreTracker
                 return null;
             }
 
+            IGuildUser botUser = await textChannel.Guild.GetUserAsync(botId);
+            if (!botUser.GetPermissions(voiceChannel).MuteMembers)
+            {
+                return null;
+            }
+
             IGuildUser reader = await textChannel.Guild.GetUserAsync(readerId.Value);
             try
             {
@@ -218,7 +225,7 @@ namespace QuizBowlDiscordScoreTracker
                 if (ex.HttpCode == System.Net.HttpStatusCode.Forbidden)
                 {
                     this.Logger.Error(
-                        $"Couldn't deafen reader because bot doesn't have Mute permission in guild '{voiceChannel.Guild.Name}'");
+                        $"Couldn't mute reader because bot doesn't have Mute permission in guild '{voiceChannel.Guild.Name}'");
                 }
 
                 return null;
@@ -227,7 +234,7 @@ namespace QuizBowlDiscordScoreTracker
             return new Tuple<IVoiceChannel, IGuildUser>(voiceChannel, reader);
         }
 
-        private async Task PromptNextPlayerAsync(GameState state, ITextChannel textChannel)
+        private async Task PromptNextPlayerAsync(GameState state, ITextChannel textChannel, ulong botId)
         {
             if (!state.TryGetNextPlayer(out ulong userId))
             {
@@ -239,7 +246,7 @@ namespace QuizBowlDiscordScoreTracker
             string teamId = await state.TeamManager.GetTeamIdOrNull(user.Id);
 
             Task<Tuple<IVoiceChannel, IGuildUser>> getVoiceChannelReaderPair = this.MuteReader(
-                textChannel, state.ReaderId);
+                textChannel, botId, state.ReaderId);
 
             string teamNameReference = await GetTeamNameForMessage(state, teamId);
             Task sendMessage = textChannel.SendMessageAsync($"{user.Mention}{teamNameReference}");
@@ -256,7 +263,7 @@ namespace QuizBowlDiscordScoreTracker
         }
 
         private async Task<bool> TryScoreBuzz(
-            GameState state, ITextChannel channel, string messageContent)
+            GameState state, ITextChannel channel, ulong botId, string messageContent)
         {
             if (!state.TryGetNextPlayer(out _))
             {
@@ -274,7 +281,7 @@ namespace QuizBowlDiscordScoreTracker
                     case 15:
                     case 20:
                         state.ScorePlayer(points);
-                        await this.PromptNextPlayerAsync(state, channel);
+                        await this.PromptNextPlayerAsync(state, channel, botId);
                         if (points > 0)
                         {
                             if (state.CurrentStage == PhaseStage.Bonus)
@@ -295,7 +302,7 @@ namespace QuizBowlDiscordScoreTracker
             else if (messageContent.Trim() == "no penalty")
             {
                 state.ScorePlayer(0);
-                await this.PromptNextPlayerAsync(state, channel);
+                await this.PromptNextPlayerAsync(state, channel, botId);
                 return true;
             }
 

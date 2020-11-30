@@ -1,8 +1,11 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
+using Microsoft.Extensions.Options;
 using QuizBowlDiscordScoreTracker.Database;
+using QuizBowlDiscordScoreTracker.Scoresheet;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
@@ -10,15 +13,24 @@ namespace QuizBowlDiscordScoreTracker.Commands
     [RequireContext(ContextType.Guild)]
     public class AdminCommands : ModuleBase
     {
-        public AdminCommands(IDatabaseActionFactory dbActionFactory)
+        public AdminCommands(
+            IOptionsMonitor<BotConfiguration> options,
+            IDatabaseActionFactory dbActionFactory,
+            IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory)
         {
+            this.Options = options;
             this.DatabaseActionFactory = dbActionFactory;
+            this.GoogleSheetsGeneratorFactory = googleSheetsGeneratorFactory;
         }
 
         private IDatabaseActionFactory DatabaseActionFactory { get; }
 
+        private IGoogleSheetsGeneratorFactory GoogleSheetsGeneratorFactory { get; }
+
+        private IOptionsMonitor<BotConfiguration> Options { get; }
+
         [Command("checkPermissions")]
-        [Summary("Checks if the bot has all the required permissions. " + 
+        [Summary("Checks if the bot has all the required permissions. " +
                  "Omitting a channel mention will check the current channel's permissions.")]
         public Task CheckPermissionsAsync([Optional][Summary("Text channel mention (#textChannelName)")] ITextChannel messageChannel)
         {
@@ -105,6 +117,17 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().SetReaderRolePrefixAsync(prefix);
         }
 
+        [HumanOnly]
+        [Command("setRostersForUCSD")]
+        [Summary("Sets the rosters for the Rosters sheet for the UCSD scoresheets.")]
+        [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
+            Justification = "Discord.Net can't parse the argument directly as a URI")]
+        public Task SetRostersFromRolesForUCSD(
+            [Summary("The URL to the UCSD Rosters Google Sheet. For example, https://docs.google.com/spreadsheets/d/1hwJJl5oz5VautZ3ckdV5Wo7YTTwIySMIu07nwSqvSHM")] string sheetsUrl)
+        {
+            return this.GetHandler().SetRostersFromRolesForUCSD(sheetsUrl);
+        }
+
         [Command("setTeamRolePrefix")]
         [Summary("Players who have a role whose name shares the specified prefix will be on the same team. For " +
             @"example, if a user has the role ""Team Alpha"", and the prefix is set to ""Team"", then the player " +
@@ -126,7 +149,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private AdminCommandHandler GetHandler()
         {
             // this.Context is null in the constructor, so create the handler in this method
-            return new AdminCommandHandler(this.Context, this.DatabaseActionFactory);
+            return new AdminCommandHandler(
+                this.Context, this.Options, this.DatabaseActionFactory, this.GoogleSheetsGeneratorFactory);
         }
     }
 }

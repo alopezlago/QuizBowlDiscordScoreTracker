@@ -1,10 +1,11 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.Scoresheet;
@@ -22,18 +23,22 @@ namespace QuizBowlDiscordScoreTracker.Commands
             GameStateManager manager,
             IOptionsMonitor<BotConfiguration> options,
             IDatabaseActionFactory dbActionFactory,
-            IFileScoresheetGenerator scoresheetGenerator)
+            IFileScoresheetGenerator scoresheetGenerator,
+            IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory)
         {
             this.Context = context;
             this.Manager = manager;
             this.Options = options;
             this.DatabaseActionFactory = dbActionFactory;
             this.ScoresheetGenerator = scoresheetGenerator;
+            this.GoogleSheetsGeneratorFactory = googleSheetsGeneratorFactory;
         }
 
         private ICommandContext Context { get; }
 
         private IDatabaseActionFactory DatabaseActionFactory { get; }
+
+        private IGoogleSheetsGeneratorFactory GoogleSheetsGeneratorFactory { get; }
 
         private GameStateManager Manager { get; }
 
@@ -153,7 +158,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             if (alwaysUseBonuses)
             {
                 await this.Context.Channel.SendMessageAsync(
-                    "Bonuses are no longer being tracked for this game only. Run !disableBonusesAlways to stop " +
+                    "Bonuses are no longer being tracked for this game only. Run !disableBonusesByDefault to stop " +
                     "tracking bonuses on this server by default.\nScores for the current question have been cleared.");
                 return;
             }
@@ -213,38 +218,10 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            int userExportCount;
-            int guildExportCount;
-            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            (bool isBelowExportLimit, int userExportCount) = await this.VerifyBelowExportLimit();
+            if (!isBelowExportLimit)
             {
-                int[] exportCounts = await Task.WhenAll(
-                    action.GetGuildExportCount(this.Context.Guild.Id),
-                    action.GetUserExportCount(this.Context.User.Id));
-                userExportCount = exportCounts[0];
-                guildExportCount = exportCounts[1];
-
-                // The count starts at 0, so use >= to make sure we don't go over
-                if (userExportCount >= this.Options.CurrentValue.DailyUserExportLimit)
-                {
-                    Logger.Information($"User {this.Context.User.Id}'s export failed because of a daily user limit");
-                    await this.Context.Channel.SendMessageAsync(
-                        "Cannot export a scoresheet. The user has already exceeded the number of scoresheets they can " +
-                        $"export each day ({this.Options.CurrentValue.DailyUserExportLimit}). The limit resets at midnight GMT.");
-                    return;
-                }
-                else if (guildExportCount >= this.Options.CurrentValue.DailyGuildExportLimit)
-                {
-                    Logger.Information(
-                        $"User {this.Context.User.Id}'s export failed because of a daily server limit on server {this.Context.Guild.Id}");
-                    await this.Context.Channel.SendMessageAsync(
-                        "Cannot export a scoresheet. The server has already exceeded the number of scoresheets it can " +
-                        $"export each day ({this.Options.CurrentValue.DailyGuildExportLimit}). The count resets at midnight GMT.");
-                    return;
-                }
-
-                await Task.WhenAll(
-                    action.IncrementGuildExportCount(this.Context.Guild.Id),
-                    action.IncrementUserExportCount(this.Context.User.Id));
+                return;
             }
 
             string readerName = guildUser.Nickname ?? guildUser.Username;
@@ -265,6 +242,62 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 filename,
                 text: "Scoresheet for this game. This scoresheet is based on NAQT's electronic scoresheet (© National Academic Quiz Tournaments, LLC).");
             Logger.Information($"User {this.Context.User.Id}'s export succeeded");
+        }
+
+        [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
+            Justification = "Discord.Net can't parse the argument directly as a URI")]
+        public async Task ExportToUCSD(string sheetsUrl, int round)
+        {
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
+            {
+                // This command only works during a game
+                return;
+            }
+
+            if (!(this.Context.User is IGuildUser _))
+            {
+                return;
+            }
+
+            if (!(this.Context.Channel is IGuildChannel _))
+            {
+                return;
+            }
+
+            // This would be nicer if it was done in the scoresheet generator, but it's easier to check for here
+            // If all of the scoresheets have the same type of name for the sheets, we should just pass in the round
+            // number to the interface, and then do the check there
+            if (round < 1 || round > 15)
+            {
+                await this.Context.Channel.SendMessageAsync(
+                    "The round is out of range. The round number must be between 1 and 15 (inclusive).");
+                return;
+            }
+
+            if (!Uri.TryCreate(sheetsUrl, UriKind.Absolute, out Uri sheetsUri))
+            {
+                await this.Context.Channel.SendMessageAsync(
+                    "The link to the Google Sheet wasn't understandable. Be sure to copy the full URL from the address bar.");
+                return;
+            }
+
+            Logger.Information($"User {this.Context.User.Id} attempting to export a UCSD scoresheet");
+
+            (bool isBelowExportLimit, _) = await this.VerifyBelowExportLimit();
+            if (!isBelowExportLimit)
+            {
+                return;
+            }
+
+            IGoogleSheetsGenerator generator = this.GoogleSheetsGeneratorFactory.Create(GoogleSheetsType.UCSD);
+            IResult<string> result = await generator.TryCreateScoresheet(game, sheetsUri, $"Round {round}");
+            if (!result.Success)
+            {
+                await this.Context.Channel.SendMessageAsync(result.ErrorMessage);
+                return;
+            }
+
+            await this.Context.Channel.SendMessageAsync($"Game written to the scoresheet Round {round}");
         }
 
         public async Task SetNewReaderAsync(IGuildUser newReader)
@@ -401,6 +434,45 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             await this.Context.Channel.SendMessageAsync(message);
+        }
+
+        private async Task<(bool belowExportLimit, int userExportCount)> VerifyBelowExportLimit()
+        {
+            int userExportCount;
+            int guildExportCount;
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                int[] exportCounts = await Task.WhenAll(
+                    action.GetGuildExportCount(this.Context.Guild.Id),
+                    action.GetUserExportCount(this.Context.User.Id));
+                userExportCount = exportCounts[0];
+                guildExportCount = exportCounts[1];
+
+                // The count starts at 0, so use >= to make sure we don't go over
+                if (userExportCount >= this.Options.CurrentValue.DailyUserExportLimit)
+                {
+                    Logger.Information($"User {this.Context.User.Id}'s export failed because of a daily user limit");
+                    await this.Context.Channel.SendMessageAsync(
+                        "Cannot export a scoresheet. The user has already exceeded the number of scoresheets they can " +
+                        $"export each day ({this.Options.CurrentValue.DailyUserExportLimit}). The limit resets at midnight GMT.");
+                    return (false, userExportCount);
+                }
+                else if (guildExportCount >= this.Options.CurrentValue.DailyGuildExportLimit)
+                {
+                    Logger.Information(
+                        $"User {this.Context.User.Id}'s export failed because of a daily server limit on server {this.Context.Guild.Id}");
+                    await this.Context.Channel.SendMessageAsync(
+                        "Cannot export a scoresheet. The server has already exceeded the number of scoresheets it can " +
+                        $"export each day ({this.Options.CurrentValue.DailyGuildExportLimit}). The count resets at midnight GMT.");
+                    return (false, userExportCount);
+                }
+
+                await Task.WhenAll(
+                    action.IncrementGuildExportCount(this.Context.Guild.Id),
+                    action.IncrementUserExportCount(this.Context.User.Id));
+
+                return (true, userExportCount);
+            }
         }
     }
 }

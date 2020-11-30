@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
+using System.Text.Json;
 
 namespace QuizBowlDiscordScoreTracker
 {
@@ -8,12 +10,20 @@ namespace QuizBowlDiscordScoreTracker
     {
         public const string TokenKey = "BotToken";
 
+        private static readonly JsonSerializerOptions GoogleJsonFileOptions = new JsonSerializerOptions()
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        private string googleAppJsonFile;
+
         // File with this should look like:
         // {
         //    "waitForRejoinMs": 10000,
         //    "muteDelayMs": 500,
         //    "buzzEmojis": [":buzz:"],
-        //    "webBaseUrl": "https://localhost:8080/index.html"
+        //    "webBaseUrl": "https://localhost:8080/index.html",
+        //    "googleAppJsonFile": "C:\\Users\\Me\\Documents\\GoogleappName-f1111111111f.json
         // }
         // Token currently comes from a separate file, since it should eventually be encrypted and not included with
         // the config file.
@@ -77,7 +87,54 @@ namespace QuizBowlDiscordScoreTracker
         /// </summary>
         public int DailyUserExportLimit { get; set; }
 
+        /// <summary>
+        /// The file location with information about the Google application's service account. This will refresh and
+        /// override the values in GoogleAppEmail/GoogleAppPrivateKey
+        /// </summary>
+        public string GoogleAppJsonFile
+        {
+            get => this.googleAppJsonFile;
+            set
+            {
+                if (this.googleAppJsonFile != value && File.Exists(value))
+                {
+                    this.googleAppJsonFile = value;
+                    string credentialJson = File.ReadAllText(this.googleAppJsonFile);
+                    GoogleCredentialFile credentialFileContents = JsonSerializer.Deserialize<GoogleCredentialFile>(
+                        credentialJson, GoogleJsonFileOptions);
+                    this.GoogleAppEmail = credentialFileContents.client_email;
+                    this.GoogleAppPrivateKey = credentialFileContents.private_key;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The email account of the Google application service account
+        /// </summary>
+        public string GoogleAppEmail { get; set; }
+
+        /// <summary>
+        /// The private key for the Google application service credential that can access Google Sheets
+        /// </summary>
+        public string GoogleAppPrivateKey { get; set; }
+
+        /// <summary>
+        /// The token for the Discord bot
+        /// </summary>
         public string BotToken { get; set; }
+
+        /// <summary>
+        /// The web URL for the buzzer website, that is hooked into the websockets
+        /// </summary>
         public Uri WebBaseURL { get; set; }
+
+        private class GoogleCredentialFile
+        {
+#pragma warning disable IDE1006 // Naming Styles. Json contract
+            public string private_key { get; set; }
+
+            public string client_email { get; set; }
+#pragma warning restore IDE1006 // Naming Styles
+        }
     }
 }
