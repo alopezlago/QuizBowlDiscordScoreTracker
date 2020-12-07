@@ -36,16 +36,6 @@
   </ItemGroup>
   
   <ItemGroup>
-    <!-- The txt files aren't automatically copied to the bin folder-->
-    <None Include="discordToken.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="config.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-  
-  <ItemGroup>
     <None Update="Scoresheet\naqt-scoresheet-electronic-template.xlsx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

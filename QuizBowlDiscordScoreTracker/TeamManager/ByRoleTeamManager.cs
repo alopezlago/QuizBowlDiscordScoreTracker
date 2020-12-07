@@ -65,18 +65,8 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
         public void ReloadTeamRoles(out string message)
         {
             this.InitiailzeTeamIdToName();
-            message = $@"Reload team roles OK.";
+            message = $@"Team roles reloaded. There are now {this.TeamIdToName.Count} team(s)";
         }
-
-
-//        We should add some information in the message to let the user know if there are changes to the number of teams we now see.There are a couple options:
-//Include the count(like "Team roles reloaded. There are now {this.TeamIdToNames.Count} team(s)")
-//You could include the previous count if you want to make the difference more explicit, by taking the count before we initialize, and adding something like "(old number of teams: X, new number of teams: Y)" in the message
-//Show team names in a style similar to GeneralCommandHandler.GetTeamsAsync.
-//This is more involved, so it's okay if you go with the first option instead
-
-
-
 
         private void InitiailzeTeamIdToName()
         {
