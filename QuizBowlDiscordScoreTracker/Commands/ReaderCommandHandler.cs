@@ -103,6 +103,25 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.Context.Channel.SendMessageAsync(message);
         }
 
+        public async Task ReloadTeamRoles()
+        {
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
+            {
+                // This command only works during a game
+                return;
+            }
+
+            if (!(game.TeamManager is IByRoleTeamManager teamManager))
+            {
+                await this.Context.Channel.SendMessageAsync("Reloading team roles isn't supported in this mode.");
+                return;
+            }
+
+            teamManager.ReloadTeamRoles(out string message);
+            await this.Context.Channel.SendMessageAsync(message);
+        }
+
+
         public async Task RemovePlayerAsync(IGuildUser player)
         {
             Verify.IsNotNull(player, nameof(player));
