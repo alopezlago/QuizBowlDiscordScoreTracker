@@ -5,8 +5,8 @@ using System.Threading.Tasks;
 
 namespace QuizBowlDiscordScoreTracker.TeamManager
 {
-    interface IByRoleTeamManager
+    public interface IByRoleTeamManager
     {
-        public void ReloadTeamRoles(out string message);
+        void ReloadTeamRoles(out string message);
     }
 }
