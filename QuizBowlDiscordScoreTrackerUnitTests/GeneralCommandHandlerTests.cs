@@ -1428,7 +1428,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.AreEqual(FirstTeamName, await teamManager.GetTeamIdOrNull(userId), "User didn't join the team");
             this.MessageStore.VerifyChannelMessages($@"@User_{userId} is on team ""{FirstTeamName}""");
         }
-        
+
         [TestMethod]
         public async Task JoinNonexistentTeamFails()
         {

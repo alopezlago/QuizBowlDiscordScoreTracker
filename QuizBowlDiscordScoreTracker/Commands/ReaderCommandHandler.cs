@@ -117,7 +117,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            teamManager.ReloadTeamRoles(out string message);
+            string message = teamManager.ReloadTeamRoles();
             await this.Context.Channel.SendMessageAsync(message);
         }
 
@@ -265,6 +265,60 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
             Justification = "Discord.Net can't parse the argument directly as a URI")]
+        public async Task ExportToTJ(string sheetsUrl, int round)
+        {
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
+            {
+                // This command only works during a game
+                return;
+            }
+
+            if (!(this.Context.User is IGuildUser _))
+            {
+                return;
+            }
+
+            if (!(this.Context.Channel is IGuildChannel _))
+            {
+                return;
+            }
+
+            if (round < 1)
+            {
+                await this.Context.Channel.SendMessageAsync(
+                    "The round is out of range. The round number must be at least 1.");
+                return;
+            }
+
+            if (!Uri.TryCreate(sheetsUrl, UriKind.Absolute, out Uri sheetsUri))
+            {
+                await this.Context.Channel.SendMessageAsync(
+                    "The link to the Google Sheet wasn't understandable. Be sure to copy the full URL from the address bar.");
+                return;
+            }
+
+            Logger.Information($"User {this.Context.User.Id} attempting to export a TJ scoresheet");
+
+            (bool isBelowExportLimit, _) = await this.VerifyBelowExportLimit();
+            if (!isBelowExportLimit)
+            {
+                return;
+            }
+
+            IGoogleSheetsGenerator generator = this.GoogleSheetsGeneratorFactory.Create(GoogleSheetsType.TJ);
+            IResult<string> result = await generator.TryCreateScoresheet(game, sheetsUri, round);
+            if (!result.Success)
+            {
+                await this.Context.Channel.SendMessageAsync(result.ErrorMessage);
+                return;
+            }
+
+            // TODO: To handle cases where we partially write the scoresheet, we should use something from the result.
+            await this.Context.Channel.SendMessageAsync($"Game written to the scoresheet Round {round}");
+        }
+
+        [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
+            Justification = "Discord.Net can't parse the argument directly as a URI")]
         public async Task ExportToUCSD(string sheetsUrl, int round)
         {
             if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
@@ -309,7 +363,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             IGoogleSheetsGenerator generator = this.GoogleSheetsGeneratorFactory.Create(GoogleSheetsType.UCSD);
-            IResult<string> result = await generator.TryCreateScoresheet(game, sheetsUri, $"Round {round}");
+            IResult<string> result = await generator.TryCreateScoresheet(game, sheetsUri, round);
             if (!result.Success)
             {
                 await this.Context.Channel.SendMessageAsync(result.ErrorMessage);
@@ -366,7 +420,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             if (this.Context.Channel is IGuildChannel guildChannel)
             {
                 Logger.Information(
-                    "Game ended in guild '{0}' in channel '{0}'", guildChannel.Guild.Name, guildChannel.Name);
+                    "Game ended in guild '{0}' in channel '{1}'", guildChannel.Guild.Name, guildChannel.Name);
             }
 
             return this.Context.Channel.SendMessageAsync($"Reading over. All stats cleared.");

@@ -62,10 +62,11 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
             IReadOnlyDictionary<string, string> teamIdToName = (IReadOnlyDictionary<string, string>)this.TeamIdToName;
             return Task.FromResult(teamIdToName);
         }
-        public void ReloadTeamRoles(out string message)
+
+        public string ReloadTeamRoles()
         {
             this.InitiailzeTeamIdToName();
-            message = $@"Team roles reloaded. There are now {this.TeamIdToName.Count} team(s)";
+            return $@"Team roles reloaded. There are now {this.TeamIdToName.Count} team(s)";
         }
 
         private void InitiailzeTeamIdToName()

@@ -501,6 +501,40 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task ReloadTeamRolesSucceeds()
+        {
+            this.InitializeHandler();
+            Mock<IGuild> mockGuild = new Mock<IGuild>();
+            mockGuild.Setup(guild => guild.Roles).Returns(Array.Empty<IRole>());
+            this.Game.TeamManager = new ByRoleTeamManager(mockGuild.Object, "Team");
+
+            IReadOnlyDictionary<string, string> teamIdToNames = await this.Game.TeamManager.GetTeamIdToNames();
+            Assert.AreEqual(0, teamIdToNames.Count, "Unexpected number of initial teams");
+
+            Mock<IRole> mockNonTeamRole = new Mock<IRole>();
+            mockNonTeamRole.Setup(role => role.Id).Returns(123987);
+            mockNonTeamRole.Setup(role => role.Name).Returns("Team X");
+            IRole[] roles = new IRole[] { mockNonTeamRole.Object };
+            mockGuild.Setup(guild => guild.Roles).Returns(roles);
+
+            await this.Handler.ReloadTeamRoles();
+            this.MessageStore.VerifyChannelMessages("Team roles reloaded. There are now 1 team(s)");
+
+            teamIdToNames = await this.Game.TeamManager.GetTeamIdToNames();
+            Assert.AreEqual(1, teamIdToNames.Count, "Unexpected number of teams after a reload");
+        }
+
+        [TestMethod]
+        public async Task ReloadTeamRolesFailsWithoutByRoleManager()
+        {
+            this.InitializeHandler();
+            this.Game.TeamManager = new ByCommandTeamManager();
+
+            await this.Handler.ReloadTeamRoles();
+            this.MessageStore.VerifyChannelMessages("Reloading team roles isn't supported in this mode.");
+        }
+
+        [TestMethod]
         public async Task RemoveTeamSucceeds()
         {
             const string teamName = "Alpha";
@@ -695,171 +729,91 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task ExportToTJFails()
+        {
+            await this.ExportToGoogleSheetsFails(
+                GoogleSheetsType.TJ, (url, round) => this.Handler.ExportToTJ(url, round));
+        }
+
+        [TestMethod]
+        public async Task ExportToTJSucceeds()
+        {
+            await this.ExportToGoogleSheetsSucceeds(
+                GoogleSheetsType.TJ, (url, round) => this.Handler.ExportToTJ(url, round));
+        }
+
+        [TestMethod]
+        public async Task ExportToTJUserLimit()
+        {
+            await this.ExportToGoogleSheetsUserLimit(
+                GoogleSheetsType.TJ, (url, round) => this.Handler.ExportToTJ(url, round));
+        }
+
+        [TestMethod]
+        public async Task ExportToTJGuildLimit()
+        {
+            await this.ExportToGoogleSheetsGuildLimit(
+               GoogleSheetsType.TJ, (url, round) => this.Handler.ExportToTJ(url, round));
+        }
+
+        [TestMethod]
+        public async Task ExportToTJWithBadUrlFails()
+        {
+            await this.ExportToGoogleSheetsWithBadUrlFails(
+                GoogleSheetsType.TJ, (url, round) => this.Handler.ExportToTJ(url, round));
+        }
+
+        [TestMethod]
+        public async Task ExportToTJWithRoundBelowOneFails()
+        {
+            await this.ExportToGoogleSheetsWithRoundBelowOneFails(
+                GoogleSheetsType.TJ,
+                "The round is out of range. The round number must be at least 1.",
+                (url, round) => this.Handler.ExportToTJ(url, round));
+        }
+
+        [TestMethod]
         public async Task ExportToUCSDFails()
         {
-            const string errorMessage = "Too many teams";
-
-            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
-            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
-            mockGenerator
-                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
-                .Returns(Task.FromResult<IResult<string>>(new FailureResult<string>(errorMessage)))
-                .Verifiable();
-
-            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
-            mockFactory
-                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
-                .Returns(mockGenerator.Object);
-
-            this.InitializeHandler(options, mockFactory.Object);
-            await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", 1);
-
-            mockFactory.Verify();
-            this.MessageStore.VerifyChannelMessages(errorMessage);
+            await this.ExportToGoogleSheetsFails(
+                GoogleSheetsType.UCSD, (url, round) => this.Handler.ExportToUCSD(url, round));
         }
 
         [TestMethod]
         public async Task ExportToUCSDSucceeds()
         {
-            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
-            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
-            mockGenerator
-                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
-                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)))
-                .Verifiable();
-
-            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
-            mockFactory
-                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
-                .Returns(mockGenerator.Object);
-
-            this.InitializeHandler(options, mockFactory.Object);
-            await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", 1);
-
-            mockFactory.Verify();
-            this.MessageStore.VerifyChannelMessages("Game written to the scoresheet Round 1");
-
-            // Make sure it succeeds at the limit (15) too
-            this.MessageStore.Clear();
-            await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", 15);
-
-            this.MessageStore.VerifyChannelMessages("Game written to the scoresheet Round 15");
+            await this.ExportToGoogleSheetsSucceeds(
+                GoogleSheetsType.UCSD, (url, round) => this.Handler.ExportToUCSD(url, round));
         }
 
         [TestMethod]
         public async Task ExportToUCSDUserLimit()
         {
-            const int userLimit = 2;
-            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
-            options.CurrentValue.DailyUserExportLimit = userLimit;
-            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
-            mockGenerator
-                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
-                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
-
-            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
-            mockFactory
-                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
-                .Returns(mockGenerator.Object);
-
-            this.InitializeHandler(options, mockFactory.Object);
-
-            for (int i = 0; i < userLimit; i++)
-            {
-                await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", i + 1);
-                this.MessageStore.VerifyChannelMessages($"Game written to the scoresheet Round {i + 1}");
-                this.MessageStore.Clear();
-            }
-
-            await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", userLimit + 1);
-
-            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Exactly(userLimit));
-
-            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
-            string message = this.MessageStore.ChannelMessages.First();
-            Assert.IsTrue(
-                message.Contains("The user has already exceeded", StringComparison.InvariantCultureIgnoreCase),
-                $"Couldn't find information on the user limit in the message '{message}'");
+            await this.ExportToGoogleSheetsUserLimit(
+                GoogleSheetsType.UCSD, (url, round) => this.Handler.ExportToUCSD(url, round));
         }
 
         [TestMethod]
         public async Task ExportToUCSDGuildLimit()
         {
-            const int guildLimit = 2;
-            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
-            options.CurrentValue.DailyGuildExportLimit = guildLimit;
-            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
-            mockGenerator
-                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
-                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
-
-            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
-            mockFactory
-                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
-                .Returns(mockGenerator.Object);
-
-            this.InitializeHandler(options, mockFactory.Object);
-
-            for (int i = 0; i < guildLimit; i++)
-            {
-                await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", i + 1);
-                this.MessageStore.VerifyChannelMessages($"Game written to the scoresheet Round {i + 1}");
-                this.MessageStore.Clear();
-            }
-
-            await this.Handler.ExportToUCSD("https://localhost/sheetsUrl", guildLimit + 1);
-
-            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Exactly(guildLimit));
-
-            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
-            string message = this.MessageStore.ChannelMessages.First();
-            Assert.IsTrue(
-                message.Contains("The server has already exceeded", StringComparison.InvariantCultureIgnoreCase),
-                $"Couldn't find information on the user limit in the message '{message}'");
+            await this.ExportToGoogleSheetsGuildLimit(
+               GoogleSheetsType.UCSD, (url, round) => this.Handler.ExportToUCSD(url, round));
         }
 
         [TestMethod]
         public async Task ExportToUCSDWithBadUrlFails()
         {
-            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
-            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
-            mockGenerator
-                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
-                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
-
-            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
-            mockFactory
-                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
-                .Returns(mockGenerator.Object);
-
-            this.InitializeHandler(options, mockFactory.Object);
-            await this.Handler.ExportToUCSD("this is a bad URL", 1);
-
-            this.MessageStore.VerifyChannelMessages(
-                "The link to the Google Sheet wasn't understandable. Be sure to copy the full URL from the address bar.");
-            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Never);
+            await this.ExportToGoogleSheetsWithBadUrlFails(
+                GoogleSheetsType.UCSD, (url, round) => this.Handler.ExportToUCSD(url, round));
         }
 
         [TestMethod]
         public async Task ExportToUCSDWithRoundBelowOneFails()
         {
-            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
-            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
-            mockGenerator
-                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
-                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
-
-            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
-            mockFactory
-                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
-                .Returns(mockGenerator.Object);
-
-            this.InitializeHandler(options, mockFactory.Object);
-            await this.Handler.ExportToUCSD("https://localhost/sheets", 0);
-
-            this.MessageStore.VerifyChannelMessages(
-                "The round is out of range. The round number must be between 1 and 15 (inclusive).");
-            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Never);
+            await this.ExportToGoogleSheetsWithRoundBelowOneFails(
+                GoogleSheetsType.UCSD,
+                "The round is out of range. The round number must be between 1 and 15 (inclusive).",
+                (url, round) => this.Handler.ExportToUCSD(url, round));
         }
 
         [TestMethod]
@@ -868,7 +822,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
-                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<string>()))
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<int>()))
                 .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
 
             Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
@@ -887,6 +841,177 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         private static ulong GetExistingNonReaderUserId(ulong readerId = DefaultReaderId)
         {
             return DefaultIds.Except(new ulong[] { readerId }).First();
+        }
+
+        private static void UpdateMockGuild(Mock<IGuild> mockGuild, ITextChannel textChannel)
+        {
+            Mock<IRole> mockReaderRole = new Mock<IRole>();
+            mockReaderRole.Setup(role => role.Id).Returns(DefaultReaderRoleId);
+            mockReaderRole.Setup(role => role.Name).Returns(DefaultReaderRoleName);
+            mockGuild.Setup(guild => guild.Roles).Returns(new IRole[] { mockReaderRole.Object });
+        }
+
+        private async Task ExportToGoogleSheetsFails(GoogleSheetsType type, Func<string, int, Task> exportToSheet)
+        {
+            const string errorMessage = "Too many teams";
+
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<int>()))
+                .Returns(Task.FromResult<IResult<string>>(new FailureResult<string>(errorMessage)))
+                .Verifiable();
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(type))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+            await exportToSheet("https://localhost/sheetsUrl", 1);
+
+            mockFactory.Verify();
+            this.MessageStore.VerifyChannelMessages(errorMessage);
+        }
+
+        private async Task ExportToGoogleSheetsSucceeds(GoogleSheetsType type, Func<string, int, Task> exportToSheet)
+        {
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<int>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)))
+                .Verifiable();
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(type))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+            await exportToSheet("https://localhost/sheetsUrl", 1);
+
+            mockFactory.Verify();
+            this.MessageStore.VerifyChannelMessages("Game written to the scoresheet Round 1");
+
+            // Make sure it succeeds at the limit (15) too
+            this.MessageStore.Clear();
+            await exportToSheet("https://localhost/sheetsUrl", 15);
+
+            this.MessageStore.VerifyChannelMessages("Game written to the scoresheet Round 15");
+        }
+
+        private async Task ExportToGoogleSheetsUserLimit(GoogleSheetsType type, Func<string, int, Task> exportToSheet)
+        {
+            const int userLimit = 2;
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            options.CurrentValue.DailyUserExportLimit = userLimit;
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<int>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(type))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+
+            for (int i = 0; i < userLimit; i++)
+            {
+                await exportToSheet("https://localhost/sheetsUrl", i + 1);
+                this.MessageStore.VerifyChannelMessages($"Game written to the scoresheet Round {i + 1}");
+                this.MessageStore.Clear();
+            }
+
+            await exportToSheet("https://localhost/sheetsUrl", userLimit + 1);
+
+            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Exactly(userLimit));
+
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
+            string message = this.MessageStore.ChannelMessages.First();
+            Assert.IsTrue(
+                message.Contains("The user has already exceeded", StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find information on the user limit in the message '{message}'");
+        }
+
+        private async Task ExportToGoogleSheetsGuildLimit(GoogleSheetsType type, Func<string, int, Task> exportToSheet)
+        {
+            const int guildLimit = 2;
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            options.CurrentValue.DailyGuildExportLimit = guildLimit;
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<int>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(type))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+
+            for (int i = 0; i < guildLimit; i++)
+            {
+                await exportToSheet("https://localhost/sheetsUrl", i + 1);
+                this.MessageStore.VerifyChannelMessages($"Game written to the scoresheet Round {i + 1}");
+                this.MessageStore.Clear();
+            }
+
+            await exportToSheet("https://localhost/sheetsUrl", guildLimit + 1);
+
+            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Exactly(guildLimit));
+
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages");
+            string message = this.MessageStore.ChannelMessages.First();
+            Assert.IsTrue(
+                message.Contains("The server has already exceeded", StringComparison.InvariantCultureIgnoreCase),
+                $"Couldn't find information on the user limit in the message '{message}'");
+        }
+
+        private async Task ExportToGoogleSheetsWithBadUrlFails(
+            GoogleSheetsType type, Func<string, int, Task> exportToSheet)
+        {
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<int>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(type))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+            await exportToSheet("this is a bad URL", 1);
+
+            this.MessageStore.VerifyChannelMessages(
+                "The link to the Google Sheet wasn't understandable. Be sure to copy the full URL from the address bar.");
+            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Never);
+        }
+
+        private async Task ExportToGoogleSheetsWithRoundBelowOneFails(
+            GoogleSheetsType type, string errorMessage, Func<string, int, Task> exportToSheet)
+        {
+            IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
+            Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
+            mockGenerator
+                .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<int>()))
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+
+            Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
+            mockFactory
+                .Setup(factory => factory.Create(type))
+                .Returns(mockGenerator.Object);
+
+            this.InitializeHandler(options, mockFactory.Object);
+            await exportToSheet("https://localhost/sheets", 0);
+
+            this.MessageStore.VerifyChannelMessages(errorMessage);
+            mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Never);
         }
 
         private void InitializeHandler()
@@ -984,14 +1109,6 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 dbActionFactory,
                 scoresheetGenerator,
                 this.GoogleSheetsGeneratorFactory);
-        }
-
-        private static void UpdateMockGuild(Mock<IGuild> mockGuild, ITextChannel textChannel)
-        {
-            Mock<IRole> mockReaderRole = new Mock<IRole>();
-            mockReaderRole.Setup(role => role.Id).Returns(DefaultReaderRoleId);
-            mockReaderRole.Setup(role => role.Name).Returns(DefaultReaderRoleName);
-            mockGuild.Setup(guild => guild.Roles).Returns(new IRole[] { mockReaderRole.Object });
         }
     }
 }

@@ -7,6 +7,10 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
 {
     public interface IByRoleTeamManager
     {
-        void ReloadTeamRoles(out string message);
+        /// <summary>
+        /// Reloads teams from the roles
+        /// </summary>
+        /// <returns>Returns the message to report after the roles were reloaded</returns>
+        string ReloadTeamRoles();
     }
 }

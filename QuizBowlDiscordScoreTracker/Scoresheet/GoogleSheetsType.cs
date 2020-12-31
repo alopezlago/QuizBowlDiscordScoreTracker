@@ -2,6 +2,7 @@
 {
     public enum GoogleSheetsType
     {
-        UCSD
+        UCSD,
+        TJ
     }
 }

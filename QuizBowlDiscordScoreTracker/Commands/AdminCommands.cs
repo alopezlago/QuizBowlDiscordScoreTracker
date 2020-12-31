@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
-using Microsoft.Extensions.Options;
 using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.Scoresheet;
 
@@ -14,11 +13,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
     public class AdminCommands : ModuleBase
     {
         public AdminCommands(
-            IOptionsMonitor<BotConfiguration> options,
-            IDatabaseActionFactory dbActionFactory,
-            IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory)
+            IDatabaseActionFactory dbActionFactory, IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory)
         {
-            this.Options = options;
             this.DatabaseActionFactory = dbActionFactory;
             this.GoogleSheetsGeneratorFactory = googleSheetsGeneratorFactory;
         }
@@ -26,8 +22,6 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private IDatabaseActionFactory DatabaseActionFactory { get; }
 
         private IGoogleSheetsGeneratorFactory GoogleSheetsGeneratorFactory { get; }
-
-        private IOptionsMonitor<BotConfiguration> Options { get; }
 
         [Command("checkPermissions")]
         [Summary("Checks if the bot has all the required permissions. " +
@@ -118,6 +112,17 @@ namespace QuizBowlDiscordScoreTracker.Commands
         }
 
         [HumanOnly]
+        [Command("setRostersForTJ")]
+        [Summary("Sets the rosters for the Rosters sheet for TJ Sheets.")]
+        [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
+            Justification = "Discord.Net can't parse the argument directly as a URI")]
+        public Task SetRostersFromRolesForTJ(
+            [Summary("The URL to the TJ Rosters Google Sheet. For example, https://docs.google.com/spreadsheets/d/1dZ_Yj_WBt5nWoHdyhv2VYeW--ecNR8-aQY39TBsaNwU")] string sheetsUrl)
+        {
+            return this.GetHandler().SetRostersFromRolesForTJ(sheetsUrl);
+        }
+
+        [HumanOnly]
         [Command("setRostersForUCSD")]
         [Summary("Sets the rosters for the Rosters sheet for the UCSD scoresheets.")]
         [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
@@ -149,8 +154,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         private AdminCommandHandler GetHandler()
         {
             // this.Context is null in the constructor, so create the handler in this method
-            return new AdminCommandHandler(
-                this.Context, this.Options, this.DatabaseActionFactory, this.GoogleSheetsGeneratorFactory);
+            return new AdminCommandHandler(this.Context, this.DatabaseActionFactory, this.GoogleSheetsGeneratorFactory);
         }
     }
 }
