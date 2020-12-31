@@ -24,7 +24,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
         /// <param name="sheetsUri">URI to the Google Sheet with the worksheet for the tournament's rosters</param>
         /// <param name="sheetName">Name of the worksheet for the round we're creating a scoresheet for</param>
         /// <returns>A result with an error code if the update failed, or a result with an empty string on success</returns>
-        Task<IResult<string>> TryCreateScoresheet(GameState game, Uri sheetsUri, string sheetName);
+        Task<IResult<string>> TryCreateScoresheet(GameState game, Uri sheetsUri, int roundNumber);
 
         /// <summary>
         /// Updates the rosters spreadsheet in the Google Sheet

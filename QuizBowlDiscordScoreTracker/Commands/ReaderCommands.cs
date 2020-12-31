@@ -110,13 +110,26 @@ namespace QuizBowlDiscordScoreTracker.Commands
         }
 
         [HumanOnly]
+        [Command("exportToTJ")]
+        [Summary("Exports the scoresheet to the UCSD Scoresheet. Export requires that one or two teams are " +
+            "playing, that each team has at most 6 players, and that at most 24 tossups have been played.")]
+        [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
+            Justification = "Discord.Net can't parse the argument directly as a URI")]
+        public Task ExportToTJAsync(
+            [Summary("The URL to the TJ Google Sheet. For example, https://docs.google.com/spreadsheets/d/1IJji0c23_mOYz6SnMiUlj2WDCIAHutIqfMdG-0hpEIU")] string sheetsUrl,
+            [Summary("The round number, starting from 1")][Remainder] int round)
+        {
+            return this.GetHandler().ExportToTJ(sheetsUrl, round);
+        }
+
+        [HumanOnly]
         [Command("exportToUCSD")]
         [Summary("Exports the scoresheet to the UCSD Scoresheet. Export requires that one or two teams are " +
             "playing, that each team has at most 6 players, and that at most 24 tossups have been played.")]
         [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
             Justification = "Discord.Net can't parse the argument directly as a URI")]
         public Task ExportToUCSDAsync(
-            [Summary("The URL to the UCSD Google Sheet. For example, https://docs.google.com/spreadsheets/d/00000-0oVdTQYtgzHPI7L8kf3xePu5fyi_u-00000000/edit#gid=12345678")] string sheetsUrl,
+            [Summary("The URL to the UCSD Google Sheet. For example, https://docs.google.com/spreadsheets/d/00000-0oVdTQYtgzHPI7L8kf3xePu5fyi_u-00000000")] string sheetsUrl,
             [Summary("The round number, starting from 1")][Remainder] int round)
         {
             return this.GetHandler().ExportToUCSD(sheetsUrl, round);

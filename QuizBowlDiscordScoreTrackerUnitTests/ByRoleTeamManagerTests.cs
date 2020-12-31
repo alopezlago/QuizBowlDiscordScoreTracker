@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
@@ -90,6 +91,68 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     $"Couldn't get the team name for role ID {RoleIds[i]}");
                 Assert.AreEqual(TeamNames[i], teamName, $"Unexpected team name for team #{i + 1}");
             }
+        }
+
+        [TestMethod]
+        public async Task ReloadTeamRoles()
+        {
+            Mock<IGuild> mockGuild = new Mock<IGuild>();
+            List<IRole> roles = new List<IRole>();
+            for (int i = 0; i < RoleIds.Length; i++)
+            {
+                Mock<IRole> mockRole = new Mock<IRole>();
+                mockRole.Setup(role => role.Id).Returns(RoleIds[i]);
+                mockRole.Setup(role => role.Name).Returns(RoleNames[i]);
+                roles.Add(mockRole.Object);
+            }
+
+            mockGuild
+                .Setup(guild => guild.Roles)
+                .Returns(roles);
+
+            bool newRolesAssigned = false;
+            List<IGuildUser> users = new List<IGuildUser>();
+            for (int i = 0; i < PlayerIds.Length; i++)
+            {
+                Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
+                mockUser.Setup(user => user.Id).Returns(PlayerIds[i]);
+                mockUser.Setup(user => user.Nickname).Returns($"User_{PlayerIds[i]}");
+
+                // Make a copy so that we don't use the value of i after it's done in the loop in the return function's
+                // closure
+                int index = i;
+                mockUser.Setup(user => user.RoleIds).Returns(() =>
+                {
+                    if (newRolesAssigned || index % 2 == 0)
+                    {
+                        return new ulong[] { RoleIds[index] };
+                    }
+
+                    return Array.Empty<ulong>();
+                });
+                users.Add(mockUser.Object);
+            }
+
+            IReadOnlyCollection<IGuildUser> readonlyUsers = users;
+            mockGuild
+                .Setup(guild => guild.GetUsersAsync(It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
+                .Returns<CacheMode, RequestOptions>((mode, options) => Task.FromResult(readonlyUsers));
+            mockGuild
+                .Setup(guild => guild.GetUserAsync(It.IsAny<ulong>(), It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
+                .Returns<ulong, CacheMode, RequestOptions>((id, mode, options) => Task.FromResult(users.FirstOrDefault(user => user.Id == id)));
+
+            ByRoleTeamManager teamManager = new ByRoleTeamManager(mockGuild.Object, DefaultTeamRolePrefix);
+
+            IEnumerable<PlayerTeamPair> players = await teamManager.GetKnownPlayers();
+            Assert.AreEqual(PlayerIds.Length / 2, players.Count(), "Unexpected number of players the first time");
+            Assert.AreEqual(PlayerIds[0], players.First().PlayerId, "Unexpected player in the first set of players");
+
+            newRolesAssigned = true;
+            string message = teamManager.ReloadTeamRoles();
+            Assert.IsNotNull(message, "Message to report shouldn't be null");
+            Assert.AreEqual(PlayerIds.Length, players.Count(), "Unexpected number of players the second time");
+            Assert.IsTrue(players.Any(player => player.PlayerId == PlayerIds[0]), "First player isn't in the list of teams");
+            Assert.IsTrue(players.Any(player => player.PlayerId == PlayerIds[1]), "Second player isn't in the list of teams");
         }
 
         private static ByRoleTeamManager CreateTeamManager()

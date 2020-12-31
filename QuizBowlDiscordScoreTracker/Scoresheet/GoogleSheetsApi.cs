@@ -44,7 +44,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
         }
 
         public Task<IResult<string>> UpdateGoogleSheet(
-            List<ValueRange> ranges, List<string> rangesToClear, Uri sheetsUri)
+            List<ValueRange> ranges, IList<string> rangesToClear, Uri sheetsUri)
         {
             Verify.IsNotNull(ranges, nameof(ranges));
             Verify.IsNotNull(rangesToClear, nameof(rangesToClear));
@@ -89,7 +89,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
         }
 
         private async Task<IResult<string>> UpdateGoogleSheet(
-            List<ValueRange> ranges, List<string> rangesToClear, Uri sheetsUri, int attemptedRetries)
+            List<ValueRange> ranges, IList<string> rangesToClear, Uri sheetsUri, int attemptedRetries)
         {
             if (this.Service == null)
             {

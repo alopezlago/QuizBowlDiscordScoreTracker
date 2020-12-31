@@ -12,7 +12,7 @@ using QuizBowlDiscordScoreTracker.TeamManager;
 namespace QuizBowlDiscordScoreTrackerUnitTests
 {
     [TestClass]
-    public class UCSDGoogleSheetsGeneratorTests
+    public class TJheetsGeneratorTests
     {
         private const string FirstTeam = "Alpha";
         private const string SecondTeam = "Beta";
@@ -21,7 +21,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
         private List<string> ClearedRanges { get; set; }
 
-        private UCSDGoogleSheetsGenerator Generator { get; set; }
+        private TJSheetsGenerator Generator { get; set; }
 
         private ByCommandTeamManager TeamManager { get; set; }
 
@@ -36,7 +36,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             this.TeamManager = new ByCommandTeamManager();
 
             IGoogleSheetsApi googleSheetsApi = this.CreateGoogleSheetsApi();
-            this.Generator = new UCSDGoogleSheetsGenerator(googleSheetsApi);
+            this.Generator = new TJSheetsGenerator(googleSheetsApi);
         }
 
         [TestMethod]
@@ -52,29 +52,39 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(result.Success, "Update should've succeeded");
 
             Assert.AreEqual(1, this.ClearedRanges.Count, "Unexpected number of clears");
-            Assert.AreEqual($"'{UCSDGoogleSheetsGenerator.RostersSheetName}'!A2:G999", this.ClearedRanges[0], "Unexpected range");
+            Assert.AreEqual($"'{TJSheetsGenerator.RostersSheetName}'!A1:ZZ21", this.ClearedRanges[0], "Unexpected range");
 
-            Assert.AreEqual(2, this.UpdatedRanges.Count, "Unexpected number of update ranges");
+            Assert.AreEqual(3, this.UpdatedRanges.Count, "Unexpected number of update ranges");
 
             UpdateRange updateRange = this.UpdatedRanges[0];
             Assert.AreEqual(
-                $"'{UCSDGoogleSheetsGenerator.RostersSheetName}'!A2:C2",
+                $"'{TJSheetsGenerator.RostersSheetName}'!A1:B1",
                 updateRange.Range,
-                "Unexpected range for the first team");
+                "Unexpected range for the team names");
             CollectionAssert.AreEquivalent(
-                new string[] { FirstTeam, "Alice", "Alan" },
+                new string[] { FirstTeam, SecondTeam },
                 updateRange.Values.ToArray(),
-                "Unexpected row for the first team");
+                "Unexpected row for the team names");
 
             updateRange = this.UpdatedRanges[1];
             Assert.AreEqual(
-                $"'{UCSDGoogleSheetsGenerator.RostersSheetName}'!A3:B3",
+                $"'{TJSheetsGenerator.RostersSheetName}'!A2:A3",
                 updateRange.Range,
-                "Unexpected range for the second team");
+                "Unexpected range for the first team's players");
             CollectionAssert.AreEquivalent(
-                new string[] { SecondTeam, "Bob" },
+                new string[] { "Alice", "Alan" },
                 updateRange.Values.ToArray(),
-                "Unexpected row for the second team");
+                "Unexpected row for the first team's players");
+
+            updateRange = this.UpdatedRanges[2];
+            Assert.AreEqual(
+                $"'{TJSheetsGenerator.RostersSheetName}'!B2:B2",
+                updateRange.Range,
+                "Unexpected range for the second team's players");
+            CollectionAssert.AreEquivalent(
+                new string[] { "Bob" },
+                updateRange.Values.ToArray(),
+                "Unexpected row for the second team's players");
         }
 
         [TestMethod]
@@ -131,42 +141,133 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(result.Success, $"Failed: {(result.Success ? "" : result.ErrorMessage)}");
 
             // Assert we cleared these two fields
-            Assert.IsTrue(this.ClearedRanges.Contains("'Round 1'!C4:H31"), "First team scores are not in the list of cleared ranges.");
-            Assert.IsTrue(this.ClearedRanges.Contains("'Round 1'!O4:T31"), "Second team scores are not in the list of cleared ranges.");
+            Assert.IsTrue(this.ClearedRanges.Contains("'ROUND 1'!C4:I27"), "First team scores are not in the list of cleared ranges.");
+            Assert.IsTrue(this.ClearedRanges.Contains("'ROUND 1'!M4:S27"), "Second team scores are not in the list of cleared ranges.");
 
             // These checks are O(n^2), since we do Any for all of them. However, n is small here (~15), so it's not
             // too bad.
 
             // Team names
-            this.AssertInUpdateRange("'Round 1'!C1", FirstTeam, "Couldn't find first team");
-            this.AssertInUpdateRange("'Round 1'!O1", SecondTeam, "Couldn't find second team");
+            this.AssertInUpdateRange("'ROUND 1'!C2", FirstTeam, "Couldn't find first team");
+            this.AssertInUpdateRange("'ROUND 1'!M2", SecondTeam, "Couldn't find second team");
 
             // Player names
-            this.AssertInUpdateRange("'Round 1'!C3", "Alice", "Couldn't find Alice");
-            this.AssertInUpdateRange("'Round 1'!D3", "Alan", "Couldn't find Alan");
-            this.AssertInUpdateRange("'Round 1'!O3", "Bob", "Couldn't find Bob");
+            this.AssertInUpdateRange("'ROUND 1'!C3", "Alice", "Couldn't find Alice");
+            this.AssertInUpdateRange("'ROUND 1'!D3", "Alan", "Couldn't find Alan");
+            this.AssertInUpdateRange("'ROUND 1'!M3", "Bob", "Couldn't find Bob");
 
             // Tossups
-            this.AssertInUpdateRange("'Round 1'!C4", "15", "Couldn't find Alice's buzz");
-            this.AssertInUpdateRange("'Round 1'!D5", "-5", "Couldn't find Alan's buzz");
-            this.AssertInUpdateRange("'Round 1'!O5", "10", "Couldn't find Bob's buzz");
+            this.AssertInUpdateRange("'ROUND 1'!C4", "15", "Couldn't find Alice's buzz");
+            this.AssertInUpdateRange("'ROUND 1'!D5", "-5", "Couldn't find Alan's buzz");
+            this.AssertInUpdateRange("'ROUND 1'!M5", "10", "Couldn't find Bob's buzz");
 
             // Bonuses
             UpdateRange updateRange = this.UpdatedRanges
-                .FirstOrDefault(valueRange => valueRange.Range == "'Round 1'!I4:K4");
+                .FirstOrDefault(valueRange => valueRange.Range == "'ROUND 1'!I4");
             Assert.IsNotNull(updateRange, "Couldn't find range for the first bonus");
             CollectionAssert.AreEquivalent(
-                new bool[] { true, false, true },
+                new int[] { 20 },
                 updateRange.Values.ToArray(),
                 "Unexpected scoring for the first bonus");
 
             updateRange = this.UpdatedRanges
-                .FirstOrDefault(valueRange => valueRange.Range == "'Round 1'!U5:W5");
+                .FirstOrDefault(valueRange => valueRange.Range == "'ROUND 1'!S5");
             Assert.IsNotNull(updateRange, "Couldn't find range for the second bonus");
             CollectionAssert.AreEquivalent(
-                new bool[] { false, true, false },
+                new int[] { 10 },
                 updateRange.Values.ToArray(),
                 "Unexpected scoring for the second bonus");
+        }
+
+        [TestMethod]
+        public async Task TryCreateScoresheetWithDeadTossups()
+        {
+            // Do something simple, then read the spreadsheet and verify some fields
+            GameState game = new GameState()
+            {
+                Format = Format.TossupBonusesShootout,
+                ReaderId = 1,
+                TeamManager = this.TeamManager
+            };
+
+            this.TeamManager.TryAddTeam(FirstTeam, out _);
+            this.TeamManager.TryAddTeam(SecondTeam, out _);
+            this.TeamManager.TryAddPlayerToTeam(2, "Alice", FirstTeam);
+            this.TeamManager.TryAddPlayerToTeam(3, "Alan", FirstTeam);
+            this.TeamManager.TryAddPlayerToTeam(4, "Bob", SecondTeam);
+
+            await game.AddPlayer(2, "Alice");
+            game.ScorePlayer(-5);
+            game.NextQuestion();
+            game.NextQuestion();
+
+            await game.AddPlayer(4, "Bob");
+            game.ScorePlayer(10);
+            game.TryScoreBonus("0/10/0");
+
+            IResult<string> result = await this.Generator.TryCreateScoresheet(game, SheetsUri, 1);
+            Assert.IsTrue(result.Success, $"Failed: {(result.Success ? "" : result.ErrorMessage)}");
+
+            // These checks are O(n^2), since we do Any for all of them. However, n is small here (~15), so it's not
+            // too bad.
+
+            // Tossups
+            this.AssertInUpdateRange("'ROUND 1'!C4", "-5", "Couldn't find Alice's buzz");
+            this.AssertInUpdateRange("'ROUND 1'!I4", "DT", "Couldn't find the first dead tossup marker");
+            this.AssertInUpdateRange("'ROUND 1'!I5", "DT", "Couldn't find the second dead tossup marker");
+
+            // Bonuses
+            UpdateRange updateRange = this.UpdatedRanges
+                .FirstOrDefault(valueRange => valueRange.Range == "'ROUND 1'!S6");
+            Assert.IsNotNull(updateRange, "Couldn't find range for the bonus");
+            CollectionAssert.AreEquivalent(
+                new int[] { 10 },
+                updateRange.Values.ToArray(),
+                "Unexpected scoring for the bonus");
+        }
+
+        [TestMethod]
+        public async Task TryCreateScoresheetWithDeadTossupsInTiebreakers()
+        {
+            // Do something simple, then read the spreadsheet and verify some fields
+            GameState game = new GameState()
+            {
+                Format = Format.TossupBonusesShootout,
+                ReaderId = 1,
+                TeamManager = this.TeamManager
+            };
+
+            this.TeamManager.TryAddTeam(FirstTeam, out _);
+            this.TeamManager.TryAddTeam(SecondTeam, out _);
+            this.TeamManager.TryAddPlayerToTeam(2, "Alice", FirstTeam);
+            this.TeamManager.TryAddPlayerToTeam(3, "Alan", FirstTeam);
+            this.TeamManager.TryAddPlayerToTeam(4, "Bob", SecondTeam);
+
+            for (int i = 0; i < this.Generator.PhasesLimit - 1; i++)
+            {
+                game.NextQuestion();
+            }
+
+            await game.AddPlayer(2, "Alice");
+            game.ScorePlayer(15);
+
+            IResult<string> result = await this.Generator.TryCreateScoresheet(game, SheetsUri, 1);
+            Assert.IsTrue(result.Success, $"Failed: {(result.Success ? "" : result.ErrorMessage)}");
+
+            // These checks are O(n^2), since we do Any for all of them. However, n is small here (~15), so it's not
+            // too bad.
+
+            // Tossups
+            // FirstRowPhase is included in the limit, so subtract 1 from what the row should be
+            int buzzRow = this.Generator.PhasesLimit + this.Generator.FirstPhaseRow - 1;
+            this.AssertInUpdateRange($"'ROUND 1'!C{buzzRow}", "15", "Couldn't find Alice's buzz");
+            this.AssertInUpdateRange("'ROUND 1'!I4", "DT", "Couldn't find the first dead tossup marker");
+            this.AssertInUpdateRange($"'ROUND 1'!I{this.Generator.LastBonusRow + 1}", "DT", "Couldn't find the tiebreaker dead tossup marker");
+
+            // No bonus in the tie breaker
+            UpdateRange updateRange = this.UpdatedRanges
+                .FirstOrDefault(valueRange => valueRange.Range == $"'ROUND 1'!I{buzzRow}");
+            Assert.IsNull(updateRange, "There shouldn't be an update for the bonus yet");
         }
 
         [TestMethod]
@@ -200,11 +301,11 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             for (int i = 0; i < this.Generator.PlayersPerTeamLimit; i++)
             {
                 this.AssertInUpdateRange(
-                    $"'Round 1'!{firstTeamColumn}3",
+                    $"'ROUND 1'!{firstTeamColumn}3",
                     $"FirstPlayer{i}",
                     $"Couldn't find the player { i + 1 } on the first team");
                 this.AssertInUpdateRange(
-                    $"'Round 1'!{secondTeamColumn}3",
+                    $"'ROUND 1'!{secondTeamColumn}3",
                     $"SecondPlayer{i}",
                     $"Couldn't find player {i + 1} on the second team");
                 firstTeamColumn = firstTeamColumn + 1;
@@ -243,8 +344,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(result.Success, $"Creation should've succeeded at the limit.");
 
             int lastRow = this.Generator.FirstPhaseRow + this.Generator.PhasesLimit - 1;
-            this.AssertInUpdateRange($"'Round 1'!C{lastRow}", "15", "Couldn't find Alice's buzz");
-            this.AssertInUpdateRange($"'Round 1'!O{lastRow}", "-5", "Couldn't find Bob's buzz");
+            this.AssertInUpdateRange($"'ROUND 1'!C{lastRow}", "15", "Couldn't find Alice's buzz");
+            this.AssertInUpdateRange($"'ROUND 1'!M{lastRow}", "-5", "Couldn't find Bob's buzz");
         }
 
         [TestMethod]
@@ -278,15 +379,15 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(result.Success, $"Creation should've succeeded at the limit.");
 
             UpdateRange updateRange = this.UpdatedRanges
-                .FirstOrDefault(valueRange => valueRange.Range == $"'Round 1'!I{this.Generator.LastBonusRow}:K{this.Generator.LastBonusRow}");
+                .FirstOrDefault(valueRange => valueRange.Range == $"'ROUND 1'!I{this.Generator.LastBonusRow}");
             Assert.IsNotNull(updateRange, "Couldn't find range for the last bonus");
             CollectionAssert.AreEquivalent(
-                new bool[] { true, true, true },
+                new int[] { 30 },
                 updateRange.Values.ToArray(),
                 "Unexpected scoring for the last bonus");
 
             updateRange = this.UpdatedRanges
-                .FirstOrDefault(valueRange => valueRange.Range == $"'Round 1'!I{this.Generator.LastBonusRow + 1}:K{this.Generator.LastBonusRow + 1}");
+                .FirstOrDefault(valueRange => valueRange.Range == $"'ROUND 1'!I{this.Generator.LastBonusRow + 1}");
             Assert.IsNull(updateRange, "Bonus past the last bonus phase should'nt be exported");
         }
 
@@ -354,7 +455,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             result = await this.Generator.TryCreateScoresheet(game, SheetsUri, 1);
             Assert.IsFalse(result.Success, $"Creation should've failed after the limit.");
             Assert.AreEqual(
-                $"Couldn't write to the sheet. Export only currently works if there are at most {this.Generator.PhasesLimit} tosusps answered in a game. Bonuses will only be tracked up to question 24.",
+                $"Couldn't write to the sheet. Export only currently works if there are at most {this.Generator.PhasesLimit} tosusps answered in a game. Bonuses will only be tracked up to question {this.Generator.LastBonusRow - this.Generator.FirstPhaseRow + 1}.",
                 result.ErrorMessage,
                 "Unexpected error message");
         }

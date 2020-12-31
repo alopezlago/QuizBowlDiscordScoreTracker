@@ -356,7 +356,63 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task SetRostersFromRolesForTJSheetsFails()
+        {
+            await this.SetRostersFromRolesForGoogleSheetsFails(
+                GoogleSheetsType.TJ, (url) => this.Handler.SetRostersFromRolesForTJ(url));
+        }
+
+        [TestMethod]
+        public async Task SetRostersFromRolesForTJSheetsSucceeds()
+        {
+            await this.SetRostersFromRolesForGoogleSheetsSucceeds(
+                GoogleSheetsType.TJ, (url) => this.Handler.SetRostersFromRolesForTJ(url));
+        }
+
+        [TestMethod]
+        public async Task SetRostersFromRolesForTJSheetsWithoutByRoleTeamsFails()
+        {
+            await this.SetRostersFromRolesForGoogleSheetsWithoutByRoleTeamsFails(
+                GoogleSheetsType.TJ, (url) => this.Handler.SetRostersFromRolesForTJ(url));
+        }
+
+        [TestMethod]
+        public async Task SetRostersFromRolesForTJSheetsWithBadUrlFails()
+        {
+            await this.SetRostersFromRolesForGoogleSheetsWithBadUrlFails(
+                GoogleSheetsType.TJ, (url) => this.Handler.SetRostersFromRolesForTJ(url));
+        }
+
+        [TestMethod]
         public async Task SetRostersFromRolesForUCSDFails()
+        {
+            await this.SetRostersFromRolesForGoogleSheetsFails(
+                GoogleSheetsType.UCSD, (url) => this.Handler.SetRostersFromRolesForUCSD(url));
+        }
+
+        [TestMethod]
+        public async Task SetRostersFromRolesForUCSDSucceeds()
+        {
+            await this.SetRostersFromRolesForGoogleSheetsSucceeds(
+                GoogleSheetsType.UCSD, (url) => this.Handler.SetRostersFromRolesForUCSD(url));
+        }
+
+        [TestMethod]
+        public async Task SetRostersFromRolesForUCSDWithoutByRoleTeamsFails()
+        {
+            await this.SetRostersFromRolesForGoogleSheetsWithoutByRoleTeamsFails(
+                GoogleSheetsType.UCSD, (url) => this.Handler.SetRostersFromRolesForUCSD(url));
+        }
+
+        [TestMethod]
+        public async Task SetRostersFromRolesForUCSDWithBadUrlFails()
+        {
+            await this.SetRostersFromRolesForGoogleSheetsWithBadUrlFails(
+                GoogleSheetsType.UCSD, (url) => this.Handler.SetRostersFromRolesForUCSD(url));
+        }
+
+        private async Task SetRostersFromRolesForGoogleSheetsFails(
+            GoogleSheetsType type, Func<string, Task> setRosters)
         {
             const string errorMessage = "API call failed";
 
@@ -368,7 +424,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
             mockFactory
-                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Setup(factory => factory.Create(type))
                 .Returns(mockGenerator.Object);
 
             this.InitializeHandler(googleSheetsGeneratorFactory: mockFactory.Object);
@@ -379,14 +435,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 await action.SetTeamRolePrefixAsync(DefaultGuildId, TeamRolePrefix);
             }
 
-            await this.Handler.SetRostersFromRolesForUCSD("http://localhost/sheetsUrl");
+            await setRosters("http://localhost/sheetsUrl");
 
             mockFactory.Verify();
             this.MessageStore.VerifyChannelMessages(errorMessage);
         }
 
-        [TestMethod]
-        public async Task SetRostersFromRolesForUCSDSucceeds()
+        private async Task SetRostersFromRolesForGoogleSheetsSucceeds(
+            GoogleSheetsType type, Func<string, Task> setRosters)
         {
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
@@ -396,7 +452,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
             mockFactory
-                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Setup(factory => factory.Create(type))
                 .Returns(mockGenerator.Object);
 
             this.InitializeHandler(googleSheetsGeneratorFactory: mockFactory.Object);
@@ -407,14 +463,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 await action.SetTeamRolePrefixAsync(DefaultGuildId, TeamRolePrefix);
             }
 
-            await this.Handler.SetRostersFromRolesForUCSD("http://localhost/sheetsUrl");
+            await setRosters("http://localhost/sheetsUrl");
 
             mockFactory.Verify();
             this.MessageStore.VerifyChannelMessages("Rosters updated.");
         }
 
-        [TestMethod]
-        public async Task SetRostersFromRolesForUCSDWithoutByRoleTeamsFails()
+        private async Task SetRostersFromRolesForGoogleSheetsWithoutByRoleTeamsFails(
+            GoogleSheetsType type, Func<string, Task> setRosters)
         {
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
@@ -424,20 +480,20 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
             mockFactory
-                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Setup(factory => factory.Create(type))
                 .Returns(mockGenerator.Object);
 
             this.InitializeHandler(googleSheetsGeneratorFactory: mockFactory.Object);
 
-            await this.Handler.SetRostersFromRolesForUCSD("http://localhost/sheetsUrl");
+            await setRosters("http://localhost/sheetsUrl");
 
             this.MessageStore.VerifyChannelMessages(
                 "Couldn't export to the rosters sheet. This server is not using the team role prefix. Use !setTeamRolePrefix to set the prefix for role names to use for teams.");
             mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Never);
         }
 
-        [TestMethod]
-        public async Task SetRostersFromRolesForUCSDWithBadUrlFails()
+        private async Task SetRostersFromRolesForGoogleSheetsWithBadUrlFails(
+            GoogleSheetsType type, Func<string, Task> setRosters)
         {
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
@@ -446,7 +502,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
             mockFactory
-                .Setup(factory => factory.Create(GoogleSheetsType.UCSD))
+                .Setup(factory => factory.Create(type))
                 .Returns(mockGenerator.Object);
 
             this.InitializeHandler(googleSheetsGeneratorFactory: mockFactory.Object);
@@ -457,7 +513,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 await action.SetTeamRolePrefixAsync(DefaultGuildId, TeamRolePrefix);
             }
 
-            await this.Handler.SetRostersFromRolesForUCSD("this URL does not parse");
+            await setRosters("this URL does not parse");
 
             this.MessageStore.VerifyChannelMessages(
                 "The link to the Google Sheet wasn't understandable. Be sure to copy the full URL from the address bar.");
@@ -513,7 +569,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 this.botConfigurationfactory);
             this.GoogleSheetsGeneratorFactory = googleSheetsGeneratorFactory ?? (new Mock<IGoogleSheetsGeneratorFactory>()).Object;
 
-            this.Handler = new AdminCommandHandler(commandContext, options, dbActionFactory, this.GoogleSheetsGeneratorFactory);
+            this.Handler = new AdminCommandHandler(commandContext, dbActionFactory, this.GoogleSheetsGeneratorFactory);
         }
     }
 }

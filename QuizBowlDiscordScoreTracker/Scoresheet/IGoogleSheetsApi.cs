@@ -15,6 +15,6 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
         /// <param name="rangesToClear">The cells to clear</param>
         /// <param name="sheetsUri">The URI to the Google Sheets workbook/param>
         /// <returns></returns>
-        Task<IResult<string>> UpdateGoogleSheet(List<ValueRange> ranges, List<string> rangesToClear, Uri sheetsUri);
+        Task<IResult<string>> UpdateGoogleSheet(List<ValueRange> ranges, IList<string> rangesToClear, Uri sheetsUri);
     }
 }
