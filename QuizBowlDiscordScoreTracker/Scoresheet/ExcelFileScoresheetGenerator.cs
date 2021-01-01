@@ -9,16 +9,15 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
 {
     public class ExcelFileScoresheetGenerator : IFileScoresheetGenerator
     {
-        // TODO: Support tiebreakers in this packet. This will require skipping one row, then potentially filling in the
-        // next three.
         internal const int PlayersPerTeamLimit = 6;
-        internal const int PhasesLimit = 24;
+        internal const int PhasesLimit = 28;
+        internal const int FirstPhaseRow = 8;
+        internal const int LastBonusRow = 31;
 
         private const int RoomRow = 2;
         private const int ModeratorRow = 3;
         private const int TeamNameRow = 6;
         private const int PlayerNameRow = 7;
-        private const int FirstPhaseRow = 8;
         private const string TemplateFilename = "naqt-scoresheet-electronic-template.xlsx";
         private static readonly string TemplateFile = Path.Combine("Scoresheet", TemplateFilename);
 
@@ -52,7 +51,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                 (phaseScoresCount == PhasesLimit + 1 && phaseScores.Last().ScoringSplitsOnActions.Any()))
             {
                 return new FailureResult<Stream>(
-                    "Export only currently works if there are at most 24 tosusps answered in a game.");
+                    $"Export only currently works if there are at most {ExcelFileScoresheetGenerator.PhasesLimit} tosusps answered in a game.");
             }
 
             // Copy the file to a stream, so we don't have the handle open the whole time. We may want to cache this
@@ -102,7 +101,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                         worksheet.Cell(row, column).Value = action.Action.Score;
                     }
 
-                    if (phaseScore.BonusScores?.Any() == true)
+                    if (row <= LastBonusRow && phaseScore.BonusScores?.Any() == true)
                     {
                         int bonusPartCount = phaseScore.BonusScores.Count();
                         if (bonusPartCount != 3)
@@ -124,6 +123,12 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                             worksheet.Cell(row, bonusColumn).Value = score;
                             bonusColumn++;
                         }
+                    }
+
+                    // After the last bonus row, we skip one row to account for the divider
+                    if (row == LastBonusRow)
+                    {
+                        row++;
                     }
 
                     row++;

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using QuizBowlDiscordScoreTracker.TeamManager;
 
@@ -12,6 +13,8 @@ namespace QuizBowlDiscordScoreTracker
         // Add a maximum number of phases, to prevent any denial-of-service issues
         public const int MaximumPhasesCount = 2000;
         public const int ScoresListLimit = 200;
+
+        private static readonly RandomNumberGenerator Random = RNGCryptoServiceProvider.Create();
 
         private readonly LinkedList<IPhaseState> phases;
 
@@ -33,6 +36,14 @@ namespace QuizBowlDiscordScoreTracker
             this.format = Format.TossupShootout;
             this.TeamManager = SoloOnlyTeamManager.Instance;
 
+            // Generate a 64-bit cryptographically secure random string for the ID
+            byte[] randomBytes = new byte[8];
+            Random.GetBytes(randomBytes);
+
+            // TODO: Should the replacement happen when we need to escape this (for a URL)? If we do it here, escape
+            // = and / and replace it with something like @ and ~. Alternatively, just return a number
+            this.Id = Convert.ToBase64String(randomBytes);
+
             this.SetupInitialPhases();
             this.ReaderId = null;
         }
@@ -47,6 +58,8 @@ namespace QuizBowlDiscordScoreTracker
                 }
             }
         }
+
+        public string Id { get; }
 
         public int PhaseNumber
         {
@@ -194,6 +207,7 @@ namespace QuizBowlDiscordScoreTracker
                     this.CurrentPhase is ITossupBonusPhaseState tossupBonusPhaseState)
                 {
                     tossupBonusPhaseState.TryScoreBonus("0");
+                    this.ClearCaches();
                 }
 
                 // Add a new phase, since the last one is over

@@ -134,7 +134,58 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
-        public async Task TryCreateScoresheetAtPhasesLimitSucceeds()
+        public async Task TryCreateScoresheetAtLastTossupSucceeds()
+        {
+            ExcelFileScoresheetGenerator generator = new ExcelFileScoresheetGenerator();
+            ByCommandTeamManager teamManager = new ByCommandTeamManager();
+            GameState game = new GameState()
+            {
+                Format = Format.TossupBonusesShootout,
+                ReaderId = 1,
+                TeamManager = teamManager
+            };
+
+            Assert.IsTrue(teamManager.TryAddTeam(FirstTeam, out _), "Couldn't add the first team");
+            Assert.IsTrue(teamManager.TryAddTeam(SecondTeam, out _), "Couldn't add the second team");
+            Assert.IsTrue(teamManager.TryAddPlayerToTeam(2, "Alice", FirstTeam), "Couldn't add first player to team");
+            Assert.IsTrue(teamManager.TryAddPlayerToTeam(3, "Bob", SecondTeam), "Couldn't add second player to team");
+
+            // The first phase row is the first one, so add 1 to include it in the count
+            int tossupsCount = ExcelFileScoresheetGenerator.LastBonusRow - ExcelFileScoresheetGenerator.FirstPhaseRow + 1;
+            for (int i = 0; i < tossupsCount - 1; i++)
+            {
+                await game.AddPlayer(2, "Alice");
+                game.ScorePlayer(10);
+                Assert.IsTrue(game.TryScoreBonus("0"), $"Scoring a bonus should've succeeded in phase {i}");
+            }
+
+            await game.AddPlayer(3, "Bob");
+            game.ScorePlayer(-5);
+            await game.AddPlayer(2, "Alice");
+            game.ScorePlayer(15);
+            Assert.IsTrue(game.TryScoreBonus("10/0/10"), "Scoring the last bonus should've succeeded");
+
+            IResult<Stream> result = await generator.TryCreateScoresheet(game, "Reader X", "Room A");
+            Assert.IsTrue(result.Success, $"Creation should've succeeded at the limit.");
+
+            using (IXLWorkbook workbook = new XLWorkbook(result.Value))
+            {
+                Assert.AreEqual(1, workbook.Worksheets.Count, "Unexpected number of worksheets");
+                IXLWorksheet worksheet = workbook.Worksheet(1);
+                Assert.AreEqual(
+                    "15", worksheet.Cell("B31").Value.ToString(), "Alice's power at the end was not recorded");
+                Assert.AreEqual(
+                    "-5", worksheet.Cell("N31").Value.ToString(), "Bob's neg at the end was not recorded");
+                Assert.AreEqual("10", worksheet.Cell("H31").Value.ToString(), "First bonus part is wrong");
+                Assert.AreEqual("0", worksheet.Cell("I31").Value.ToString(), "Second bonus part is wrong");
+                Assert.AreEqual("10", worksheet.Cell("J31").Value.ToString(), "Third bonus part is wrong");
+                Assert.AreEqual("35", worksheet.Cell("K31").Value.ToString(), "Alice's total for the phase is wrong");
+                Assert.AreEqual("-5", worksheet.Cell("W31").Value.ToString(), "Bob's total for the phase is wrong");
+            }
+        }
+
+        [TestMethod]
+        public async Task TryCreateScoresheetAtPhaseLimitSucceeds()
         {
             ExcelFileScoresheetGenerator generator = new ExcelFileScoresheetGenerator();
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
@@ -171,14 +222,16 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 Assert.AreEqual(1, workbook.Worksheets.Count, "Unexpected number of worksheets");
                 IXLWorksheet worksheet = workbook.Worksheet(1);
                 Assert.AreEqual(
-                    "15", worksheet.Cell("B31").Value.ToString(), "Alice's power at the end was not recorded");
+                    "15", worksheet.Cell("B36").Value.ToString(), "Alice's power at the end was not recorded");
                 Assert.AreEqual(
-                    "-5", worksheet.Cell("N31").Value.ToString(), "Bob's neg at the end was not recorded");
-                Assert.AreEqual("10", worksheet.Cell("H31").Value.ToString(), "First bonus part is wrong");
-                Assert.AreEqual("0", worksheet.Cell("I31").Value.ToString(), "Second bonus part is wrong");
-                Assert.AreEqual("10", worksheet.Cell("J31").Value.ToString(), "Third bonus part is wrong");
-                Assert.AreEqual("35", worksheet.Cell("K31").Value.ToString(), "Alice's total for the phase is wrong");
-                Assert.AreEqual("-5", worksheet.Cell("W31").Value.ToString(), "Bob's total for the phase is wrong");
+                    "-5", worksheet.Cell("N36").Value.ToString(), "Bob's neg at the end was not recorded");
+
+                for (int i = ExcelFileScoresheetGenerator.LastBonusRow + 1; i < ExcelFileScoresheetGenerator.LastBonusRow + 5; i++)
+                {
+                    Assert.AreEqual(string.Empty, worksheet.Cell($"H{i}").Value.ToString(), $"First bonus part is wrong for row {i}");
+                    Assert.AreEqual(string.Empty, worksheet.Cell($"I{i}").Value.ToString(), $"Second bonus part is wrong for row {i}");
+                    Assert.AreEqual(string.Empty, worksheet.Cell($"J{i}").Value.ToString(), $"Third bonus part is wrong for row {i}");
+                }
             }
         }
 

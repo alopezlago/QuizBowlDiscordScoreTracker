@@ -319,12 +319,51 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(
                 this.TeamManager.TryAddPlayerToTeam(1111, "OverLimit", FirstTeam),
                 "Adding the player over the limit should've succeeded");
+
+            // We need to force an update to the game, so we don't have cached stats
+            await game.AddPlayer(2, "Player2");
+            game.ScorePlayer(0);
+
             result = await this.Generator.TryCreateScoresheet(game, SheetsUri, 1);
             Assert.IsFalse(result.Success, $"Creation should've failed after the limit.");
             Assert.AreEqual(
                 $"Couldn't write to the sheet. Export only currently works if there are at most {this.Generator.PlayersPerTeamLimit} players on a team.",
                 result.ErrorMessage,
                 "Unexpected error message");
+        }
+
+        [TestMethod]
+        public async Task TryCreateScoresheetOneTeamAndIndividual()
+        {
+            const string firstTeamPlayer = "Alice";
+            const string individualName = "Individual";
+
+            GameState game = new GameState()
+            {
+                Format = Format.TossupShootout,
+                ReaderId = 1,
+                TeamManager = this.TeamManager
+            };
+
+            Assert.IsTrue(this.TeamManager.TryAddTeam(FirstTeam, out _), "Couldn't add the team");
+            Assert.IsTrue(this.TeamManager.TryAddPlayerToTeam(2, firstTeamPlayer, FirstTeam), "Couldn't add player to team");
+
+            await game.AddPlayer(2, firstTeamPlayer);
+            game.ScorePlayer(10);
+            await game.AddPlayer(3, individualName);
+            game.ScorePlayer(15);
+
+            IResult<string> result = await this.Generator.TryCreateScoresheet(game, SheetsUri, 1);
+            Assert.IsTrue(result.Success, $"Creation should've succeeded");
+
+            // n^2 runtime, but not that many checks or update ranges, so it should be okay
+
+            this.AssertInUpdateRange($"'Round 1'!C1", FirstTeam, "Couldn't find the first team's name");
+            this.AssertInUpdateRange($"'Round 1'!O1", individualName, "Couldn't find the second team's name");
+            this.AssertInUpdateRange($"'Round 1'!C3", firstTeamPlayer, "Couldn't find the first team's player name");
+            this.AssertInUpdateRange($"'Round 1'!O3", individualName, "Couldn't find the indivual team's player name");
+            this.AssertInUpdateRange($"'Round 1'!C4", "10", "Couldn't find the buzz from the first team");
+            this.AssertInUpdateRange($"'Round 1'!O5", "15", "Couldn't find the buzz from the individual team");
         }
 
         [TestMethod]
@@ -350,13 +389,15 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(result.Success, $"Creation should've succeeded at the limit.");
 
             await game.AddPlayer(2, "Alice");
-            game.ScorePlayer(10);
+            game.ScorePlayer(15);
+
             result = await this.Generator.TryCreateScoresheet(game, SheetsUri, 1);
-            Assert.IsFalse(result.Success, $"Creation should've failed after the limit.");
-            Assert.AreEqual(
-                $"Couldn't write to the sheet. Export only currently works if there are at most {this.Generator.PhasesLimit} tosusps answered in a game. Bonuses will only be tracked up to question 24.",
-                result.ErrorMessage,
-                "Unexpected error message");
+            Assert.IsTrue(result.Success, $"Creation should've succeeded.");
+            this.AssertInUpdateRange($"'Round 1'!C27", "10", "Couldn't find the last buzz");
+            Assert.IsFalse(
+                this.UpdatedRanges
+                    .Any(valueRange => valueRange.Values.Any(v => v.ToString() == "15")),
+                "Last buzz should've been cut off, but we found a power");
         }
 
         [TestMethod]

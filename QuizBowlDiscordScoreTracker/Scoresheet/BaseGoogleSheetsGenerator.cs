@@ -17,7 +17,6 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
         // Used in tests
         internal abstract int FirstPhaseRow { get; }
 
-        // TODO: This will likely disappear
         internal abstract int LastBonusRow { get; }
 
         internal abstract int PhasesLimit { get; }
@@ -32,7 +31,6 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
 
         protected abstract int PlayerNameRow { get; }
 
-        // Should this be SpreadsheetColumn?
         protected abstract ReadOnlyMemory<SpreadsheetColumn> BonusColumns { get; }
 
         protected abstract int TeamsLimit { get; }
@@ -53,8 +51,10 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             }
 
             // Make it an array so we don't keep re-evaluating the enumerable
-            PlayerTeamPair[] players = (await game.TeamManager.GetKnownPlayers()).ToArray();
-            IEnumerable<IGrouping<string, PlayerTeamPair>> playersByTeam = players.GroupBy(player => player.TeamId);
+            
+            IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> players = await game.GetLastScoringSplits();
+            IEnumerable<IGrouping<string, PlayerTeamPair>> playersByTeam = players.GroupBy(
+                kvp => kvp.Key.TeamId, kvp => kvp.Key);
             if (playersByTeam.Any(grouping => grouping.Count() > this.PlayersPerTeamLimit))
             {
                 return CreateFailureResult("Export only currently works if there are at most 6 players on a team.");
@@ -64,28 +64,35 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
 
             IEnumerable<PhaseScore> phaseScores = await game.GetPhaseScores();
             int phaseScoresCount = phaseScores.Count();
+            bool trimScoresheet = false;
             if (phaseScoresCount > this.PhasesLimit + 1 ||
                 (phaseScoresCount == this.PhasesLimit + 1 && phaseScores.Last().ScoringSplitsOnActions.Any()))
             {
-                return CreateFailureResult(
-                    $"Export only currently works if there are at most {this.PhasesLimit} tosusps answered in a game. Bonuses will only be tracked up to question { this.LastBonusRow - this.FirstPhaseRow + 1 }.");
+                trimScoresheet = true;
+                phaseScores = phaseScores.Take(this.PhasesLimit);
             }
 
             IReadOnlyDictionary<ulong, SpreadsheetColumn> playerIdToColumn = this.CreatePlayerIdToColumnMapping(playersByTeam);
             string sheetName = this.GetSheetName(roundNumber);
-            List<ValueRange> ranges = new List<ValueRange>
-            {
-                CreateUpdateSingleCellRequest(
-                    sheetName, this.StartingColumns.Span[0], this.TeamNameRow, teamIdToNames[playersByTeam.First().Key])
-            };
+            List<ValueRange> ranges = new List<ValueRange>();
 
-            if (teamIdToNames.Count > 1 && playersByTeam.Skip(1).Any())
+            // Write the names of the teams
+            int startingColumnIndex = 0;
+            foreach (string teamId in teamIds)
             {
+                if (!teamIdToNames.TryGetValue(teamId, out string teamName))
+                {
+                    // We know the player exists since the teamIds came from the list of players
+                    teamName = players.First(kvp => kvp.Key.TeamId == teamId).Key.PlayerDisplayName;
+                }
+
                 ranges.Add(CreateUpdateSingleCellRequest(
-                    sheetName, this.StartingColumns.Span[1], this.TeamNameRow, teamIdToNames[playersByTeam.ElementAt(1).Key]));
+                    sheetName, this.StartingColumns.Span[startingColumnIndex], this.TeamNameRow, teamName));
+
+                startingColumnIndex++;
             }
 
-            foreach (PlayerTeamPair pair in players)
+            foreach (PlayerTeamPair pair in players.Select(kvp => kvp.Key))
             {
                 // TODO: Make this more efficient by putting all the player names in one update request
                 SpreadsheetColumn column = playerIdToColumn[pair.PlayerId];
@@ -136,7 +143,20 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                 row++;
             }
 
-            return await this.SheetsApi.UpdateGoogleSheet(ranges, this.GetClearRangesForBonus(sheetName), sheetsUri);
+            IResult<string> updateResult = await this.SheetsApi.UpdateGoogleSheet(
+                ranges, this.GetClearRangesForBonus(sheetName), sheetsUri);
+            if (!updateResult.Success)
+            {
+                return updateResult;
+            }
+
+            string message = $"Game written to the scoresheet {sheetName}.";
+            if (trimScoresheet)
+            {
+                message += $" This game had more tossups than space in the scoresheet, so only the first {this.PhasesLimit} tossup/bonus cycles were recorded.";
+            }
+
+            return new SuccessResult<string>(message);
         }
 
         public async Task<IResult<string>> TryUpdateRosters(ITeamManager teamManager, Uri sheetsUri)

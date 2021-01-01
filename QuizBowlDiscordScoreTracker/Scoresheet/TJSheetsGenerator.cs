@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Google.Apis.Sheets.v4.Data;
 
@@ -124,7 +125,13 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                     .FirstOrDefault(split => split.Action.Score > 0);
                 if (split != null)
                 {
-                    int bonusIndex = Array.IndexOf(teamIds, split.Action.Buzz.TeamId);
+                    // TODO: See if there's a better way to get the individual's team (add it when we add the buzz?)
+                    // Risk is if there's a team name that is the same as someone's ID
+                    // If it's an individual who is a team, then the teamId will be null, but their user ID may be a
+                    // team ID.
+                    int bonusIndex = Array.IndexOf(
+                        teamIds, 
+                        split.Action.Buzz.TeamId ?? split.Action.Buzz.UserId.ToString(CultureInfo.InvariantCulture));
                     if (bonusIndex < 0 || bonusIndex >= 2)
                     {
                         return new FailureResult<IEnumerable<ValueRange>>(
