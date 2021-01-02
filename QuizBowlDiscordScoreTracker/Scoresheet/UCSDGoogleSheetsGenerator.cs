@@ -131,7 +131,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             return new SuccessResult<IEnumerable<ValueRange>>(ranges);
         }
 
-        protected override List<string> GetClearRangesForBonus(string sheetName)
+        protected override List<string> GetClearRanges(string sheetName)
         {
             int columnsAfterInitial = this.PlayersPerTeamLimit - 1;
             return new List<string>()
@@ -140,6 +140,13 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                 // player already.
                 $"'{sheetName}'!{this.StartingColumns.Span[0]}4:{this.StartingColumns.Span[0] + columnsAfterInitial}31",
                 $"'{sheetName}'!{this.StartingColumns.Span[1]}4:{this.StartingColumns.Span[1] + columnsAfterInitial}31",
+
+                // Clear the second team name; the first should always be overwritten
+                $"'{sheetName}'!{this.StartingColumns.Span[1]}{TeamNameRow}:{this.StartingColumns.Span[1]}{TeamNameRow}",
+
+                // Clear player names too
+                $"'{sheetName}'!{this.StartingColumns.Span[0]}{PlayerNameRow}:{this.StartingColumns.Span[0] + columnsAfterInitial}{PlayerNameRow}",
+                $"'{sheetName}'!{this.StartingColumns.Span[1]}{PlayerNameRow}:{this.StartingColumns.Span[1] + columnsAfterInitial}{PlayerNameRow}",
             };
         }
     }

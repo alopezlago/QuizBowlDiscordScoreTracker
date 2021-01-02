@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Google.Apis.Sheets.v4.Data;
 
@@ -78,7 +79,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             return $"ROUND {roundNumber}";
         }
 
-        protected override List<string> GetClearRangesForBonus(string sheetName)
+        protected override List<string> GetClearRanges(string sheetName)
         {
             // We want to include all the player columns, and the bonus column, so don't include - 1
             int columnsAfterInitial = this.PlayersPerTeamLimit;
@@ -88,6 +89,13 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                 // player already.
                 $"'{sheetName}'!{StartingColumnsArray.Span[0]}4:{StartingColumnsArray.Span[0] + columnsAfterInitial}27",
                 $"'{sheetName}'!{StartingColumnsArray.Span[1]}4:{StartingColumnsArray.Span[1] + columnsAfterInitial}27",
+
+                // Clear the second team name; the first should always be overwritten
+                $"'{sheetName}'!{this.StartingColumns.Span[1]}{TeamNameRow}:{this.StartingColumns.Span[1]}{TeamNameRow}",
+
+                // Clear player names too, but subtract one, since we don't include the bonus row
+                $"'{sheetName}'!{this.StartingColumns.Span[0]}{PlayerNameRow}:{this.StartingColumns.Span[0] + columnsAfterInitial - 1}{PlayerNameRow}",
+                $"'{sheetName}'!{this.StartingColumns.Span[1]}{PlayerNameRow}:{this.StartingColumns.Span[1] + columnsAfterInitial - 1}{PlayerNameRow}",
             };
         }
 
@@ -124,7 +132,13 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                     .FirstOrDefault(split => split.Action.Score > 0);
                 if (split != null)
                 {
-                    int bonusIndex = Array.IndexOf(teamIds, split.Action.Buzz.TeamId);
+                    // TODO: See if there's a better way to get the individual's team (add it when we add the buzz?)
+                    // Risk is if there's a team name that is the same as someone's ID
+                    // If it's an individual who is a team, then the teamId will be null, but their user ID may be a
+                    // team ID.
+                    int bonusIndex = Array.IndexOf(
+                        teamIds, 
+                        split.Action.Buzz.TeamId ?? split.Action.Buzz.UserId.ToString(CultureInfo.InvariantCulture));
                     if (bonusIndex < 0 || bonusIndex >= 2)
                     {
                         return new FailureResult<IEnumerable<ValueRange>>(

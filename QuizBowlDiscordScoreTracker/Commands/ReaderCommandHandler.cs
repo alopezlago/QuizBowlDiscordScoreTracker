@@ -313,8 +313,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            // TODO: To handle cases where we partially write the scoresheet, we should use something from the result.
-            await this.Context.Channel.SendMessageAsync($"Game written to the scoresheet Round {round}");
+            await this.Context.Channel.SendMessageAsync(result.Value);
         }
 
         [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
@@ -370,7 +369,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            await this.Context.Channel.SendMessageAsync($"Game written to the scoresheet Round {round}");
+            await this.Context.Channel.SendMessageAsync(result.Value);
         }
 
         public async Task SetNewReaderAsync(IGuildUser newReader)

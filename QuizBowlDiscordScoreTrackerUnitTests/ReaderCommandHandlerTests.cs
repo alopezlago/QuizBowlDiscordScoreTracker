@@ -24,6 +24,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
     {
         private const ulong DefaultReaderId = 1;
         private static readonly HashSet<ulong> DefaultIds = new HashSet<ulong>(new ulong[] { 1, 2, 3 });
+        private static readonly string MockTryCreateScoresheetMessage = Guid.NewGuid().ToString();
 
         private const ulong DefaultChannelId = 11;
         private const ulong DefaultGuildId = 9;
@@ -880,7 +881,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
                 .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<int>()))
-                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)))
+                .Returns<GameState, Uri, int>((game, uri, round) => Task.FromResult<IResult<string>>(new SuccessResult<string>(
+                    $"{MockTryCreateScoresheetMessage}{round}")))
                 .Verifiable();
 
             Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
@@ -892,13 +894,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             await exportToSheet("https://localhost/sheetsUrl", 1);
 
             mockFactory.Verify();
-            this.MessageStore.VerifyChannelMessages("Game written to the scoresheet Round 1");
+            this.MessageStore.VerifyChannelMessages($"{MockTryCreateScoresheetMessage}1");
 
             // Make sure it succeeds at the limit (15) too
             this.MessageStore.Clear();
             await exportToSheet("https://localhost/sheetsUrl", 15);
 
-            this.MessageStore.VerifyChannelMessages("Game written to the scoresheet Round 15");
+            this.MessageStore.VerifyChannelMessages($"{MockTryCreateScoresheetMessage}15");
         }
 
         private async Task ExportToGoogleSheetsUserLimit(GoogleSheetsType type, Func<string, int, Task> exportToSheet)
@@ -909,7 +911,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
                 .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<int>()))
-                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+                .Returns<GameState, Uri, int>((game, uri, round) => Task.FromResult<IResult<string>>(
+                    new SuccessResult<string>($"{MockTryCreateScoresheetMessage}{round}")));
 
             Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
             mockFactory
@@ -921,7 +924,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             for (int i = 0; i < userLimit; i++)
             {
                 await exportToSheet("https://localhost/sheetsUrl", i + 1);
-                this.MessageStore.VerifyChannelMessages($"Game written to the scoresheet Round {i + 1}");
+                this.MessageStore.VerifyChannelMessages($"{MockTryCreateScoresheetMessage}{i + 1}");
                 this.MessageStore.Clear();
             }
 
@@ -944,7 +947,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
                 .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<int>()))
-                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(MockTryCreateScoresheetMessage)));
 
             Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
             mockFactory
@@ -956,7 +959,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             for (int i = 0; i < guildLimit; i++)
             {
                 await exportToSheet("https://localhost/sheetsUrl", i + 1);
-                this.MessageStore.VerifyChannelMessages($"Game written to the scoresheet Round {i + 1}");
+                this.MessageStore.VerifyChannelMessages(MockTryCreateScoresheetMessage);
                 this.MessageStore.Clear();
             }
 
@@ -978,7 +981,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
                 .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<int>()))
-                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(MockTryCreateScoresheetMessage)));
 
             Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
             mockFactory
@@ -1000,7 +1003,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
                 .Setup(generator => generator.TryCreateScoresheet(It.IsAny<GameState>(), It.IsAny<Uri>(), It.IsAny<int>()))
-                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
+                .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(MockTryCreateScoresheetMessage)));
 
             Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();
             mockFactory
