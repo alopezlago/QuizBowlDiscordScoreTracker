@@ -144,6 +144,11 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(this.ClearedRanges.Contains("'ROUND 1'!C4:I27"), "First team scores are not in the list of cleared ranges.");
             Assert.IsTrue(this.ClearedRanges.Contains("'ROUND 1'!M4:S27"), "Second team scores are not in the list of cleared ranges.");
 
+            // Assert we cleared the second team and the players
+            Assert.IsTrue(this.ClearedRanges.Contains("'ROUND 1'!M2:M2"), "Second team name wasn't cleared");
+            Assert.IsTrue(this.ClearedRanges.Contains("'ROUND 1'!C3:H3"), "First team's player names weren't cleared");
+            Assert.IsTrue(this.ClearedRanges.Contains("'ROUND 1'!M3:R3"), "Second team's player names weren't cleared");
+
             // These checks are O(n^2), since we do Any for all of them. However, n is small here (~15), so it's not
             // too bad.
 

@@ -313,7 +313,6 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            // TODO: To handle cases where we partially write the scoresheet, we should use something from the result.
             await this.Context.Channel.SendMessageAsync(result.Value);
         }
 

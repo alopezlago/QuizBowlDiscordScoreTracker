@@ -144,7 +144,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             }
 
             IResult<string> updateResult = await this.SheetsApi.UpdateGoogleSheet(
-                ranges, this.GetClearRangesForBonus(sheetName), sheetsUri);
+                ranges, this.GetClearRanges(sheetName), sheetsUri);
             if (!updateResult.Success)
             {
                 return updateResult;
@@ -194,7 +194,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             return await this.SheetsApi.UpdateGoogleSheet(rangesResult.Value, this.ClearRostersRanges, sheetsUri);
         }
 
-        protected abstract List<string> GetClearRangesForBonus(string sheetName);
+        protected abstract List<string> GetClearRanges(string sheetName);
 
         protected abstract string GetSheetName(int roundNumber);
 
