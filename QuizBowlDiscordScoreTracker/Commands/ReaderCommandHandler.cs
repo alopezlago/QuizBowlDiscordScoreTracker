@@ -461,10 +461,18 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            if (nextUserId == null && game.CurrentStage == PhaseStage.Bonus)
+            if (nextUserId == null)
             {
-                await this.Context.Channel.SendMessageAsync($"**Bonus for TU {game.PhaseNumber}**");
-                return;
+                if (game.CurrentStage == PhaseStage.Bonus)
+                {
+                    await this.Context.Channel.SendMessageAsync($"**Bonus for TU {game.PhaseNumber}**");
+                    return;
+                }
+                else
+                {
+                    await this.Context.Channel.SendMessageAsync($"**TU {game.PhaseNumber}**");
+                    return;
+                }
             }
 
             ulong userId = nextUserId.Value;

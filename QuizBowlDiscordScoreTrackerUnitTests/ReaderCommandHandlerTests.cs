@@ -240,6 +240,46 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task UndoAfterNextQuestionOnBonusStagePromptsForBonus()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            this.InitializeHandler();
+            this.Game.Format = Format.TossupBonusesShootout;
+
+            this.Game.ReaderId = DefaultReaderId;
+            await this.Game.AddPlayer(buzzer, "Player");
+            this.Game.ScorePlayer(10);
+            this.Game.NextQuestion();
+            await this.Handler.UndoAsync();
+
+            Assert.AreEqual(PhaseStage.Bonus, this.Game.CurrentStage, "We should be in the bonus stage");
+            Assert.AreEqual(1, this.Game.PhaseNumber, "We should be back to the first question");
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
+            Assert.AreEqual(
+                "**Bonus for TU 1**", message, "Mention should be included in undo message as a prompt.");
+        }
+
+        [TestMethod]
+        public async Task UndoAfterNextQuestionOnTossupStagePromptsForTossup()
+        {
+            ulong buzzer = GetExistingNonReaderUserId();
+            this.InitializeHandler();
+            this.Game.Format = Format.TossupBonusesShootout;
+
+            this.Game.ReaderId = DefaultReaderId;
+            this.Game.NextQuestion();
+            await this.Handler.UndoAsync();
+
+            Assert.AreEqual(PhaseStage.Tossup, this.Game.CurrentStage, "We should be in the tossup stage");
+            Assert.AreEqual(1, this.Game.PhaseNumber, "We should be back to the first question");
+            Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
+            string message = this.MessageStore.ChannelMessages.First();
+            Assert.AreEqual(
+                "**TU 1**", message, "Mention should be included in undo message as a prompt.");
+        }
+
+        [TestMethod]
         public async Task SkipBuzzerNoLongerInServerOnUndo()
         {
             ulong buzzer = GetExistingNonReaderUserId();
