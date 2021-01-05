@@ -260,16 +260,21 @@ namespace QuizBowlDiscordScoreTracker
         {
             lock (this.phasesLock)
             {
-                // There are three cases:
+                // There are four cases:
                 // - The phase has actions that we can undo. Just undo the action and return true.
                 // - The phase does not have actions to undo, but the previous phase does. Remove the current phase, go
                 //   to the previous one, and undo that one.
-                // - We haven't had any actions (start of 1st phase), so there is nothing to undo.
+                // - The phase does not have any actions to undo, nor does the previous phase, but a previous phase
+                //   exists. Go back to that phase, and return no user to prompt.
+                // - If we couldn't undo the current phase and we're at the beginning, then there's nothing to undo
                 bool couldUndo = this.CurrentPhase.Undo(out userId);
-                while (!couldUndo && this.phases.Count > 1)
+                if (!couldUndo && this.phases.Count > 1)
                 {
                     this.phases.RemoveLast();
-                    couldUndo = this.CurrentPhase.Undo(out userId);
+
+                    // If the new CurrentPhase isn't complete, then we must've used NextQuestion, since the bonus or
+                    // tossup would've been scored otherwise. Don't undo the phase again, since we're undoing NextQuestion
+                    couldUndo = this.CurrentStage != PhaseStage.Complete || this.CurrentPhase.Undo(out userId);
                 }
 
                 // In the only case where nothing was undone, there's no score to calculate, so clearing the cache is harmless

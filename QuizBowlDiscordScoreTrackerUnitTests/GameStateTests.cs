@@ -702,6 +702,72 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.AreEqual(secondUserId, nextPlayerId, "Second player should be prompted");
         }
 
+        [TestMethod]
+        public async Task UndoNextQuestionStopsAfterOnePhase()
+        {
+            const ulong firstId = 1;
+
+            GameState gameState = new GameState();
+            Assert.IsTrue(await gameState.AddPlayer(firstId, "Player1"), "Add should succeed.");
+            gameState.ScorePlayer(10);
+            gameState.NextQuestion();
+            Assert.AreEqual(3, gameState.PhaseNumber, "Unexpected phase after NextQuestion");
+
+            Assert.IsTrue(gameState.Undo(out ulong? undoPlayerId), "Undo should return true");
+            Assert.IsNull(undoPlayerId, "No player should've been returned");
+            Assert.IsFalse(
+                gameState.TryGetNextPlayer(out _),
+                "We should have no player's in the buzz queue.");
+            Assert.AreEqual(2, gameState.PhaseNumber, "Unexpected phase after undo");
+        }
+
+        [TestMethod]
+        public async Task UndoNextQuestionTossupsOnly()
+        {
+            const ulong firstId = 1;
+            const ulong secondId = 2;
+
+            GameState gameState = new GameState();
+            Assert.IsTrue(await gameState.AddPlayer(firstId, "Player1"), "First add should succeed.");
+            gameState.ScorePlayer(10);
+            Assert.IsTrue(await gameState.AddPlayer(secondId, "Player2"), "Second add should succeed.");
+            gameState.ScorePlayer(-5);
+            gameState.NextQuestion();
+            Assert.AreEqual(3, gameState.PhaseNumber, "Unexpected phase after NextQuestion");
+
+            Assert.IsTrue(gameState.Undo(out ulong? undoPlayerId), "Undo should return true");
+            Assert.IsNull(undoPlayerId, "No player should've been returned");
+            Assert.IsFalse(
+                gameState.TryGetNextPlayer(out _),
+                "We should have no player's in the buzz queue.");
+            Assert.AreEqual(2, gameState.PhaseNumber, "Unexpected phase after undo");
+
+            bool addPlayer = await gameState.AddPlayer(secondId, "Player2");
+            Assert.IsFalse(addPlayer, "Second player was added to the queue, but they already buzzed in");
+        }
+
+        [TestMethod]
+        public async Task UndoNextQuestionAfterBonus()
+        {
+            const ulong firstId = 1;
+
+            GameState gameState = new GameState()
+            {
+                Format = Format.TossupBonusesShootout
+            };
+
+            Assert.IsTrue(await gameState.AddPlayer(firstId, "Player1"), "First add should succeed.");
+            gameState.ScorePlayer(10);
+            gameState.NextQuestion();
+            Assert.AreEqual(2, gameState.PhaseNumber, "Unexpected phase after NextQuestion");
+
+            Assert.IsTrue(gameState.Undo(out ulong? undoPlayerId), "Undo should return true");
+            Assert.IsNull(undoPlayerId, "No player should've been returned");
+            Assert.AreEqual(1, gameState.PhaseNumber, "Unexpected phase after undo");
+
+            Assert.AreEqual(PhaseStage.Bonus, gameState.CurrentStage, "Unexpected stage");
+        }
+
         public static async Task TestUndoRestoresState(int pointsFromBuzz)
         {
             const ulong firstId = 1;
