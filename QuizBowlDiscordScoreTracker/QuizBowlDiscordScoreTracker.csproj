@@ -12,9 +12,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ClosedXML" Version="0.95.3" />
+    <PackageReference Include="ClosedXML" Version="0.95.4" />
     <PackageReference Include="Discord.Net" Version="2.2.0" />
-    <PackageReference Include="Google.Apis.Sheets.v4" Version="1.49.0.2111" />
+    <PackageReference Include="Google.Apis.Sheets.v4" Version="1.49.0.2175" />
     <PackageReference Include="Microsoft.CodeAnalysis.FxCopAnalyzers" Version="3.3.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
