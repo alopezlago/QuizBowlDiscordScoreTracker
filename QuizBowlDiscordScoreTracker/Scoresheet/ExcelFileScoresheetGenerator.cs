@@ -74,10 +74,12 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                 worksheet.Cell(ModeratorRow, 2).Value = readerName;
                 worksheet.Cell(ModeratorRow, 12).Value = readerName;
 
-                worksheet.Cell(TeamNameRow, 2).Value = teamIdToNames.Values.First();
+                string firstTeamName = teamIdToNames.GetValueOrDefault(teamIds[0], string.Empty);
+                worksheet.Cell(TeamNameRow, 2).Value = firstTeamName;
                 if (teamIdToNames.Count > 1)
                 {
-                    worksheet.Cell(TeamNameRow, StartingColumns[1]).Value = teamIdToNames.ElementAt(1).Value;
+                    string secondTeamName = teamIdToNames.GetValueOrDefault(teamIds[1], string.Empty);
+                    worksheet.Cell(TeamNameRow, StartingColumns[1]).Value = secondTeamName;
                 }
 
                 foreach (PlayerTeamPair pair in players)

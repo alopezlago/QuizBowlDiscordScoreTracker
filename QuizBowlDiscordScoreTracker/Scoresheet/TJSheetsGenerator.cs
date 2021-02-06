@@ -91,11 +91,11 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                 $"'{sheetName}'!{StartingColumnsArray.Span[1]}4:{StartingColumnsArray.Span[1] + columnsAfterInitial}27",
 
                 // Clear the second team name; the first should always be overwritten
-                $"'{sheetName}'!{this.StartingColumns.Span[1]}{TeamNameRow}:{this.StartingColumns.Span[1]}{TeamNameRow}",
+                $"'{sheetName}'!{this.StartingColumns.Span[1]}{this.TeamNameRow}:{this.StartingColumns.Span[1]}{this.TeamNameRow}",
 
                 // Clear player names too, but subtract one, since we don't include the bonus row
-                $"'{sheetName}'!{this.StartingColumns.Span[0]}{PlayerNameRow}:{this.StartingColumns.Span[0] + columnsAfterInitial - 1}{PlayerNameRow}",
-                $"'{sheetName}'!{this.StartingColumns.Span[1]}{PlayerNameRow}:{this.StartingColumns.Span[1] + columnsAfterInitial - 1}{PlayerNameRow}",
+                $"'{sheetName}'!{this.StartingColumns.Span[0]}{this.PlayerNameRow}:{this.StartingColumns.Span[0] + columnsAfterInitial - 1}{this.PlayerNameRow}",
+                $"'{sheetName}'!{this.StartingColumns.Span[1]}{this.PlayerNameRow}:{this.StartingColumns.Span[1] + columnsAfterInitial - 1}{this.PlayerNameRow}",
             };
         }
 
@@ -137,7 +137,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                     // If it's an individual who is a team, then the teamId will be null, but their user ID may be a
                     // team ID.
                     int bonusIndex = Array.IndexOf(
-                        teamIds, 
+                        teamIds,
                         split.Action.Buzz.TeamId ?? split.Action.Buzz.UserId.ToString(CultureInfo.InvariantCulture));
                     if (bonusIndex < 0 || bonusIndex >= 2)
                     {

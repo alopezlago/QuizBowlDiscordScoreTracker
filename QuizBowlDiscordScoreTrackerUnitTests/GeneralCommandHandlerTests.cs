@@ -341,7 +341,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ulong buzzer = GetExistingNonReaderUserId();
             this.InitializeHandler();
             this.Game.ReaderId = 0;
-            this.Game.Format = Format.TossupBonusesShootout;
+            this.Game.Format = Format.CreateTossupBonusesShootout(false);
 
             await this.Game.AddPlayer(buzzer, playerName);
             this.Game.ScorePlayer(10);
@@ -371,7 +371,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ulong buzzer = GetExistingNonReaderUserId();
             this.InitializeHandler();
             this.Game.ReaderId = 0;
-            this.Game.Format = Format.TossupBonusesShootout;
+            this.Game.Format = Format.CreateTossupBonusesShootout(false);
 
             await this.Game.AddPlayer(buzzer, playerName);
             this.Game.ScorePlayer(10);
@@ -680,7 +680,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ulong[] players = Enumerable.Range(firstId, playersCount).Select(id => (ulong)id).ToArray();
             this.InitializeHandler();
             this.Game.ReaderId = 0;
-            this.Game.Format = Format.TossupBonusesShootout;
+            this.Game.Format = Format.CreateTossupBonusesShootout(false);
 
             // All tied for 1st
             for (int i = 0; i < 3; i++)
@@ -1297,7 +1297,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             this.InitializeHandler();
             this.Game.ReaderId = DefaultReaderId;
             this.Game.TeamManager = new SoloOnlyTeamManager();
-            this.Game.Format = Format.TossupBonusesShootout;
+            this.Game.Format = Format.CreateTossupBonusesShootout(false);
 
             await this.Game.AddPlayer(1, firstPlayerName);
             this.Game.ScorePlayer(10);
@@ -1366,7 +1366,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                         });
                 });
             this.Game.ReaderId = DefaultReaderId;
-            this.Game.Format = Format.TossupBonusesShootout;
+            this.Game.Format = Format.CreateTossupBonusesShootout(false);
 
             await this.Game.AddPlayer(1, playerName);
             this.Game.ScorePlayer(10);

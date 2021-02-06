@@ -13,7 +13,7 @@ namespace QuizBowlDiscordScoreTracker.Database
     // dotnet ef database update
     //
     // To perform migrations with Visual Studio (Package Manager Console)
-    // Add-Migration InitialCreate
+    // Add-Migration <name of migration>
     // Update-Database
     //
     // When you migrate, consult the site below to make sure migrations are safe.

@@ -142,11 +142,11 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                 $"'{sheetName}'!{this.StartingColumns.Span[1]}4:{this.StartingColumns.Span[1] + columnsAfterInitial}31",
 
                 // Clear the second team name; the first should always be overwritten
-                $"'{sheetName}'!{this.StartingColumns.Span[1]}{TeamNameRow}:{this.StartingColumns.Span[1]}{TeamNameRow}",
+                $"'{sheetName}'!{this.StartingColumns.Span[1]}{this.TeamNameRow}:{this.StartingColumns.Span[1]}{this.TeamNameRow}",
 
                 // Clear player names too
-                $"'{sheetName}'!{this.StartingColumns.Span[0]}{PlayerNameRow}:{this.StartingColumns.Span[0] + columnsAfterInitial}{PlayerNameRow}",
-                $"'{sheetName}'!{this.StartingColumns.Span[1]}{PlayerNameRow}:{this.StartingColumns.Span[1] + columnsAfterInitial}{PlayerNameRow}",
+                $"'{sheetName}'!{this.StartingColumns.Span[0]}{this.PlayerNameRow}:{this.StartingColumns.Span[0] + columnsAfterInitial}{this.PlayerNameRow}",
+                $"'{sheetName}'!{this.StartingColumns.Span[1]}{this.PlayerNameRow}:{this.StartingColumns.Span[1] + columnsAfterInitial}{this.PlayerNameRow}",
             };
         }
     }

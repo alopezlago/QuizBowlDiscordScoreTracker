@@ -82,6 +82,12 @@ namespace QuizBowlDiscordScoreTracker.Database
             return user?.CommandBanned ?? false;
         }
 
+        public async Task<bool> GetDisabledBuzzQueueAsync(ulong guildId)
+        {
+            GuildSetting guild = await this.Context.FindAsync<GuildSetting>(guildId);
+            return guild?.DisableBuzzQueue ?? false;
+        }
+
         public async Task<ulong?> GetPairedVoiceChannelIdOrNullAsync(ulong textChannelId)
         {
             TextChannelSetting textChannel = await this.Context.FindAsync<TextChannelSetting>(textChannelId);
@@ -100,13 +106,13 @@ namespace QuizBowlDiscordScoreTracker.Database
             return guild?.TeamRolePrefix ?? null;
         }
 
-        public async Task<bool> GetUseBonuses(ulong guildId)
+        public async Task<bool> GetUseBonusesAsync(ulong guildId)
         {
             GuildSetting guild = await this.Context.FindAsync<GuildSetting>(guildId);
             return guild?.UseBonuses ?? false;
         }
 
-        public async Task<int> GetGuildExportCount(ulong guildId)
+        public async Task<int> GetGuildExportCountAsync(ulong guildId)
         {
             GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
             int currentDay = DateTime.UtcNow.Day;
@@ -120,7 +126,7 @@ namespace QuizBowlDiscordScoreTracker.Database
             return guild.ExportCount;
         }
 
-        public async Task<int> GetUserExportCount(ulong userId)
+        public async Task<int> GetUserExportCountAsync(ulong userId)
         {
             UserSetting user = await this.AddOrGetUserAsync(userId);
             int currentDay = DateTime.UtcNow.Day;
@@ -134,7 +140,7 @@ namespace QuizBowlDiscordScoreTracker.Database
             return user.ExportCount;
         }
 
-        public async Task IncrementGuildExportCount(ulong guildId)
+        public async Task IncrementGuildExportCountAsync(ulong guildId)
         {
             GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
             int currentDay = DateTime.UtcNow.Day;
@@ -151,7 +157,7 @@ namespace QuizBowlDiscordScoreTracker.Database
             await this.Context.SaveChangesAsync();
         }
 
-        public async Task IncrementUserExportCount(ulong userId)
+        public async Task IncrementUserExportCountAsync(ulong userId)
         {
             UserSetting user = await this.AddOrGetUserAsync(userId);
             int currentDay = DateTime.UtcNow.Day;
@@ -194,6 +200,13 @@ namespace QuizBowlDiscordScoreTracker.Database
             UserSetting user = await this.AddOrGetUserAsync(userId);
             user.CommandBanned = false;
             this.RemoveUserIfEmptyAsync(user);
+            await this.Context.SaveChangesAsync();
+        }
+
+        public async Task SetDisableBuzzQueueAsync(ulong guildId, bool isDisabled)
+        {
+            GuildSetting guild = await this.AddOrGetGuildAsync(guildId);
+            guild.DisableBuzzQueue = isDisabled;
             await this.Context.SaveChangesAsync();
         }
 
@@ -296,6 +309,7 @@ namespace QuizBowlDiscordScoreTracker.Database
             if (guild.TeamRolePrefix != null ||
                 guild.ReaderRolePrefix != null ||
                 guild.UseBonuses ||
+                guild.DisableBuzzQueue ||
                 (guild.ExportCount > 0 && guild.LastExportDay == DateTime.UtcNow.Day))
             {
                 return;

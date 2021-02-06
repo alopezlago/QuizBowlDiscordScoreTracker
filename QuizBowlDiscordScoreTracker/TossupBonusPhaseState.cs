@@ -17,7 +17,7 @@ namespace QuizBowlDiscordScoreTracker
 
         private List<int> bonusScores;
 
-        public TossupBonusPhaseState() : base()
+        public TossupBonusPhaseState(bool disableBuzzQueue) : base(disableBuzzQueue)
         {
             this.bonusScores = null;
         }

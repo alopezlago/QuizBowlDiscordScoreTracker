@@ -248,11 +248,17 @@ namespace QuizBowlDiscordScoreTracker.Commands
             // Prevent a cold start on the first buzz, and eagerly get the team prefix and channel pair
             string teamRolePrefix;
             bool useBonuses;
+            bool disableBuzzQueue;
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
             {
                 await action.GetPairedVoiceChannelIdOrNullAsync(this.Context.Channel.Id);
                 teamRolePrefix = await action.GetTeamRolePrefixAsync(this.Context.Guild.Id);
-                useBonuses = await action.GetUseBonuses(this.Context.Guild.Id);
+
+                bool[] getTasks = await Task.WhenAll(
+                    action.GetUseBonusesAsync(this.Context.Guild.Id),
+                    action.GetDisabledBuzzQueueAsync(this.Context.Guild.Id));
+                useBonuses = getTasks[0];
+                disableBuzzQueue = getTasks[1];
             }
 
             // Set teams here, if they are using roles.
@@ -266,7 +272,9 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             // Set the format here. Eventually we'll want to use more information to determine the format
-            state.Format = useBonuses ? Format.TossupBonusesShootout : Format.TossupShootout;
+            state.Format = useBonuses ?
+                Format.CreateTossupBonusesShootout(disableBuzzQueue) :
+                Format.CreateTossupShootout(disableBuzzQueue);
 
             string baseMessage = this.Options.CurrentValue.WebBaseURL == null ?
                 $"{this.Context.User.Mention} is the reader." :

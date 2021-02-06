@@ -147,6 +147,19 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 "Scoring bonuses will no longer be enabled for every game in this server.");
         }
 
+        public async Task DisableBuzzQueueAsync()
+        {
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                await action.SetDisableBuzzQueueAsync(this.Context.Guild.Id, true);
+            }
+
+            Logger.Information($"Buzz queue disabled in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
+            await this.Context.Channel.SendMessageAsync(
+                "The buzz queue is disabled for future games. The bot will only recognize the first player who buzzed " +
+                "in. Other players must buzz in again after the reader scores the current player.");
+        }
+
         public async Task EnableBonusesByDefaultAsync()
         {
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
@@ -158,29 +171,48 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.Context.Channel.SendMessageAsync("Scoring bonuses is now enabled for every game in this server.");
         }
 
+        public async Task EnableBuzzQueueAsync()
+        {
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                await action.SetDisableBuzzQueueAsync(this.Context.Guild.Id, false);
+            }
+
+            Logger.Information($"Buzz queue enabled in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
+            await this.Context.Channel.SendMessageAsync(
+                "The buzz queue is enabled for future games. The bot will recognize players in the order that they " +
+                "buzzed in.");
+        }
+
         public async Task GetDefaultFormatAsync()
         {
-            bool useBonuses;
-            string readerRolePrefix;
-            string teamRolePrefix;
+            Task<bool> useBonuses;
+            Task<bool> disableBuzzQueue;
+            Task<string> readerRolePrefix;
+            Task<string> teamRolePrefix;
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
             {
                 // TODO: Should we make this one call so we don't need to await on all of them (and we could do it
                 // with one SELECT instead of 3)?
-                useBonuses = await action.GetUseBonuses(this.Context.Guild.Id);
-                readerRolePrefix = await action.GetReaderRolePrefixAsync(this.Context.Guild.Id);
-                teamRolePrefix = await action.GetTeamRolePrefixAsync(this.Context.Guild.Id);
+                useBonuses = action.GetUseBonusesAsync(this.Context.Guild.Id);
+                disableBuzzQueue = action.GetDisabledBuzzQueueAsync(this.Context.Guild.Id);
+                readerRolePrefix = action.GetReaderRolePrefixAsync(this.Context.Guild.Id);
+                teamRolePrefix = action.GetTeamRolePrefixAsync(this.Context.Guild.Id);
+                await Task.WhenAll(useBonuses, disableBuzzQueue, readerRolePrefix, teamRolePrefix);
             }
 
-            Logger.Information($"getFormat called in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
+            Logger.Information($"getDefaultFormat called in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
             EmbedBuilder builder = new EmbedBuilder()
             {
                 Title = "Default Format",
                 Description = "The default settings for games in this server"
             };
-            builder.AddField("Require scoring bonuses?", useBonuses ? "Yes" : "No");
-            builder.AddField("Reader role prefix?", readerRolePrefix == null ? "None set" : @$"Yes: ""{readerRolePrefix}""");
-            builder.AddField("Team role prefix?", teamRolePrefix == null ? "None set" : @$"Yes: ""{teamRolePrefix}""");
+            builder.AddField("Require scoring bonuses?", useBonuses.Result ? "Yes" : "No");
+            builder.AddField("Queue buzzes?", disableBuzzQueue.Result ? "No" : "Yes");
+            builder.AddField(
+                "Reader role prefix?", readerRolePrefix.Result == null ? "None set" : @$"Yes: ""{readerRolePrefix.Result}""");
+            builder.AddField(
+                "Team role prefix?", teamRolePrefix.Result == null ? "None set" : @$"Yes: ""{teamRolePrefix.Result}""");
 
             await this.Context.Channel.SendMessageAsync(embed: builder.Build());
         }

@@ -165,15 +165,20 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             bool alwaysUseBonuses;
+            bool disableBuzzQueue;
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
             {
-                alwaysUseBonuses = await action.GetUseBonuses(this.Context.Guild.Id);
+                bool[] getTasks = await Task.WhenAll(
+                    action.GetUseBonusesAsync(this.Context.Guild.Id),
+                    action.GetDisabledBuzzQueueAsync(this.Context.Guild.Id));
+                alwaysUseBonuses = getTasks[0];
+                disableBuzzQueue = getTasks[1];
             }
 
             // TODO: We should look into cloning the format and changing the HighestPhaseIndexWithBonus field. This
             // would require another argument for the enable command, though, since it requires a number
-            game.Format = Format.TossupShootout;
-            
+            game.Format = Format.CreateTossupShootout(disableBuzzQueue);
+
             if (alwaysUseBonuses)
             {
                 await this.Context.Channel.SendMessageAsync(
@@ -199,9 +204,15 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
+            bool disableBuzzQueue;
+            using (DatabaseAction action = this.DatabaseActionFactory.Create())
+            {
+                disableBuzzQueue = await action.GetDisabledBuzzQueueAsync(this.Context.Guild.Id);
+            }
+
             // TODO: We should look into cloning the format and changing the HighestPhaseIndexWithBonus field. This
             // would require an argument for how many bonuses to read
-            game.Format = Format.TossupBonusesShootout;
+            game.Format = Format.CreateTossupBonusesShootout(disableBuzzQueue);
             await this.Context.Channel.SendMessageAsync(
                 "Bonuses are now being tracked. Scores for the current question have been cleared.");
         }
@@ -523,8 +534,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
             using (DatabaseAction action = this.DatabaseActionFactory.Create())
             {
                 int[] exportCounts = await Task.WhenAll(
-                    action.GetGuildExportCount(this.Context.Guild.Id),
-                    action.GetUserExportCount(this.Context.User.Id));
+                    action.GetGuildExportCountAsync(this.Context.Guild.Id),
+                    action.GetUserExportCountAsync(this.Context.User.Id));
                 userExportCount = exportCounts[0];
                 guildExportCount = exportCounts[1];
 
@@ -548,8 +559,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 }
 
                 await Task.WhenAll(
-                    action.IncrementGuildExportCount(this.Context.Guild.Id),
-                    action.IncrementUserExportCount(this.Context.User.Id));
+                    action.IncrementGuildExportCountAsync(this.Context.Guild.Id),
+                    action.IncrementUserExportCountAsync(this.Context.User.Id));
 
                 return (true, userExportCount);
             }

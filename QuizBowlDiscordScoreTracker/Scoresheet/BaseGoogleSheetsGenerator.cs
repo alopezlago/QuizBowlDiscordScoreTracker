@@ -51,7 +51,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             }
 
             // Make it an array so we don't keep re-evaluating the enumerable
-            
+
             IReadOnlyDictionary<PlayerTeamPair, LastScoringSplit> players = await game.GetLastScoringSplits();
             IEnumerable<IGrouping<string, PlayerTeamPair>> playersByTeam = players.GroupBy(
                 kvp => kvp.Key.TeamId, kvp => kvp.Key);

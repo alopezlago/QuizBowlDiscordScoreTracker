@@ -219,26 +219,49 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 .Setup(channel => channel.Id)
                 .Returns(messageChannelId);
             mockMessageChannel
-                .Setup(channel => channel.SendMessageAsync(It.IsAny<string>(), false, null, It.IsAny<RequestOptions>()))
-                .Returns<string, bool, Embed, RequestOptions>((message, isTTS, embed, options) =>
-                {
-                    messageStore.ChannelMessages.Add(message);
-                    return Task.FromResult(mockUserMessage.Object);
-                });
+                .Setup(channel => channel.SendMessageAsync(
+                    It.IsAny<string>(),
+                    false,
+                    null,
+                    It.IsAny<RequestOptions>(),
+                    It.IsAny<AllowedMentions>(),
+                    It.IsAny<MessageReference>()))
+                .Returns<string, bool, Embed, RequestOptions, AllowedMentions, MessageReference>(
+                    (message, isTTS, embed, options, allowedMentions, messageReference) =>
+                    {
+                        messageStore.ChannelMessages.Add(message);
+                        return Task.FromResult(mockUserMessage.Object);
+                    });
             mockMessageChannel
-                .Setup(channel => channel.SendMessageAsync(null, false, It.IsAny<Embed>(), It.IsAny<RequestOptions>()))
-                .Returns<string, bool, Embed, RequestOptions>((message, isTTS, embed, options) =>
-                {
-                    messageStore.ChannelEmbeds.Add(GetMockEmbedText(embed));
-                    return Task.FromResult(mockUserMessage.Object);
-                });
+                .Setup(channel => channel.SendMessageAsync(
+                    null,
+                    false,
+                    It.IsAny<Embed>(),
+                    It.IsAny<RequestOptions>(),
+                    It.IsAny<AllowedMentions>(),
+                    It.IsAny<MessageReference>()))
+                .Returns<string, bool, Embed, RequestOptions, AllowedMentions, MessageReference>(
+                    (message, isTTS, embed, options, allowedMentions, messageReference) =>
+                    {
+                        messageStore.ChannelEmbeds.Add(GetMockEmbedText(embed));
+                        return Task.FromResult(mockUserMessage.Object);
+                    });
             mockMessageChannel
                 .Setup(channel => channel.Name)
                 .Returns("gameChannel");
             mockMessageChannel
-                .Setup(channel => channel.SendFileAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<Embed>(), It.IsAny<RequestOptions>(), It.IsAny<bool>()))
-                .Returns<Stream, string, string, bool, Embed, RequestOptions, bool>(
-                    (stream, filename, text, isTTS, embed, requestOptions, isSpoiler) =>
+                .Setup(channel => channel.SendFileAsync(
+                    It.IsAny<Stream>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<Embed>(),
+                    It.IsAny<RequestOptions>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<AllowedMentions>(),
+                    It.IsAny<MessageReference>()))
+                .Returns<Stream, string, string, bool, Embed, RequestOptions, bool, AllowedMentions, MessageReference>(
+                    (stream, filename, text, isTTS, embed, requestOptions, isSpoiler, allowedMentions, messageReference) =>
                     {
                         messageStore.Files.Add((stream, filename, text));
                         return Task.FromResult(mockUserMessage.Object);
