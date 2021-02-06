@@ -10,12 +10,15 @@ namespace QuizBowlDiscordScoreTracker
         // We may be able to get rid of this lock, if we rely on the host keeping it consistent.
         private readonly object collectionLock = new object();
 
-        public PhaseState()
+        public PhaseState(bool buzzQueueDisabled)
         {
             this.BuzzQueue = new SortedSet<Buzz>();
             this.AlreadyBuzzedPlayerIds = new HashSet<ulong>();
             this.AlreadyScoredTeamIds = new HashSet<string>();
             this.Actions = new Stack<ScoreAction>();
+
+            // When the buzz queue is disabled, we'll only keep one person in the queue at a time
+            this.BuzzQueueDisabled = buzzQueueDisabled;
         }
 
         public abstract PhaseStage CurrentStage { get; }
@@ -31,6 +34,8 @@ namespace QuizBowlDiscordScoreTracker
 
         internal SortedSet<Buzz> BuzzQueue { get; }
 
+        private bool BuzzQueueDisabled { get; }
+
         // We could add players to it, but if the team has buzzed already, we can skip/eject them from the queue
         public bool AddBuzz(Buzz player)
         {
@@ -40,7 +45,8 @@ namespace QuizBowlDiscordScoreTracker
                 string teamId = GetTeamId(player);
                 if (player == null ||
                     this.AlreadyBuzzedPlayerIds.Contains(player.UserId) ||
-                    this.AlreadyScoredTeamIds.Contains(teamId))
+                    this.AlreadyScoredTeamIds.Contains(teamId) ||
+                    (this.BuzzQueueDisabled && this.BuzzQueue.Count > 0))
                 {
                     return false;
                 }

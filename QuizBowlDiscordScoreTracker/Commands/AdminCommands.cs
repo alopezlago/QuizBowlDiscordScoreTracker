@@ -54,11 +54,27 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().DisableBonusesByDefaultAsync();
         }
 
+        [Command("disableBuzzQueue")]
+        [Summary("Ensures that the bot will not queue buzzes, so it will only recognize and remember the buzzer it " +
+            "prompted. Players whose buzz was not recognized must buzz in again after the reader scores the current player.")]
+        public Task DisableBuzzQueueAsync()
+        {
+            return this.GetHandler().DisableBuzzQueueAsync();
+        }
+
         [Command("enableBonusesByDefault")]
         [Summary("Makes scoring bonuses in a game enabled by default in this server.")]
         public Task EnableBonusesAsync()
         {
             return this.GetHandler().EnableBonusesByDefaultAsync();
+        }
+
+        [Command("enableBuzzQueue")]
+        [Summary("Ensures that the bot will queue buzzes. Players only need to buzz once, and they will be recognized " +
+            "in the order they buzzed in.")]
+        public Task EnableBuzzQueueAsync()
+        {
+            return this.GetHandler().EnableBuzzQueueAsync();
         }
 
         [Command("getPairedChannel")]

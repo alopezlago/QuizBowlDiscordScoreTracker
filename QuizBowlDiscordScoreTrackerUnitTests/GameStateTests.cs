@@ -239,7 +239,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             GameState gameState = new GameState
             {
                 ReaderId = readerId,
-                Format = Format.TossupBonusesShootout
+                Format = Format.CreateTossupBonusesShootout(false)
             };
 
             Assert.AreEqual(PhaseStage.Tossup, gameState.CurrentStage, "Unexpected initial stage");
@@ -250,7 +250,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             Assert.AreEqual(PhaseStage.Tossup, gameState.CurrentStage, "Unexpected stage after scoring the bonus");
             Assert.AreEqual(2, gameState.PhaseNumber, "Unexpected phase number after scoring the bonus");
-            gameState.Format = Format.TossupShootout;
+            gameState.Format = Format.CreateTossupShootout(false);
             Assert.IsTrue(await gameState.AddPlayer(id, "Player"), "Second add should succeed.");
             gameState.ScorePlayer(10);
 
@@ -291,7 +291,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             GameState gameState = new GameState
             {
                 ReaderId = readerId,
-                Format = Format.TossupBonusesShootout
+                Format = Format.CreateTossupBonusesShootout(false)
             };
 
             Assert.AreEqual(PhaseStage.Tossup, gameState.CurrentStage, "Unexpected initial stage");
@@ -313,7 +313,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             GameState gameState = new GameState
             {
                 ReaderId = readerId,
-                Format = Format.TossupBonusesShootout
+                Format = Format.CreateTossupBonusesShootout(false)
             };
 
             Assert.AreEqual(PhaseStage.Tossup, gameState.CurrentStage, "Unexpected initial stage");
@@ -568,7 +568,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             GameState gameState = new GameState
             {
-                Format = Format.TossupBonusesShootout
+                Format = Format.CreateTossupBonusesShootout(false)
             };
             Assert.IsTrue(await gameState.AddPlayer(firstId, "Player1"), "First add should succeed.");
 
@@ -753,7 +753,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             GameState gameState = new GameState()
             {
-                Format = Format.TossupBonusesShootout
+                Format = Format.CreateTossupBonusesShootout(false)
             };
 
             Assert.IsTrue(await gameState.AddPlayer(firstId, "Player1"), "First add should succeed.");

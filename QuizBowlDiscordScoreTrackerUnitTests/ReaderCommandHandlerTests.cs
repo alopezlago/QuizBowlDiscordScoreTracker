@@ -223,7 +223,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong buzzer = GetExistingNonReaderUserId();
             this.InitializeHandler();
-            this.Game.Format = Format.TossupBonusesShootout;
+            this.Game.Format = Format.CreateTossupBonusesShootout(false);
 
             this.Game.ReaderId = DefaultReaderId;
             await this.Game.AddPlayer(buzzer, "Player");
@@ -244,7 +244,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong buzzer = GetExistingNonReaderUserId();
             this.InitializeHandler();
-            this.Game.Format = Format.TossupBonusesShootout;
+            this.Game.Format = Format.CreateTossupBonusesShootout(false);
 
             this.Game.ReaderId = DefaultReaderId;
             await this.Game.AddPlayer(buzzer, "Player");
@@ -265,7 +265,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong buzzer = GetExistingNonReaderUserId();
             this.InitializeHandler();
-            this.Game.Format = Format.TossupBonusesShootout;
+            this.Game.Format = Format.CreateTossupBonusesShootout(false);
 
             this.Game.ReaderId = DefaultReaderId;
             this.Game.NextQuestion();
@@ -429,7 +429,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong buzzer = GetExistingNonReaderUserId();
             this.InitializeHandler();
-            this.Game.Format = Format.TossupBonusesShootout;
+            this.Game.Format = Format.CreateTossupBonusesShootout(false);
 
             this.Game.ReaderId = DefaultReaderId;
             await this.Game.AddPlayer(buzzer, "Player");
@@ -444,7 +444,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong buzzer = GetExistingNonReaderUserId();
             this.InitializeHandler();
-            this.Game.Format = Format.TossupBonusesShootout;
+            this.Game.Format = Format.CreateTossupBonusesShootout(false);
 
             Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
 
@@ -455,7 +455,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 "Bonuses are no longer being tracked. Scores for the current question have been cleared.",
                 message,
                 $"Unexpected message");
-            Assert.AreEqual(Format.TossupShootout, this.Game.Format, "Unexpected format");
+            Assert.AreEqual(Format.CreateTossupShootout(false), this.Game.Format, "Unexpected format");
             Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Should've been able to add the player again");
         }
 
@@ -463,7 +463,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task DisableBonusesSucceedsIfEnableBonusSetByDefault()
         {
             this.InitializeHandler();
-            this.Game.Format = Format.TossupBonusesShootout;
+            this.Game.Format = Format.CreateTossupBonusesShootout(false);
 
             using (BotConfigurationContext context = this.botConfigurationfactory.Create())
             using (DatabaseAction action = new DatabaseAction(context))
@@ -478,7 +478,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 "Bonuses are no longer being tracked for this game only. Run !disableBonusesByDefault to stop tracking bonuses on this server by default.\nScores for the current question have been cleared.",
                 message,
                 $"Unexpected message");
-            Assert.AreEqual(Format.TossupShootout, this.Game.Format, "Unexpected format");
+            Assert.AreEqual(Format.CreateTossupShootout(false), this.Game.Format, "Unexpected format");
         }
 
         [TestMethod]
@@ -486,7 +486,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong buzzer = GetExistingNonReaderUserId();
             this.InitializeHandler();
-            this.Game.Format = Format.TossupShootout;
+            this.Game.Format = Format.CreateTossupShootout(false);
 
             Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
 
@@ -497,7 +497,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 "Bonuses are already untracked.",
                 message,
                 $"Unexpected message");
-            Assert.AreEqual(Format.TossupShootout, this.Game.Format, "Unexpected format");
+            Assert.AreEqual(Format.CreateTossupShootout(false), this.Game.Format, "Unexpected format");
             Assert.IsFalse(await this.Game.AddPlayer(buzzer, "Player"), "Shouldn't be able to add the player again");
         }
 
@@ -506,7 +506,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong buzzer = GetExistingNonReaderUserId();
             this.InitializeHandler();
-            this.Game.Format = Format.TossupShootout;
+            this.Game.Format = Format.CreateTossupShootout(false);
 
             Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
 
@@ -517,7 +517,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 "Bonuses are now being tracked. Scores for the current question have been cleared.",
                 message,
                 $"Unexpected message");
-            Assert.AreEqual(Format.TossupBonusesShootout, this.Game.Format, "Unexpected format");
+            Assert.AreEqual(Format.CreateTossupBonusesShootout(false), this.Game.Format, "Unexpected format");
             Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Should've been able to add the player again");
         }
 
@@ -526,7 +526,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             ulong buzzer = GetExistingNonReaderUserId();
             this.InitializeHandler();
-            this.Game.Format = Format.TossupBonusesShootout;
+            this.Game.Format = Format.CreateTossupBonusesShootout(false);
 
             Assert.IsTrue(await this.Game.AddPlayer(buzzer, "Player"), "Should've been able to add the player");
 
@@ -537,7 +537,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 "Bonuses are already tracked.",
                 message,
                 $"Unexpected message");
-            Assert.AreEqual(Format.TossupBonusesShootout, this.Game.Format, "Unexpected format");
+            Assert.AreEqual(Format.CreateTossupBonusesShootout(false), this.Game.Format, "Unexpected format");
             Assert.IsFalse(await this.Game.AddPlayer(buzzer, "Player"), "Shouldn't be able to add the player again");
         }
 

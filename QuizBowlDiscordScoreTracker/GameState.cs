@@ -28,12 +28,12 @@ namespace QuizBowlDiscordScoreTracker
         private readonly object phasesLock = new object();
         private readonly object readerLock = new object();
 
-        public GameState()
+        public GameState(bool disableBuzzQueue = false)
         {
             this.phases = new LinkedList<IPhaseState>();
             this.cachedLastScoringSplit = null;
             this.cachedPhaseScoresPerPhase = null;
-            this.format = Format.TossupShootout;
+            this.format = Format.CreateTossupShootout(disableBuzzQueue);
             this.TeamManager = SoloOnlyTeamManager.Instance;
 
             // Generate a 64-bit cryptographically secure random string for the ID

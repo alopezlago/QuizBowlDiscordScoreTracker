@@ -116,7 +116,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             // Do something simple, then read the spreadsheet and verify some fields
             GameState game = new GameState()
             {
-                Format = Format.TossupBonusesShootout,
+                Format = Format.CreateTossupBonusesShootout(false),
                 ReaderId = 1,
                 TeamManager = this.TeamManager
             };
@@ -190,7 +190,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             // Do something simple, then read the spreadsheet and verify some fields
             GameState game = new GameState()
             {
-                Format = Format.TossupBonusesShootout,
+                Format = Format.CreateTossupBonusesShootout(false),
                 ReaderId = 1,
                 TeamManager = this.TeamManager
             };
@@ -237,7 +237,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             // Do something simple, then read the spreadsheet and verify some fields
             GameState game = new GameState()
             {
-                Format = Format.TossupBonusesShootout,
+                Format = Format.CreateTossupBonusesShootout(false),
                 ReaderId = 1,
                 TeamManager = this.TeamManager
             };
@@ -280,7 +280,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             GameState game = new GameState()
             {
-                Format = Format.TossupShootout,
+                Format = Format.CreateTossupShootout(false),
                 ReaderId = 1,
                 TeamManager = this.TeamManager
             };
@@ -323,7 +323,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             GameState game = new GameState()
             {
-                Format = Format.TossupBonusesShootout,
+                Format = Format.CreateTossupBonusesShootout(false),
                 ReaderId = 1,
                 TeamManager = this.TeamManager
             };
@@ -358,7 +358,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             GameState game = new GameState()
             {
-                Format = Format.TossupBonusesShootout,
+                Format = Format.CreateTossupBonusesShootout(false),
                 ReaderId = 1,
                 TeamManager = this.TeamManager
             };
@@ -401,7 +401,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             GameState game = new GameState()
             {
-                Format = Format.TossupShootout,
+                Format = Format.CreateTossupShootout(false),
                 ReaderId = 1,
                 TeamManager = this.TeamManager
             };
@@ -446,7 +446,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             GameState game = new GameState()
             {
-                Format = Format.TossupShootout,
+                Format = Format.CreateTossupShootout(false),
                 ReaderId = 1,
                 TeamManager = this.TeamManager
             };
@@ -477,7 +477,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             GameState game = new GameState()
             {
-                Format = Format.TossupShootout,
+                Format = Format.CreateTossupShootout(false),
                 ReaderId = 1,
                 TeamManager = this.TeamManager
             };
@@ -498,7 +498,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             game.ScorePlayer(15);
 
             result = await this.Generator.TryCreateScoresheet(game, SheetsUri, 1);
-            Assert.IsTrue(result.Success, $"Creation should've succeeded.");            
+            Assert.IsTrue(result.Success, $"Creation should've succeeded.");
             this.AssertInUpdateRange($"'ROUND 1'!C27", "10", "Couldn't find the last buzz");
             Assert.IsFalse(
                 this.UpdatedRanges
@@ -511,7 +511,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             GameState game = new GameState()
             {
-                Format = Format.TossupBonusesShootout,
+                Format = Format.CreateTossupBonusesShootout(false),
                 ReaderId = 1,
                 TeamManager = this.TeamManager
             };
@@ -532,7 +532,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             GameState game = new GameState()
             {
-                Format = Format.TossupBonusesShootout,
+                Format = Format.CreateTossupBonusesShootout(false),
                 ReaderId = 1,
                 TeamManager = this.TeamManager
             };

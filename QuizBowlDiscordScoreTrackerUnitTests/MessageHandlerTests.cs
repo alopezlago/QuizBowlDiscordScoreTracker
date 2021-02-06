@@ -225,7 +225,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 out IGuildUser readerUser,
                 out IGuildTextChannel channel,
                 out MessageStore messageStore);
-            state.Format = Format.TossupBonusesShootout;
+            state.Format = Format.CreateTossupBonusesShootout(false);
 
             await handler.HandlePlayerMessage(state, playerUser, channel, BotId, "buzz");
             messageStore.VerifyChannelMessages(playerUser.Mention);

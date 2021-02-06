@@ -25,7 +25,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
             GameState game = new GameState()
             {
-                Format = Format.TossupBonusesShootout,
+                Format = Format.CreateTossupBonusesShootout(false),
                 ReaderId = 1,
                 TeamManager = teamManager
             };
@@ -88,7 +88,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
             GameState game = new GameState()
             {
-                Format = Format.TossupShootout,
+                Format = Format.CreateTossupShootout(false),
                 ReaderId = 1,
                 TeamManager = teamManager
             };
@@ -140,7 +140,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
             GameState game = new GameState()
             {
-                Format = Format.TossupBonusesShootout,
+                Format = Format.CreateTossupBonusesShootout(false),
                 ReaderId = 1,
                 TeamManager = teamManager
             };
@@ -191,7 +191,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
             GameState game = new GameState()
             {
-                Format = Format.TossupBonusesShootout,
+                Format = Format.CreateTossupBonusesShootout(false),
                 ReaderId = 1,
                 TeamManager = teamManager
             };
@@ -242,7 +242,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
             GameState game = new GameState()
             {
-                Format = Format.TossupShootout,
+                Format = Format.CreateTossupShootout(false),
                 ReaderId = 1,
                 TeamManager = teamManager
             };
@@ -281,7 +281,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
             GameState game = new GameState()
             {
-                Format = Format.TossupShootout,
+                Format = Format.CreateTossupShootout(false),
                 ReaderId = 1,
                 TeamManager = teamManager
             };
@@ -315,7 +315,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
             GameState game = new GameState()
             {
-                Format = Format.TossupBonusesShootout,
+                Format = Format.CreateTossupBonusesShootout(false),
                 ReaderId = 1,
                 TeamManager = teamManager
             };
@@ -338,7 +338,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ByCommandTeamManager teamManager = new ByCommandTeamManager();
             GameState game = new GameState()
             {
-                Format = Format.TossupBonusesShootout,
+                Format = Format.CreateTossupBonusesShootout(false),
                 ReaderId = 1,
                 TeamManager = teamManager
             };

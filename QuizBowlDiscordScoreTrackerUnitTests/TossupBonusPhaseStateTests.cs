@@ -19,8 +19,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public void TestStagesForCorrectBuzz()
         {
-            TossupBonusPhaseState phaseState = new TossupBonusPhaseState();
-            Assert.IsFalse(phaseState.HasBonus, "We should have a bonus on a correct buzz");
+            TossupBonusPhaseState phaseState = new TossupBonusPhaseState(false);
+            Assert.IsFalse(phaseState.HasBonus, "We shouldn't have a bonus until a correct buzz");
             Assert.AreEqual(PhaseStage.Tossup, phaseState.CurrentStage, "We should be in the tossup phase");
 
             phaseState.AddBuzz(DefaultBuzz);
@@ -36,8 +36,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public void TestStagesForIncorrectBuzz()
         {
-            TossupBonusPhaseState phaseState = new TossupBonusPhaseState();
-            Assert.IsFalse(phaseState.HasBonus, "We should have a bonus on a correct buzz");
+            TossupBonusPhaseState phaseState = new TossupBonusPhaseState(false);
+            Assert.IsFalse(phaseState.HasBonus, "We shouldn't have a bonus until a correct buzz");
             Assert.AreEqual(PhaseStage.Tossup, phaseState.CurrentStage, "We should be in the tossup phase");
 
             phaseState.AddBuzz(DefaultBuzz);
@@ -46,6 +46,36 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             // Should be the same
             Assert.IsFalse(phaseState.HasBonus, "We shouldn't have a bonus on an incorrect buzz");
             Assert.AreEqual(PhaseStage.Tossup, phaseState.CurrentStage, "We should still be in the tossup phase");
+        }
+
+        [TestMethod]
+        public void OnlyOneBuzzHandledWhenQueueDisabled()
+        {
+            Buzz lateBuzz = new Buzz()
+            {
+                PlayerDisplayName = "Late",
+                TeamId = "743",
+                Timestamp = DateTime.Now,
+                UserId = DefaultBuzz.UserId + 1
+            };
+
+            TossupBonusPhaseState phaseState = new TossupBonusPhaseState(disableBuzzQueue: true);
+            Assert.IsFalse(phaseState.HasBonus, "We shouldn't have a bonus until a correct buzz");
+            Assert.AreEqual(PhaseStage.Tossup, phaseState.CurrentStage, "We should be in the tossup phase");
+
+            phaseState.AddBuzz(DefaultBuzz);
+            phaseState.AddBuzz(lateBuzz);
+
+            Assert.IsTrue(phaseState.TryScoreBuzz(0), "Scoring the buzz should succeed");
+            Assert.IsFalse(
+                phaseState.TryGetNextPlayer(out _), "There shouldn't be another player after the incorrect buzz");
+            Assert.IsFalse(phaseState.HasBonus, "We should still be on the tossup phase");
+
+            phaseState.AddBuzz(lateBuzz);
+            Assert.IsTrue(
+                phaseState.TryGetNextPlayer(out _), "There should be a player after buzzing in again");
+            Assert.IsTrue(phaseState.TryScoreBuzz(10), "Scoring the buzz the second time should succeed");
+            Assert.AreEqual(PhaseStage.Bonus, phaseState.CurrentStage, "We should be in the bonus phase");
         }
 
         [TestMethod]
@@ -137,7 +167,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public void UndoScoredTossup()
         {
-            TossupBonusPhaseState phaseState = new TossupBonusPhaseState();
+            TossupBonusPhaseState phaseState = new TossupBonusPhaseState(false);
             phaseState.AddBuzz(DefaultBuzz);
             Assert.IsTrue(phaseState.TryScoreBuzz(-5), "Scoring the first buzz should succeed");
 
@@ -221,7 +251,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
         private static TossupBonusPhaseState CreatePhaseInBonusStage()
         {
-            TossupBonusPhaseState phaseState = new TossupBonusPhaseState();
+            TossupBonusPhaseState phaseState = new TossupBonusPhaseState(false);
             phaseState.AddBuzz(DefaultBuzz);
             phaseState.TryScoreBuzz(10);
             return phaseState;

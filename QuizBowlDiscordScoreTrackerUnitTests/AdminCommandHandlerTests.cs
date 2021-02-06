@@ -62,7 +62,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
-        public async Task DisableBonusesAlways()
+        public async Task DisableBonusesByDefault()
         {
             this.InitializeHandler();
 
@@ -75,7 +75,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             await this.Handler.GetDefaultFormatAsync();
             Assert.AreEqual(
-                1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the team role");
+                1,
+                this.MessageStore.ChannelEmbeds.Count,
+                "Unexpected number of messages after getting the default format");
             string getEmbed = this.MessageStore.ChannelEmbeds[0];
             Assert.IsTrue(
                 getEmbed.Contains("Require scoring bonuses?: Yes", StringComparison.InvariantCulture),
@@ -84,7 +86,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             await this.Handler.DisableBonusesByDefaultAsync();
             Assert.AreEqual(
-                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after disabling bonuses");
             string setMessage = this.MessageStore.ChannelMessages[0];
             Assert.AreEqual(
                 "Scoring bonuses will no longer be enabled for every game in this server.",
@@ -95,7 +97,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             await this.Handler.GetDefaultFormatAsync();
             Assert.AreEqual(
-                1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the team role");
+                1,
+                this.MessageStore.ChannelEmbeds.Count,
+                "Unexpected number of messages after getting the default format after disabling bonuses");
             getEmbed = this.MessageStore.ChannelEmbeds[0];
             Assert.IsTrue(
                 getEmbed.Contains("Require scoring bonuses?: No", StringComparison.InvariantCulture),
@@ -108,7 +112,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             this.InitializeHandler();
             await this.Handler.EnableBonusesByDefaultAsync();
             Assert.AreEqual(
-                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after setting the team role");
+                1,
+                this.MessageStore.ChannelMessages.Count,
+                "Unexpected number of messages after getting the default format");
             string setMessage = this.MessageStore.ChannelMessages[0];
             Assert.AreEqual(
                 "Scoring bonuses is now enabled for every game in this server.",
@@ -119,11 +125,80 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             await this.Handler.GetDefaultFormatAsync();
             Assert.AreEqual(
-                1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the team role");
+                1,
+                this.MessageStore.ChannelEmbeds.Count,
+                "Unexpected number of messages after getting the default format after enabling bonuses");
             string getEmbed = this.MessageStore.ChannelEmbeds[0];
             Assert.IsTrue(
                 getEmbed.Contains("Require scoring bonuses?: Yes", StringComparison.InvariantCulture),
                 $"Enabled setting not in message \"{getEmbed}\"");
+        }
+
+        [TestMethod]
+        public async Task EnableBuzzQueue()
+        {
+            this.InitializeHandler();
+
+            // Enable, then disable the buzz queue
+            using (BotConfigurationContext context = this.botConfigurationfactory.Create())
+            using (DatabaseAction action = new DatabaseAction(context))
+            {
+                await action.SetDisableBuzzQueueAsync(DefaultGuildId, true);
+            }
+
+            await this.Handler.GetDefaultFormatAsync();
+            Assert.AreEqual(
+                1,
+                this.MessageStore.ChannelEmbeds.Count,
+                "Unexpected number of messages after getting the default format");
+            string getEmbed = this.MessageStore.ChannelEmbeds[0];
+            Assert.IsTrue(
+                getEmbed.Contains("Queue buzzes?: No", StringComparison.InvariantCulture),
+                $"Disabled setting not in message \"{getEmbed}\"");
+            this.MessageStore.Clear();
+
+            await this.Handler.EnableBuzzQueueAsync();
+            Assert.AreEqual(
+                1,
+                this.MessageStore.ChannelMessages.Count,
+                "Unexpected number of messages after disabling the buzz queue");
+            string setMessage = this.MessageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                setMessage.StartsWith("The buzz queue is enabled for future games.", StringComparison.InvariantCulture),
+                $@"Couldn't find correct prefix in message ""{setMessage}""");
+
+            this.MessageStore.Clear();
+
+            await this.Handler.GetDefaultFormatAsync();
+            Assert.AreEqual(
+                1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of messages after enabling the buzz queue");
+            getEmbed = this.MessageStore.ChannelEmbeds[0];
+            Assert.IsTrue(
+                getEmbed.Contains("Queue buzzes?: Yes", StringComparison.InvariantCulture),
+                $"Enabled setting not in message \"{getEmbed}\"");
+        }
+
+        [TestMethod]
+        public async Task DisableBuzzQueue()
+        {
+            this.InitializeHandler();
+            await this.Handler.DisableBuzzQueueAsync();
+            Assert.AreEqual(
+                1, this.MessageStore.ChannelMessages.Count, "Unexpected number of messages after disabling the buzz queue");
+            string setMessage = this.MessageStore.ChannelMessages[0];
+            Assert.IsTrue(
+                setMessage.StartsWith("The buzz queue is disabled for future games.", StringComparison.InvariantCulture),
+                $@"Couldn't find correct prefix in message ""{setMessage}""");
+
+            this.MessageStore.Clear();
+
+            await this.Handler.GetDefaultFormatAsync();
+            Assert.AreEqual(
+                1, this.MessageStore.ChannelEmbeds.Count, "Unexpected number of messages after getting the default format");
+            string getEmbed = this.MessageStore.ChannelEmbeds[0];
+            Assert.IsTrue(
+                getEmbed.Contains("Queue buzzes?: No", StringComparison.InvariantCulture),
+                $"Setting not in message \"{getEmbed}\"");
         }
 
         [TestMethod]
