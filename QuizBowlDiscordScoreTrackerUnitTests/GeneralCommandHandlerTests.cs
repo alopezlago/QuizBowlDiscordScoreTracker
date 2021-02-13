@@ -1695,12 +1695,24 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             // TODO: Need to update the Mock User to specify RoleIds
             // And this needs to come from GetUserId
             ITeamManager teamManager = null;
-            teamManager = teamManagerType switch
+            switch (teamManagerType)
             {
-                TeamManagerType.ByCommand => new ByCommandTeamManager(),
-                TeamManagerType.ByRole => new ByRoleTeamManager(commandContext.Guild, "Team "),
-                _ => SoloOnlyTeamManager.Instance,
-            };
+                case TeamManagerType.ByCommand:
+                    teamManager = new ByCommandTeamManager();
+                    break;
+                case TeamManagerType.ByRole:
+                    Mock<IGuildChannel> mockGuildChannel = new Mock<IGuildChannel>();
+                    mockGuildChannel
+                        .SetupGet(channel => channel.Guild)
+                        .Returns(commandContext.Guild);
+
+                    teamManager = new ByRoleTeamManager(mockGuildChannel.Object, "Team ");
+                    break;
+                default:
+                    teamManager = SoloOnlyTeamManager.Instance;
+                    break;
+            }
+
             game.TeamManager = teamManager;
 
             this.Game = game;

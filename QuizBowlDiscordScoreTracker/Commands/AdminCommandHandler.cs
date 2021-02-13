@@ -356,6 +356,11 @@ namespace QuizBowlDiscordScoreTracker.Commands
             Justification = "Discord.Net can't parse the argument directly as a URI")]
         private async Task SetRostersFromRolesForSheets(string sheetsUrl, GoogleSheetsType type)
         {
+            if (!(this.Context.Channel is IGuildChannel guildChannel))
+            {
+                return;
+            }
+
             if (!Uri.TryCreate(sheetsUrl, UriKind.Absolute, out Uri sheetsUri))
             {
                 await this.Context.Channel.SendMessageAsync(
@@ -379,7 +384,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            ITeamManager teamManager = new ByRoleTeamManager(this.Context.Guild, teamRolePrefix);
+            ITeamManager teamManager = new ByRoleTeamManager(guildChannel, teamRolePrefix);
             IGoogleSheetsGenerator generator = this.GoogleSheetsGeneratorFactory.Create(type);
             IResult<string> result = await generator.TryUpdateRosters(teamManager, sheetsUri);
 
