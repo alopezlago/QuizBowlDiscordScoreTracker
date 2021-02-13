@@ -14,8 +14,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
     [TestClass]
     public class ByRoleTeamManagerTests
     {
-        // GetTeamIdToNames
         private const string DefaultTeamRolePrefix = "Team";
+        private const ulong EveryoneRoleId = 3303;
         private const ulong NonexistentPlayerId = 12;
         private const ulong NonexistentUserId = 1212;
         private const ulong NonTeamRoleId = 34;
@@ -78,19 +78,198 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
-        public async Task GetTeamIdToNames()
+        public async Task GetTeamIdToNamesNoOverwritePermissions()
         {
             ByRoleTeamManager teamManager = CreateTeamManager();
             IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
-            Assert.AreEqual(RoleIds.Length, teamIdToName.Count, "Unexpected number of teams");
+            VerifyAllTeamsInTeamIdToName(teamIdToName);
+        }
 
-            for (int i = 0; i < RoleIds.Length; i++)
+        [TestMethod]
+        public async Task GetTeamIdToNamesNoRolesEveryoneDeniedView()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
+                (OverwritePermissions?)null :
+                new OverwritePermissions(viewChannel: PermValue.Deny));
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            Assert.AreEqual(0, teamIdToName.Count, "Unexpected number of teams");
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesNoRolesEveryoneDeniedSend()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
+                (OverwritePermissions?)null :
+                new OverwritePermissions(sendMessages: PermValue.Deny));
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            Assert.AreEqual(0, teamIdToName.Count, "Unexpected number of teams");
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesNoRolesEveryoneViewOnly()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
+                (OverwritePermissions?)null :
+                new OverwritePermissions(viewChannel: PermValue.Allow, sendMessages: PermValue.Deny));
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            Assert.AreEqual(0, teamIdToName.Count, "Unexpected number of teams");
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesNoRolesEveryoneSendOnly()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
+                (OverwritePermissions?)null :
+                new OverwritePermissions(viewChannel: PermValue.Deny, sendMessages: PermValue.Allow));
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            Assert.AreEqual(0, teamIdToName.Count, "Unexpected number of teams");
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesNoRolesEveryoneAllowed()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
+                (OverwritePermissions?)null :
+                new OverwritePermissions(viewChannel: PermValue.Allow, sendMessages: PermValue.Allow));
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            VerifyAllTeamsInTeamIdToName(teamIdToName);
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesRolesInheritEveryoneDeniedSend()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
+            OverwritePermissions.InheritAll :
+            new OverwritePermissions(sendMessages: PermValue.Deny));
+        IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            Assert.AreEqual(0, teamIdToName.Count, "Unexpected number of teams");
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesRolesInheritEveryoneViewOnly()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
+                OverwritePermissions.InheritAll :
+                new OverwritePermissions(viewChannel: PermValue.Allow, sendMessages: PermValue.Deny));
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            Assert.AreEqual(0, teamIdToName.Count, "Unexpected number of teams");
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesRolesInheritEveryoneSendOnly()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
+                OverwritePermissions.InheritAll :
+                new OverwritePermissions(viewChannel: PermValue.Deny, sendMessages: PermValue.Allow));
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            Assert.AreEqual(0, teamIdToName.Count, "Unexpected number of teams");
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesRolesInheritEveryoneAllowed()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
+                OverwritePermissions.InheritAll :
+                new OverwritePermissions(viewChannel: PermValue.Allow, sendMessages: PermValue.Allow));
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            VerifyAllTeamsInTeamIdToName(teamIdToName);
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesFirstAllowsSecondInheritsEveryoneAllowed()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) =>
             {
-                Assert.IsTrue(
-                    teamIdToName.TryGetValue(RoleIds[i].ToString(CultureInfo.InvariantCulture), out string teamName),
-                    $"Couldn't get the team name for role ID {RoleIds[i]}");
-                Assert.AreEqual(TeamNames[i], teamName, $"Unexpected team name for team #{i + 1}");
-            }
+                if (roleId == RoleIds[0] || roleId == EveryoneRoleId)
+                {
+                    return new OverwritePermissions(viewChannel: PermValue.Allow, sendMessages: PermValue.Allow);
+                }
+
+                return OverwritePermissions.InheritAll;
+            });
+
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            VerifyAllTeamsInTeamIdToName(teamIdToName);
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesFirstAllowsSecondInheritsEveryoneDenied()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) =>
+            {
+                if (roleId == RoleIds[0])
+                {
+                    return new OverwritePermissions(viewChannel: PermValue.Allow, sendMessages: PermValue.Allow);
+                }
+                else if (roleId == EveryoneRoleId)
+                {
+                    return new OverwritePermissions(viewChannel: PermValue.Deny, sendMessages: PermValue.Deny);
+                }
+
+                return OverwritePermissions.InheritAll;
+            });
+
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            VerifyOnlyOneTeamInTeamIdToName(teamIdToName);
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesFirstAllowsSecondDeniedEveryoneAllowed()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) =>
+            {
+                if (roleId == RoleIds[0] || roleId == EveryoneRoleId)
+                {
+                    return new OverwritePermissions(viewChannel: PermValue.Allow, sendMessages: PermValue.Allow);
+                }
+
+                return new OverwritePermissions(viewChannel: PermValue.Deny, sendMessages: PermValue.Deny);
+            });
+
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            VerifyOnlyOneTeamInTeamIdToName(teamIdToName);
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesFirstPartialSecondInheritsEveryoneDenied()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) =>
+            {
+                if (roleId == RoleIds[0])
+                {
+                    return new OverwritePermissions(viewChannel: PermValue.Allow, sendMessages: PermValue.Inherit);
+                }
+                else if (roleId == EveryoneRoleId)
+                {
+                    return new OverwritePermissions(viewChannel: PermValue.Deny, sendMessages: PermValue.Deny);
+                }
+
+                return OverwritePermissions.InheritAll;
+            });
+
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            Assert.AreEqual(0, teamIdToName.Count, "Unexpected number of teams");
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesFirstInheritsSecondAllowsEveryoneDenied()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) =>
+            {
+                if (roleId == RoleIds[1])
+                {
+                    return new OverwritePermissions(viewChannel: PermValue.Allow, sendMessages: PermValue.Allow);
+                }
+                else if (roleId == EveryoneRoleId)
+                {
+                    return new OverwritePermissions(viewChannel: PermValue.Deny, sendMessages: PermValue.Deny);
+                }
+
+                return OverwritePermissions.InheritAll;
+            });
+
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            VerifyOnlyOneTeamInTeamIdToName(teamIdToName, 1);
         }
 
         [TestMethod]
@@ -141,7 +320,15 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 .Setup(guild => guild.GetUserAsync(It.IsAny<ulong>(), It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
                 .Returns<ulong, CacheMode, RequestOptions>((id, mode, options) => Task.FromResult(users.FirstOrDefault(user => user.Id == id)));
 
-            ByRoleTeamManager teamManager = new ByRoleTeamManager(mockGuild.Object, DefaultTeamRolePrefix);
+            Mock<IGuildChannel> mockGuildChannel = new Mock<IGuildChannel>();
+            mockGuildChannel
+                .Setup(channel => channel.GetPermissionOverwrite(It.IsAny<IRole>()))
+                .Returns<IRole>(null);
+            mockGuildChannel
+                .SetupGet(channel => channel.Guild)
+                .Returns(mockGuild.Object);
+
+            ByRoleTeamManager teamManager = new ByRoleTeamManager(mockGuildChannel.Object, DefaultTeamRolePrefix);
 
             IEnumerable<PlayerTeamPair> players = await teamManager.GetKnownPlayers();
             Assert.AreEqual(PlayerIds.Length / 2, players.Count(), "Unexpected number of players the first time");
@@ -155,7 +342,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(players.Any(player => player.PlayerId == PlayerIds[1]), "Second player isn't in the list of teams");
         }
 
-        private static ByRoleTeamManager CreateTeamManager()
+        private static ByRoleTeamManager CreateTeamManager(
+            Func<ulong, OverwritePermissions?> channelOverwritePermissions = null)
         {
             Mock<IGuild> mockGuild = new Mock<IGuild>();
             List<IRole> roles = new List<IRole>();
@@ -200,7 +388,46 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 .Setup(guild => guild.GetUserAsync(It.IsAny<ulong>(), It.IsAny<CacheMode>(), It.IsAny<RequestOptions>()))
                 .Returns<ulong, CacheMode, RequestOptions>((id, mode, options) => Task.FromResult(users.FirstOrDefault(user => user.Id == id)));
 
-            return new ByRoleTeamManager(mockGuild.Object, DefaultTeamRolePrefix);
+            Mock<IRole> mockEveryoneRole = new Mock<IRole>();
+            mockEveryoneRole.SetupGet(role => role.Id).Returns(EveryoneRoleId);
+            mockGuild
+                .SetupGet(guild => guild.EveryoneRole)
+                .Returns(mockEveryoneRole.Object);
+
+            Mock<IGuildChannel> mockGuildChannel = new Mock<IGuildChannel>();
+            mockGuildChannel
+                .Setup(channel => channel.GetPermissionOverwrite(It.IsAny<IRole>()))
+                .Returns<IRole>(role => channelOverwritePermissions?.Invoke(role.Id));
+            mockGuildChannel
+                .SetupGet(channel => channel.Guild)
+                .Returns(mockGuild.Object);
+
+            return new ByRoleTeamManager(mockGuildChannel.Object, DefaultTeamRolePrefix);
+        }
+
+        private static void VerifyAllTeamsInTeamIdToName(IReadOnlyDictionary<string, string> teamIdToName)
+        {
+            Assert.AreEqual(RoleIds.Length, teamIdToName.Count, "Unexpected number of teams");
+
+            for (int i = 0; i < RoleIds.Length; i++)
+            {
+                Assert.IsTrue(
+                    teamIdToName.TryGetValue(RoleIds[i].ToString(CultureInfo.InvariantCulture), out string teamName),
+                    $"Couldn't get the team name for role ID {RoleIds[i]}");
+                Assert.AreEqual(TeamNames[i], teamName, $"Unexpected team name for team #{i + 1}");
+            }
+        }
+
+        private static void VerifyOnlyOneTeamInTeamIdToName(
+            IReadOnlyDictionary<string, string> teamIdToName, int teamIndex = 0)
+        {
+            Assert.AreEqual(1, teamIdToName.Count, "Unexpected number of teams");
+
+            int teamNumber = teamIndex + 1;
+            Assert.IsTrue(
+                teamIdToName.TryGetValue(RoleIds[teamIndex].ToString(CultureInfo.InvariantCulture), out string teamName),
+                $"Couldn't get the team name for role #{teamNumber}");
+            Assert.AreEqual(TeamNames[teamIndex], teamName, $"Unexpected team name for team #{teamNumber}");
         }
     }
 }

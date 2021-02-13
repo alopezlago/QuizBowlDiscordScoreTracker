@@ -11,9 +11,12 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
     {
         private readonly object teamIdToNameLock = new object();
 
-        public ByRoleTeamManager(IGuild guild, string teamRolePrefix)
+        public ByRoleTeamManager(IGuildChannel channel, string teamRolePrefix)
         {
-            this.Guild = guild;
+            Verify.IsNotNull(channel, nameof(channel));
+
+            this.Guild = channel.Guild;
+            this.Channel = channel;
             this.TeamRolePrefix = teamRolePrefix;
             this.InitiailzeTeamIdToName();
         }
@@ -23,6 +26,8 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
             "to play with teams.";
 
         private IGuild Guild { get; }
+
+        private IGuildChannel Channel { get; }
 
         private string TeamRolePrefix { get; }
 
@@ -73,8 +78,34 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
         {
             lock (this.teamIdToNameLock)
             {
+                OverwritePermissions? everyonePermissions = this.Channel.GetPermissionOverwrite(this.Guild.EveryoneRole);
+                PermValue everyoneViewPermissions = everyonePermissions?.ViewChannel ?? PermValue.Inherit;
+                PermValue everyoneSendPermissions = everyonePermissions?.SendMessages ?? PermValue.Inherit;
+
                 this.TeamIdToName = this.Guild.Roles
                     .Where(role => role.Name.StartsWith(this.TeamRolePrefix, StringComparison.InvariantCultureIgnoreCase))
+                    .Where(role =>
+                    {
+                        // Players need both View and Send permissions to play, so make sure either the role or the
+                        // everyone role has it
+                        OverwritePermissions? permissions = this.Channel.GetPermissionOverwrite(role);
+                        if (!permissions.HasValue)
+                        {
+                            // No specific permissions, so inherit it from everyone
+                            return everyonePermissions?.ViewChannel != PermValue.Deny &&
+                                everyonePermissions?.SendMessages != PermValue.Deny;
+                        }
+
+                        OverwritePermissions permissionsValue = permissions.Value;
+                        PermValue viewPermissions = permissionsValue.ViewChannel != PermValue.Inherit ?
+                            permissionsValue.ViewChannel :
+                            everyoneViewPermissions;
+                        PermValue sendPermissions = permissionsValue.SendMessages != PermValue.Inherit ?
+                            permissionsValue.SendMessages :
+                            everyoneSendPermissions;
+
+                        return viewPermissions != PermValue.Deny && sendPermissions != PermValue.Deny;
+                    })
                     .ToDictionary(
                         role => role.Id.ToString(CultureInfo.InvariantCulture),
                         role => role.Name.Substring(this.TeamRolePrefix.Length).Trim());

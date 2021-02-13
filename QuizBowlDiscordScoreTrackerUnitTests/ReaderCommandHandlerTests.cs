@@ -369,12 +369,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ulong buzzer = GetExistingNonReaderUserId();
             string nickname = $"User_{buzzer}";
             this.InitializeHandler();
+            this.InitializeByRoleTeamManager();
 
             this.Game.ReaderId = DefaultReaderId;
-
-            Mock<IGuild> mockGuild = new Mock<IGuild>();
-            mockGuild.Setup(guild => guild.Roles).Returns(Array.Empty<IRole>());
-            this.Game.TeamManager = new ByRoleTeamManager(mockGuild.Object, "Team");
 
             Mock<IGuildUser> mockUser = new Mock<IGuildUser>();
             mockUser.Setup(user => user.Id).Returns(buzzer);
@@ -410,9 +407,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             const string teamName = "My Team";
             this.InitializeHandler();
-            Mock<IGuild> mockGuild = new Mock<IGuild>();
-            mockGuild.Setup(guild => guild.Roles).Returns(Array.Empty<IRole>());
-            this.Game.TeamManager = new ByRoleTeamManager(mockGuild.Object, "Team");
+            this.InitializeByRoleTeamManager();
 
             await this.Handler.AddTeamAsync(teamName);
 
@@ -545,9 +540,19 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task ReloadTeamRolesSucceeds()
         {
             this.InitializeHandler();
+
             Mock<IGuild> mockGuild = new Mock<IGuild>();
             mockGuild.Setup(guild => guild.Roles).Returns(Array.Empty<IRole>());
-            this.Game.TeamManager = new ByRoleTeamManager(mockGuild.Object, "Team");
+
+            Mock<IGuildChannel> mockGuildChannel = new Mock<IGuildChannel>();
+            mockGuildChannel
+                .Setup(channel => channel.GetPermissionOverwrite(It.IsAny<IRole>()))
+                .Returns<IRole>(null);
+            mockGuildChannel
+                .SetupGet(channel => channel.Guild)
+                .Returns(mockGuild.Object);
+
+            this.Game.TeamManager = new ByRoleTeamManager(mockGuildChannel.Object, "Team");
 
             IReadOnlyDictionary<string, string> teamIdToNames = await this.Game.TeamManager.GetTeamIdToNames();
             Assert.AreEqual(0, teamIdToNames.Count, "Unexpected number of initial teams");
@@ -1055,6 +1060,22 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             this.MessageStore.VerifyChannelMessages(errorMessage);
             mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Never);
+        }
+
+        private void InitializeByRoleTeamManager()
+        {
+            Mock<IGuild> mockGuild = new Mock<IGuild>();
+            mockGuild.Setup(guild => guild.Roles).Returns(Array.Empty<IRole>());
+
+            Mock<IGuildChannel> mockGuildChannel = new Mock<IGuildChannel>();
+            mockGuildChannel
+                .Setup(channel => channel.GetPermissionOverwrite(It.IsAny<IRole>()))
+                .Returns<IRole>(null);
+            mockGuildChannel
+                .SetupGet(channel => channel.Guild)
+                .Returns(mockGuild.Object);
+
+            this.Game.TeamManager = new ByRoleTeamManager(mockGuildChannel.Object, "Team");
         }
 
         private void InitializeHandler()

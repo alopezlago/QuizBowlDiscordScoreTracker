@@ -244,6 +244,10 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 Logger.Information(
                      "Game started in guild '{0}' in channel '{1}'", guildChannel.Guild.Name, guildChannel.Name);
             }
+            else
+            {
+                return;
+            }
 
             // Prevent a cold start on the first buzz, and eagerly get the team prefix and channel pair
             string teamRolePrefix;
@@ -264,7 +268,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             // Set teams here, if they are using roles.
             if (teamRolePrefix != null)
             {
-                state.TeamManager = new ByRoleTeamManager(this.Context.Guild, teamRolePrefix);
+                state.TeamManager = new ByRoleTeamManager(guildChannel, teamRolePrefix);
             }
             else
             {
