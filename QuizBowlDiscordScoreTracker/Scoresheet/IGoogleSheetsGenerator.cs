@@ -32,6 +32,6 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
         /// <param name="teamManager">Team Manager used in the server or game.</param>
         /// <param name="sheetsUri">URI to the Google Sheet with the worksheet for the tournament's rosters</param>
         /// <returns>A result with an error code if the update failed, or a result with an empty string on success</returns>
-        Task<IResult<string>> TryUpdateRosters(ITeamManager teamManager, Uri sheetsUri);
+        Task<IResult<string>> TryUpdateRosters(IByRoleTeamManager teamManager, Uri sheetsUri);
     }
 }
