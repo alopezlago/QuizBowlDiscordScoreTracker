@@ -159,19 +159,12 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             return new SuccessResult<string>(message);
         }
 
-        public async Task<IResult<string>> TryUpdateRosters(ITeamManager teamManager, Uri sheetsUri)
+        public async Task<IResult<string>> TryUpdateRosters(IByRoleTeamManager teamManager, Uri sheetsUri)
         {
             Verify.IsNotNull(teamManager, nameof(teamManager));
             Verify.IsNotNull(sheetsUri, nameof(sheetsUri));
 
-            IReadOnlyDictionary<string, string> teamIdToNames = await teamManager.GetTeamIdToNames();
-
-            // Convert it to an array so we don't have to keep re-evaluating the GroupBy
-            IEnumerable<PlayerTeamPair> playerTeamPairs = await teamManager.GetKnownPlayers();
-            IGrouping<string, PlayerTeamPair>[] groupings = playerTeamPairs
-                .GroupBy(pair => pair.TeamId)
-                .Where(grouping => grouping.Any())
-                .ToArray();
+            IEnumerable<IGrouping<string, PlayerTeamPair>> groupings = await teamManager.GetPlayerTeamPairsForServer();
 
             if (groupings.Any(grouping => grouping.Count() > this.PlayersPerTeamLimit))
             {
@@ -179,12 +172,19 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                     $"Rosters can only support up to {this.PlayersPerTeamLimit} players per team.");
             }
 
-            if (groupings.Length > this.TeamsLimit)
+            int groupingsCount = groupings.Count();
+
+            if (groupingsCount == 0)
+            {
+                return CreateFailureResult($"No teams were found, so the rosters remain unchanged.");
+            }
+            else if (groupingsCount > this.TeamsLimit)
             {
                 return CreateFailureResult(
                     $"Rosters can only support up to {this.TeamsLimit} teams.");
             }
 
+            IReadOnlyDictionary<string, string> teamIdToNames = await teamManager.GetTeamIdToNamesForServer();
             IResult<List<ValueRange>> rangesResult = this.GetUpdateRangesForRoster(teamIdToNames, groupings);
             if (!rangesResult.Success)
             {

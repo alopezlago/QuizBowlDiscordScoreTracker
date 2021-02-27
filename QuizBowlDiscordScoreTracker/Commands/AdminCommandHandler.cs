@@ -352,8 +352,6 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.Context.Channel.SendMessageAsync("Text and voice channel unpaired successfully");
         }
 
-        [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
-            Justification = "Discord.Net can't parse the argument directly as a URI")]
         private async Task SetRostersFromRolesForSheets(string sheetsUrl, GoogleSheetsType type)
         {
             if (!(this.Context.Channel is IGuildChannel guildChannel))
@@ -384,7 +382,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            ITeamManager teamManager = new ByRoleTeamManager(guildChannel, teamRolePrefix);
+            IByRoleTeamManager teamManager = new ByRoleTeamManager(guildChannel, teamRolePrefix);
             IGoogleSheetsGenerator generator = this.GoogleSheetsGeneratorFactory.Create(type);
             IResult<string> result = await generator.TryUpdateRosters(teamManager, sheetsUri);
 

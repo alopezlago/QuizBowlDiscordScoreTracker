@@ -78,6 +78,26 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task GetKnownPlayersNoRolesEveryoneDeniedView()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
+                (OverwritePermissions?)null :
+                new OverwritePermissions(viewChannel: PermValue.Deny));
+            IEnumerable<PlayerTeamPair> pairs = await teamManager.GetKnownPlayers();
+            Assert.AreEqual(0, pairs.Count(), "Unexpected number of players");
+        }
+
+        [TestMethod]
+        public async Task GetPlayerTeamPairsForServerNoRolesEveryoneDeniedView()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
+                (OverwritePermissions?)null :
+                new OverwritePermissions(viewChannel: PermValue.Deny));
+            IEnumerable<IGrouping<string, PlayerTeamPair>> pairs = await teamManager.GetPlayerTeamPairsForServer();
+            Assert.AreEqual(PlayerIds.Length, pairs.Count(), "Unexpected number of players");
+        }
+
+        [TestMethod]
         public async Task GetTeamIdToNamesNoOverwritePermissions()
         {
             ByRoleTeamManager teamManager = CreateTeamManager();
@@ -270,6 +290,16 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
             VerifyOnlyOneTeamInTeamIdToName(teamIdToName, 1);
+        }
+
+        [TestMethod]
+        public async Task GetTeamIdToNamesForServerNoRolesEveryoneDeniedView()
+        {
+            ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
+                (OverwritePermissions?)null :
+                new OverwritePermissions(viewChannel: PermValue.Deny));
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNamesForServer();
+            Assert.AreEqual(2, teamIdToName.Count, "Unexpected number of teams");
         }
 
         [TestMethod]

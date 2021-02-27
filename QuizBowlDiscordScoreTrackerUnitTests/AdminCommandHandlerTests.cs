@@ -493,7 +493,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
-                .Setup(generator => generator.TryUpdateRosters(It.IsAny<ITeamManager>(), It.IsAny<Uri>()))
+                .Setup(generator => generator.TryUpdateRosters(It.IsAny<IByRoleTeamManager>(), It.IsAny<Uri>()))
                 .Returns(Task.FromResult<IResult<string>>(new FailureResult<string>(errorMessage)))
                 .Verifiable();
 
@@ -521,7 +521,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
-                .Setup(generator => generator.TryUpdateRosters(It.IsAny<ITeamManager>(), It.IsAny<Uri>()))
+                .Setup(generator => generator.TryUpdateRosters(It.IsAny<IByRoleTeamManager>(), It.IsAny<Uri>()))
                 .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)))
                 .Verifiable();
 
@@ -549,7 +549,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
-                .Setup(generator => generator.TryUpdateRosters(It.IsAny<ITeamManager>(), It.IsAny<Uri>()))
+                .Setup(generator => generator.TryUpdateRosters(It.IsAny<IByRoleTeamManager>(), It.IsAny<Uri>()))
                 .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)))
                 .Verifiable();
 
@@ -572,7 +572,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             Mock<IGoogleSheetsGenerator> mockGenerator = new Mock<IGoogleSheetsGenerator>();
             mockGenerator
-                .Setup(generator => generator.TryUpdateRosters(It.IsAny<ITeamManager>(), It.IsAny<Uri>()))
+                .Setup(generator => generator.TryUpdateRosters(It.IsAny<IByRoleTeamManager>(), It.IsAny<Uri>()))
                 .Returns(Task.FromResult<IResult<string>>(new SuccessResult<string>(string.Empty)));
 
             Mock<IGoogleSheetsGeneratorFactory> mockFactory = new Mock<IGoogleSheetsGeneratorFactory>();

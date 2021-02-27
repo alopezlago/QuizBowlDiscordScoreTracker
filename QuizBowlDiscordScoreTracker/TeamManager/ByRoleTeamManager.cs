@@ -7,7 +7,7 @@ using Discord;
 
 namespace QuizBowlDiscordScoreTracker.TeamManager
 {
-    public class ByRoleTeamManager : ITeamManager, IByRoleTeamManager
+    public class ByRoleTeamManager : IByRoleTeamManager
     {
         private readonly object teamIdToNameLock = new object();
 
@@ -31,19 +31,25 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
 
         private string TeamRolePrefix { get; }
 
-        private IDictionary<string, string> TeamIdToName { get; set; }
+        private IReadOnlyDictionary<string, string> ChannelTeamIdToName { get; set; }
 
-        public async Task<IEnumerable<PlayerTeamPair>> GetKnownPlayers()
+        private IReadOnlyDictionary<string, string> ServerTeamIdToName { get; set; }
+
+        public Task<IEnumerable<PlayerTeamPair>> GetKnownPlayers()
         {
-            IReadOnlyCollection<IGuildUser> users = await this.Guild.GetUsersAsync();
-            return users
-                .Select(user => new Tuple<ulong, ulong, string>(
-                    user.Id,
-                    user.RoleIds.FirstOrDefault(id => this.TeamIdToName.ContainsKey(id.ToString(CultureInfo.InvariantCulture))),
-                    user.Nickname ?? user.Username))
-                .Where(kvp => kvp.Item2 != default)
-                .Select(tuple => new PlayerTeamPair(
-                    tuple.Item1, tuple.Item3, tuple.Item2.ToString(CultureInfo.InvariantCulture)));
+            return this.GetKnownPlayers(this.ChannelTeamIdToName);
+        }
+
+        public async Task<IEnumerable<IGrouping<string, PlayerTeamPair>>> GetPlayerTeamPairsForServer()
+        {
+            IReadOnlyDictionary<string, string> teamIdToNames = this.ServerTeamIdToName;
+            IEnumerable<PlayerTeamPair> playerTeamPairs = await this.GetKnownPlayers(this.ServerTeamIdToName);
+            IGrouping<string, PlayerTeamPair>[] groupings = playerTeamPairs
+                .GroupBy(pair => pair.TeamId)
+                .Where(grouping => grouping.Any())
+                .ToArray();
+
+            return groupings;
         }
 
         public async Task<string> GetTeamIdOrNull(ulong userId)
@@ -57,21 +63,38 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
             lock (this.teamIdToNameLock)
             {
                 ulong matchingRoleId = user.RoleIds.FirstOrDefault(
-                    id => this.TeamIdToName.ContainsKey(id.ToString(CultureInfo.InvariantCulture)));
+                    id => this.ChannelTeamIdToName.ContainsKey(id.ToString(CultureInfo.InvariantCulture)));
                 return matchingRoleId == default ? null : matchingRoleId.ToString(CultureInfo.InvariantCulture);
             }
         }
 
         public Task<IReadOnlyDictionary<string, string>> GetTeamIdToNames()
         {
-            IReadOnlyDictionary<string, string> teamIdToName = (IReadOnlyDictionary<string, string>)this.TeamIdToName;
-            return Task.FromResult(teamIdToName);
+            return Task.FromResult(this.ChannelTeamIdToName);
+        }
+
+        public Task<IReadOnlyDictionary<string, string>> GetTeamIdToNamesForServer()
+        {
+            return Task.FromResult(this.ServerTeamIdToName);
         }
 
         public string ReloadTeamRoles()
         {
             this.InitiailzeTeamIdToName();
-            return $@"Team roles reloaded. There are now {this.TeamIdToName.Count} team(s)";
+            return $@"Team roles reloaded. There are now {this.ChannelTeamIdToName.Count} team(s)";
+        }
+
+        private async Task<IEnumerable<PlayerTeamPair>> GetKnownPlayers(IReadOnlyDictionary<string, string> teamIdToName)
+        {
+            IReadOnlyCollection<IGuildUser> users = await this.Guild.GetUsersAsync();
+            return users
+                .Select(user => new Tuple<ulong, ulong, string>(
+                    user.Id,
+                    user.RoleIds.FirstOrDefault(id => teamIdToName.ContainsKey(id.ToString(CultureInfo.InvariantCulture))),
+                    user.Nickname ?? user.Username))
+                .Where(kvp => kvp.Item2 != default)
+                .Select(tuple => new PlayerTeamPair(
+                    tuple.Item1, tuple.Item3, tuple.Item2.ToString(CultureInfo.InvariantCulture)));
         }
 
         private void InitiailzeTeamIdToName()
@@ -82,8 +105,15 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
                 PermValue everyoneViewPermissions = everyonePermissions?.ViewChannel ?? PermValue.Inherit;
                 PermValue everyoneSendPermissions = everyonePermissions?.SendMessages ?? PermValue.Inherit;
 
-                this.TeamIdToName = this.Guild.Roles
-                    .Where(role => role.Name.StartsWith(this.TeamRolePrefix, StringComparison.InvariantCultureIgnoreCase))
+                IEnumerable<IRole> teamRoles = this.Guild.Roles
+                    .Where(role => role.Name.StartsWith(this.TeamRolePrefix, StringComparison.InvariantCultureIgnoreCase));
+
+                this.ServerTeamIdToName = teamRoles
+                    .ToDictionary(
+                        role => role.Id.ToString(CultureInfo.InvariantCulture),
+                        role => role.Name.Substring(this.TeamRolePrefix.Length).Trim());
+
+                this.ChannelTeamIdToName = teamRoles
                     .Where(role =>
                     {
                         // Players need both View and Send permissions to play, so make sure either the role or the
