@@ -14,7 +14,7 @@ namespace QuizBowlDiscordScoreTracker
         public const int MaximumPhasesCount = 2000;
         public const int ScoresListLimit = 200;
 
-        private static readonly RandomNumberGenerator Random = RNGCryptoServiceProvider.Create();
+        private static readonly RandomNumberGenerator Random = RandomNumberGenerator.Create();
 
         private readonly LinkedList<IPhaseState> phases;
 

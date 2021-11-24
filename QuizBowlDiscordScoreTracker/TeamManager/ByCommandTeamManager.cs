@@ -108,7 +108,7 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
 
             // If there are players on a team, we can't remove it
             (string teamId, string playerName) = this.PlayerIdToTeamId.Values
-                .FirstOrDefault(pair => pair.teamId.Equals(teamName, StringComparison.InvariantCultureIgnoreCase));
+                .FirstOrDefault(pair => pair.teamId.Equals(teamName, StringComparison.OrdinalIgnoreCase));
             if (playerName != default)
             {
                 message = $"Cannot remove a team because at least one player (**{playerName}**) is still on it.";

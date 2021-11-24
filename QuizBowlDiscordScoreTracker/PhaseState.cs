@@ -10,7 +10,7 @@ namespace QuizBowlDiscordScoreTracker
         // We may be able to get rid of this lock, if we rely on the host keeping it consistent.
         private readonly object collectionLock = new object();
 
-        public PhaseState(bool buzzQueueDisabled)
+        protected PhaseState(bool buzzQueueDisabled)
         {
             this.BuzzQueue = new SortedSet<Buzz>();
             this.AlreadyBuzzedPlayerIds = new HashSet<ulong>();

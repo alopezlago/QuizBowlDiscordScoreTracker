@@ -79,7 +79,7 @@ namespace QuizBowlDiscordScoreTracker
             this.logger = Log.ForContext(this.GetType());
             this.discordNetEventLogger = new DiscordNetEventLogger(this.client, this.commandService);
 
-            Task.WaitAll(this.commandService.AddModulesAsync(Assembly.GetExecutingAssembly(), this.serviceProvider));
+            this.commandService.AddModulesAsync(Assembly.GetExecutingAssembly(), this.serviceProvider).Wait();
 
             this.messageHandler = new MessageHandler(
                 this.options, this.dbActionFactory, hubContext, this.logger);

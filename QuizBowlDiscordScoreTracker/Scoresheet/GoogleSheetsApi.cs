@@ -173,14 +173,14 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                 return new FailureResult<string>(
                     "The URL doesn't have the sheets ID in it. Be sure to copy the full URL from the address bar.");
             }
-            else if (!sheetsUri.Segments[1].Equals("spreadsheets/", StringComparison.InvariantCultureIgnoreCase))
+            else if (!sheetsUri.Segments[1].Equals("spreadsheets/", StringComparison.OrdinalIgnoreCase))
             {
                 return new FailureResult<string>(
                     "The URL isn't for a spreadsheet. Be sure to copy the full URL from the address bar.");
             }
 
             string sheetsId = sheetsUri.Segments[3];
-            if (sheetsId.EndsWith("/", StringComparison.InvariantCultureIgnoreCase))
+            if (sheetsId.EndsWith("/", StringComparison.OrdinalIgnoreCase))
             {
                 sheetsId = sheetsId.Substring(0, sheetsId.Length - 1);
             }

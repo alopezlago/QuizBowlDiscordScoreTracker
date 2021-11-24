@@ -9,7 +9,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
 {
     public abstract class BaseGoogleSheetsGenerator : IGoogleSheetsGenerator
     {
-        public BaseGoogleSheetsGenerator(IGoogleSheetsApi sheetsApi)
+        protected BaseGoogleSheetsGenerator(IGoogleSheetsApi sheetsApi)
         {
             this.SheetsApi = sheetsApi;
         }
@@ -27,7 +27,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
         // Used in tests
         internal abstract ReadOnlyMemory<SpreadsheetColumn> StartingColumns { get; }
 
-        protected abstract List<string> ClearRostersRanges { get; }
+        protected abstract IList<string> ClearRostersRanges { get; }
 
         protected abstract int PlayerNameRow { get; }
 
@@ -194,7 +194,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             return await this.SheetsApi.UpdateGoogleSheet(rangesResult.Value, this.ClearRostersRanges, sheetsUri);
         }
 
-        protected abstract List<string> GetClearRanges(string sheetName);
+        protected abstract IList<string> GetClearRanges(string sheetName);
 
         protected abstract string GetSheetName(int roundNumber);
 

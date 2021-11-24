@@ -41,7 +41,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
 
         internal override ReadOnlyMemory<SpreadsheetColumn> StartingColumns => StartingColumnsArray;
 
-        protected override List<string> ClearRostersRanges => ClearRosters;
+        protected override IList<string> ClearRostersRanges => ClearRosters;
 
         protected override int PlayerNameRow => 3;
 
@@ -79,7 +79,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             return $"ROUND {roundNumber}";
         }
 
-        protected override List<string> GetClearRanges(string sheetName)
+        protected override IList<string> GetClearRanges(string sheetName)
         {
             // We want to include all the player columns, and the bonus column, so don't include - 1
             int columnsAfterInitial = this.PlayersPerTeamLimit;

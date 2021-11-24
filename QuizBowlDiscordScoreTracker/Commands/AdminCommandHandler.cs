@@ -207,12 +207,16 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 Title = "Default Format",
                 Description = "The default settings for games in this server"
             };
+
+            // We already waited for the results in the for loop above
+#pragma warning disable CA1849 // Call async methods when in an async method
             builder.AddField("Require scoring bonuses?", useBonuses.Result ? "Yes" : "No");
             builder.AddField("Queue buzzes?", disableBuzzQueue.Result ? "No" : "Yes");
             builder.AddField(
                 "Reader role prefix?", readerRolePrefix.Result == null ? "None set" : @$"Yes: ""{readerRolePrefix.Result}""");
             builder.AddField(
                 "Team role prefix?", teamRolePrefix.Result == null ? "None set" : @$"Yes: ""{teamRolePrefix.Result}""");
+#pragma warning restore CA1849 // Call async methods when in an async method
 
             await this.Context.Channel.SendMessageAsync(embed: builder.Build());
         }
@@ -279,7 +283,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             IReadOnlyCollection<IVoiceChannel> voiceChannels = await this.Context.Guild.GetVoiceChannelsAsync();
             IVoiceChannel voiceChannel = voiceChannels
                 .FirstOrDefault(channel => channel.Name.Trim().Equals(
-                    voiceChannelName.Trim(), StringComparison.InvariantCultureIgnoreCase));
+                    voiceChannelName.Trim(), StringComparison.OrdinalIgnoreCase));
             if (voiceChannel == null)
             {
                 Logger.Information("Could not find voice channel with the given name");
