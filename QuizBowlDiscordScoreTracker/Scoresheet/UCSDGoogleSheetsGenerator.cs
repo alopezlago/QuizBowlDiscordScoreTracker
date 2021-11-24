@@ -31,7 +31,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
         {
         }
 
-        protected override List<string> ClearRostersRanges => ClearRosters;
+        protected override IList<string> ClearRostersRanges => ClearRosters;
 
         internal override int FirstPhaseRow => 4;
 
@@ -131,7 +131,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             return new SuccessResult<IEnumerable<ValueRange>>(ranges);
         }
 
-        protected override List<string> GetClearRanges(string sheetName)
+        protected override IList<string> GetClearRanges(string sheetName)
         {
             int columnsAfterInitial = this.PlayersPerTeamLimit - 1;
             return new List<string>()

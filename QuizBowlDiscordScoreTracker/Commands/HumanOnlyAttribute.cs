@@ -6,7 +6,7 @@ using Discord.Commands;
 namespace QuizBowlDiscordScoreTracker.Commands
 {
     [AttributeUsage(AttributeTargets.Method)]
-    public class HumanOnlyAttribute : PreconditionAttribute
+    public sealed class HumanOnlyAttribute : PreconditionAttribute
     {
         [SuppressMessage(
             "Design",

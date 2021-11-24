@@ -254,7 +254,7 @@ namespace QuizBowlDiscordScoreTracker
                 .SendAsync("PlayerBuzz", $"{user.Nickname ?? user.Username}{teamNameReference}");
             await Task.WhenAll(getVoiceChannelReaderPair, sendMessage, alertWebSocket);
 
-            Tuple<IVoiceChannel, IGuildUser> voiceChannelReaderPair = getVoiceChannelReaderPair.Result;
+            Tuple<IVoiceChannel, IGuildUser> voiceChannelReaderPair = await getVoiceChannelReaderPair;
             if (voiceChannelReaderPair != null)
             {
                 // We want to run this on a separate thread and not block the event handler

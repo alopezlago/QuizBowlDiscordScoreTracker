@@ -15,6 +15,9 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
         /// <param name="rangesToClear">The cells to clear</param>
         /// <param name="sheetsUri">The URI to the Google Sheets workbook/param>
         /// <returns></returns>
+        // Google's API explicitly expects a List, not an IList
+#pragma warning disable CA1002 // Do not expose generic lists
         Task<IResult<string>> UpdateGoogleSheet(List<ValueRange> ranges, IList<string> rangesToClear, Uri sheetsUri);
+#pragma warning restore CA1002 // Do not expose generic lists
     }
 }

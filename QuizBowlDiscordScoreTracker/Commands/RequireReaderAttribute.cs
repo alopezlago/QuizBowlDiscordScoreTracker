@@ -8,13 +8,13 @@ using Microsoft.Extensions.DependencyInjection;
 namespace QuizBowlDiscordScoreTracker.Commands
 {
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
-    public class RequireReaderAttribute : PreconditionAttribute
+    public sealed class RequireReaderAttribute : PreconditionAttribute
     {
         [SuppressMessage("Design", "CA1062:Validate arguments of public methods", Justification = "Discord.Net will pass in non-null CommandContext")]
         public override Task<PreconditionResult> CheckPermissionsAsync(
-            ICommandContext context, CommandInfo command, IServiceProvider serviceProvider)
+            ICommandContext context, CommandInfo command, IServiceProvider services)
         {
-            GameStateManager manager = serviceProvider.GetService<GameStateManager>();
+            GameStateManager manager = services.GetService<GameStateManager>();
             if (!manager.TryGet(context.Channel.Id, out GameState state))
             {
                 return Task.FromResult(PreconditionResult.FromError("No existing game"));
