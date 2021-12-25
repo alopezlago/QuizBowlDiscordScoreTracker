@@ -86,13 +86,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
         }
 
         [Command("stop")]
-        [Summary("Ends the game, clearing the stats and allowing others to read.")]
-        public Task StopAsync()
-        {
-            return this.GetHandler().ClearAllAsync();
-        }
-
-        [Command("end")]
+        [Alias("end")]
         [Summary("Ends the game, clearing the stats and allowing others to read.")]
         public Task EndAsync()
         {

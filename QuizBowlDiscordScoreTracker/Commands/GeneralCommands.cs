@@ -59,7 +59,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
             return this.GetHandler().GetGameReportAsync();
         }
 
-        [Command("read")]
+        [Command("start")]
+        [Alias("read")]
         [Summary("Set yourself as the reader.")]
         public Task SetReaderAsync()
         {
