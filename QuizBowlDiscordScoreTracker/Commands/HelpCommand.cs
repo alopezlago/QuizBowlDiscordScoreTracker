@@ -125,10 +125,21 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 {
                     string parameters = string.Join(' ', commandInfo.Parameters
                         .Select(parameter => GetParameterFieldName(parameter)));
+
+                    // Include the other aliases in the description
+                    string summary = string.Empty;
+                    if (commandInfo.Aliases.Count > 1)
+                    {
+                        summary = "Aliases for this command: **" + string.Join(", ", commandInfo.Aliases.Skip(1)) + "**. ";
+                    }
+
+                    summary += commandInfo.Summary ?? "<undocumented>";
+
+
                     return new EmbedFieldBuilder()
                     {
                         Name = $"{commandInfo.Name} {parameters}",
-                        Value = commandInfo.Summary ?? "<undocumented>"
+                        Value = summary
                     };
                 });
         }

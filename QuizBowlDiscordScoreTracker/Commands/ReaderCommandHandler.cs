@@ -417,12 +417,18 @@ namespace QuizBowlDiscordScoreTracker.Commands
             await this.Context.Channel.SendMessageAsync($"User could not be found. Could not set the new reader.");
         }
 
-        public Task ClearAllAsync()
+        public async Task ClearAllAsync()
         {
-            if (!(this.Manager.TryGet(this.Context.Channel.Id, out GameState game) &&
-                this.Manager.TryRemove(this.Context.Channel.Id)))
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
             {
-                return Task.CompletedTask;
+                return;
+            }
+
+            await ScoreHandler.GetScoreAsync(this.Context, this.Manager);
+
+            if (!this.Manager.TryRemove(this.Context.Channel.Id))
+            {
+                return;
             }
 
             game.ClearAll();
@@ -433,7 +439,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     "Game ended in guild '{0}' in channel '{1}'", guildChannel.Guild.Name, guildChannel.Name);
             }
 
-            return this.Context.Channel.SendMessageAsync($"Reading over. All stats cleared.");
+            await this.Context.Channel.SendMessageAsync($"Reading over. All stats cleared.");
         }
 
         public Task ClearAsync()

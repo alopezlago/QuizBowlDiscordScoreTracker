@@ -544,7 +544,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 this.MessageStore.Clear();
 
                 int medalIndex = 0;
-                foreach (string medal in GeneralCommandHandler.Medals.Take(i + 1))
+                foreach (string medal in ScoreHandler.Medals.Take(i + 1))
                 {
                     Assert.IsTrue(
                         embed.Contains(medal, StringComparison.OrdinalIgnoreCase),
@@ -557,7 +557,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     medalIndex++;
                 }
 
-                foreach (string medal in GeneralCommandHandler.Medals.Skip(i + 1))
+                foreach (string medal in ScoreHandler.Medals.Skip(i + 1))
                 {
                     Assert.IsFalse(
                         embed.Contains(medal, StringComparison.OrdinalIgnoreCase),
@@ -593,13 +593,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             this.MessageStore.Clear();
             Assert.AreEqual(
                 4,
-                embed.Split(GeneralCommandHandler.Medals[0]).Length,
+                embed.Split(ScoreHandler.Medals[0]).Length,
                 $"There weren't three 1st place medals in\n{embed}");
             Assert.IsFalse(
-                embed.Contains(GeneralCommandHandler.Medals[1], StringComparison.OrdinalIgnoreCase),
+                embed.Contains(ScoreHandler.Medals[1], StringComparison.OrdinalIgnoreCase),
                 $"2nd place medal appeared when it shouldn't have in\n{embed}");
             Assert.IsFalse(
-                embed.Contains(GeneralCommandHandler.Medals[2], StringComparison.OrdinalIgnoreCase),
+                embed.Contains(ScoreHandler.Medals[2], StringComparison.OrdinalIgnoreCase),
                 $"3rd place medal appeared when it shouldn't have in\n{embed}");
 
             // One tied for 1st, two tied for 2nd
@@ -615,14 +615,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             Assert.AreEqual(
                 2,
-                embed.Split(GeneralCommandHandler.Medals[0]).Length,
+                embed.Split(ScoreHandler.Medals[0]).Length,
                 $"There wasn't 1 1st place medals after the 2nd round of scoring in\n{embed}");
             Assert.AreEqual(
                 3,
-                embed.Split(GeneralCommandHandler.Medals[1]).Length,
+                embed.Split(ScoreHandler.Medals[1]).Length,
                 $"There weren't two 2nd place medals after the 2nd round of scoring in\n{embed}");
             Assert.IsFalse(
-                embed.Contains(GeneralCommandHandler.Medals[2], StringComparison.OrdinalIgnoreCase),
+                embed.Contains(ScoreHandler.Medals[2], StringComparison.OrdinalIgnoreCase),
                 $"3rd place medal appeared when it shouldn't have after the 2nd round of scoring in\n{embed}");
 
             // Two tied for 1st, one for third
@@ -638,14 +638,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             Assert.AreEqual(
                 3,
-                embed.Split(GeneralCommandHandler.Medals[0]).Length,
+                embed.Split(ScoreHandler.Medals[0]).Length,
                 $"There weren't 2 1st place medals after the 3rd round of scoring in\n{embed}");
             Assert.IsFalse(
-                embed.Contains(GeneralCommandHandler.Medals[1], StringComparison.OrdinalIgnoreCase),
+                embed.Contains(ScoreHandler.Medals[1], StringComparison.OrdinalIgnoreCase),
                 $"2nd place medal appeared when it shouldn't have after the 3rd round of scoring in\n{embed}");
             Assert.AreEqual(
                 2,
-                embed.Split(GeneralCommandHandler.Medals[2]).Length,
+                embed.Split(ScoreHandler.Medals[2]).Length,
                 $"There wasn't 1 3rd place medals after the 3rd round of scoring in\n{embed}");
 
             // Two tied for 1st, two for third
@@ -660,14 +660,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             Assert.AreEqual(
                 3,
-                embed.Split(GeneralCommandHandler.Medals[0]).Length,
+                embed.Split(ScoreHandler.Medals[0]).Length,
                 $"There weren't 2 1st place medals after the 4th round of scoring in\n{embed}");
             Assert.IsFalse(
-                embed.Contains(GeneralCommandHandler.Medals[1], StringComparison.OrdinalIgnoreCase),
+                embed.Contains(ScoreHandler.Medals[1], StringComparison.OrdinalIgnoreCase),
                 $"2nd place medal appeared when it shouldn't have after the 4th round of scoring in\n{embed}");
             Assert.AreEqual(
                 3,
-                embed.Split(GeneralCommandHandler.Medals[2]).Length,
+                embed.Split(ScoreHandler.Medals[2]).Length,
                 $"There weren't 2 3rd place medals after the 4th round of scoring in\n{embed}");
         }
 
@@ -702,13 +702,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             this.MessageStore.Clear();
             Assert.AreEqual(
                 4,
-                embed.Split(GeneralCommandHandler.Medals[0]).Length,
+                embed.Split(ScoreHandler.Medals[0]).Length,
                 $"There weren't three 1st place medals in\n{embed}");
             Assert.IsFalse(
-                embed.Contains(GeneralCommandHandler.Medals[1], StringComparison.OrdinalIgnoreCase),
+                embed.Contains(ScoreHandler.Medals[1], StringComparison.OrdinalIgnoreCase),
                 $"2nd place medal appeared when it shouldn't have in\n{embed}");
             Assert.IsFalse(
-                embed.Contains(GeneralCommandHandler.Medals[2], StringComparison.OrdinalIgnoreCase),
+                embed.Contains(ScoreHandler.Medals[2], StringComparison.OrdinalIgnoreCase),
                 $"3rd place medal appeared when it shouldn't have in\n{embed}");
             Assert.IsFalse(
                 embed.Contains("🥇 Player 3", StringComparison.InvariantCultureIgnoreCase),
@@ -854,7 +854,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             this.InitializeHandler();
             this.Game.ReaderId = DefaultReaderId;
-            for (int i = 0; i < GeneralCommandHandler.MaxLeadersShown; i++)
+            for (int i = 0; i < ScoreHandler.MaxLeadersShown; i++)
             {
                 ulong number = (ulong)i;
                 await this.Game.AddPlayer(number, $"Player {number}");
@@ -871,7 +871,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 $"\"other\" was found unexpectedly in\n{embed}");
 
             // Once we are past the limit, show other
-            ulong otherLimit = GeneralCommandHandler.MaxLeadersShown;
+            ulong otherLimit = ScoreHandler.MaxLeadersShown;
             await this.Game.AddPlayer(otherLimit, $"Player {otherLimit}");
             this.Game.ScorePlayer(10);
 
@@ -908,7 +908,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.IsTrue(teamManager.TryAddTeam("Alpha", out _), "Couldn't add team");
             teamManager.TryAddPlayerToTeam(0, "Player 0", "Alpha");
 
-            for (int i = 0; i < GeneralCommandHandler.MaxLeadersShown; i++)
+            for (int i = 0; i < ScoreHandler.MaxLeadersShown; i++)
             {
                 ulong number = (ulong)i;
                 await this.Game.AddPlayer(number, $"Player {number}");
@@ -925,7 +925,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 $"\"...\" was found unexpectedly in\n{embed}");
 
             // Once we are past the limit, show "..."
-            ulong otherLimit = GeneralCommandHandler.MaxLeadersShown;
+            ulong otherLimit = ScoreHandler.MaxLeadersShown;
             await this.Game.AddPlayer(otherLimit, $"Player {otherLimit}");
             this.Game.ScorePlayer(10);
 
@@ -955,7 +955,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 });
             this.Game.ReaderId = DefaultReaderId;
 
-            for (int i = 0; i < GeneralCommandHandler.MaxLeadersShown; i++)
+            for (int i = 0; i < ScoreHandler.MaxLeadersShown; i++)
             {
                 ulong number = (ulong)i;
                 await this.Game.AddPlayer(number, $"Player {number}");
@@ -972,7 +972,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 $"\"...\" was found unexpectedly in\n{embed}");
 
             // Once we are past the limit, show "..."
-            ulong otherLimit = GeneralCommandHandler.MaxLeadersShown;
+            ulong otherLimit = ScoreHandler.MaxLeadersShown;
             await this.Game.AddPlayer(otherLimit, $"Player {otherLimit}");
             this.Game.ScorePlayer(10);
 

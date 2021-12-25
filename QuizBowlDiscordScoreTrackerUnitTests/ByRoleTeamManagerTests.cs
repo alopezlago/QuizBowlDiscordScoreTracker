@@ -161,7 +161,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             ByRoleTeamManager teamManager = CreateTeamManager((roleId) => roleId != EveryoneRoleId ?
             OverwritePermissions.InheritAll :
             new OverwritePermissions(sendMessages: PermValue.Deny));
-        IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
+            IReadOnlyDictionary<string, string> teamIdToName = await teamManager.GetTeamIdToNames();
             Assert.AreEqual(0, teamIdToName.Count, "Unexpected number of teams");
         }
 

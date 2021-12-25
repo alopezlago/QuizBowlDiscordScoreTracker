@@ -161,7 +161,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task ClearAllRemovesGame()
         {
             GameStateManager manager = new GameStateManager();
-            manager.TryCreate(DefaultChannelId, out _);
+            manager.TryCreate(DefaultChannelId, out GameState game);
+            this.Game = game;
+
             MessageStore messageStore = new MessageStore();
             ICommandContext commandContext = CommandMocks.CreateCommandContext(
                 messageStore, DefaultIds, DefaultGuildId, DefaultChannelId, DefaultReaderId);
@@ -170,6 +172,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
             IFileScoresheetGenerator scoresheetGenerator = (new Mock<IFileScoresheetGenerator>()).Object;
             IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory = (new Mock<IGoogleSheetsGeneratorFactory>()).Object;
+
+            this.Game.ReaderId = DefaultReaderId;
+            Assert.IsTrue(await this.Game.AddPlayer(100u, "Player"), "Adding player should've succeeded");
+            this.Game.ScorePlayer(10);
 
             ReaderCommandHandler handler = new ReaderCommandHandler(
                 commandContext, manager, options, dbActionFactory, scoresheetGenerator, googleSheetsGeneratorFactory);
@@ -180,6 +186,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 manager.TryGet(DefaultChannelId, out _),
                 "Game should have been removed from the manager.");
             Assert.AreEqual(1, messageStore.ChannelMessages.Count, "Unexpected number of messages sent.");
+            Assert.AreEqual(1, messageStore.ChannelEmbeds.Count, "Unexpected number of embeds sent.");
+            Assert.IsTrue(
+                messageStore.ChannelEmbeds[0].StartsWith("Scores", StringComparison.OrdinalIgnoreCase),
+                $"Embed doesn't start with 'Scores': {messageStore.ChannelEmbeds[0]}");
         }
 
         [TestMethod]
