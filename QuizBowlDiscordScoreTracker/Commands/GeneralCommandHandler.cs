@@ -45,7 +45,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 Color = Color.Gold,
                 Title = "About",
                 Description = $"QuizBowlScoreTracker v{version}. For the list of changes in this version, visit " +
-                $"https://github.com/alopezlago/QuizBowlDiscordScoreTracker/releases/tag/v{version}"
+                $"https://github.com/alopezlago/QuizBowlDiscordScoreTracker/releases/tag/v{version}. For the privacy" +
+                $"policy, visit https://www.quizbowlreader.com/privacy.html."
             };
             return this.Context.Channel.SendMessageAsync(embed: embedBuilder.Build());
         }
