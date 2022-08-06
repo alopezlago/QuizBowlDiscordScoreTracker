@@ -225,9 +225,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     null,
                     It.IsAny<RequestOptions>(),
                     It.IsAny<AllowedMentions>(),
-                    It.IsAny<MessageReference>()))
-                .Returns<string, bool, Embed, RequestOptions, AllowedMentions, MessageReference>(
-                    (message, isTTS, embed, options, allowedMentions, messageReference) =>
+                    It.IsAny<MessageReference>(),
+                    It.IsAny<MessageComponent>(),
+                    It.IsAny<ISticker[]>(),
+                    It.IsAny<Embed[]>(),
+                    It.IsAny<MessageFlags>()))
+                .Returns<string, bool, Embed, RequestOptions, AllowedMentions, MessageReference, MessageComponent, ISticker[], Embed[], MessageFlags>(
+                    (message, isTTS, embed, options, allowedMentions, messageReference, components, stickers, embeds, flags) =>
                     {
                         messageStore.ChannelMessages.Add(message);
                         return Task.FromResult(mockUserMessage.Object);
@@ -239,9 +243,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     It.IsAny<Embed>(),
                     It.IsAny<RequestOptions>(),
                     It.IsAny<AllowedMentions>(),
-                    It.IsAny<MessageReference>()))
-                .Returns<string, bool, Embed, RequestOptions, AllowedMentions, MessageReference>(
-                    (message, isTTS, embed, options, allowedMentions, messageReference) =>
+                    It.IsAny<MessageReference>(),
+                    It.IsAny<MessageComponent>(),
+                    It.IsAny<ISticker[]>(),
+                    It.IsAny<Embed[]>(),
+                    It.IsAny<MessageFlags>()))
+                .Returns<string, bool, Embed, RequestOptions, AllowedMentions, MessageReference, MessageComponent, ISticker[], Embed[], MessageFlags>(
+                    (message, isTTS, embed, options, allowedMentions, messageReference, components, stickers, embeds, flags) =>
                     {
                         messageStore.ChannelEmbeds.Add(GetMockEmbedText(embed));
                         return Task.FromResult(mockUserMessage.Object);
@@ -259,9 +267,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     It.IsAny<RequestOptions>(),
                     It.IsAny<bool>(),
                     It.IsAny<AllowedMentions>(),
-                    It.IsAny<MessageReference>()))
-                .Returns<Stream, string, string, bool, Embed, RequestOptions, bool, AllowedMentions, MessageReference>(
-                    (stream, filename, text, isTTS, embed, requestOptions, isSpoiler, allowedMentions, messageReference) =>
+                    It.IsAny<MessageReference>(),
+                    It.IsAny<MessageComponent>(),
+                    It.IsAny<ISticker[]>(),
+                    It.IsAny<Embed[]>(),
+                    It.IsAny<MessageFlags>()))
+                .Returns<Stream, string, string, bool, Embed, RequestOptions, bool, AllowedMentions, MessageReference, MessageComponent, ISticker[], Embed[], MessageFlags>(
+                    (stream, filename, text, isTTS, embed, requestOptions, isSpoiler, allowedMentions, messageReference, components, stickers, embeds, flags) =>
                     {
                         messageStore.Files.Add((stream, filename, text));
                         return Task.FromResult(mockUserMessage.Object);
