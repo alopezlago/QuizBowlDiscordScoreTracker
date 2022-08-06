@@ -204,7 +204,7 @@ namespace QuizBowlDiscordScoreTracker
             return Task.CompletedTask;
         }
 
-        private Task OnPresenceUpdated(SocketGuildUser oldUser, SocketGuildUser newUser)
+        private Task OnPresenceUpdated(Cacheable<SocketGuildUser, ulong> oldUser, SocketGuildUser newUser)
         {
             IGuildUser user = newUser;
             if (user == null)
