@@ -141,7 +141,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         public Task GetGameReportAsync()
         {
-            return ScoreHandler.GetGameReportAsync(this.Context, this.Manager);
+            return ScoreHandler.GetGameReportAsync(this.Context.Guild, this.Context.Channel, this.Manager);
         }
 
         public async Task SetReaderAsync()
@@ -233,7 +233,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
         public Task GetScoreAsync()
         {
-            return ScoreHandler.GetScoreAsync(this.Context, this.Manager);
+            return ScoreHandler.GetScoreAsync(this.Context.Guild, this.Context.Channel, this.Manager);
         }
     }
 }

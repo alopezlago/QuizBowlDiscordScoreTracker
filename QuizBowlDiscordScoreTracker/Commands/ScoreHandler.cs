@@ -19,20 +19,20 @@ namespace QuizBowlDiscordScoreTracker.Commands
         // Used by tests
         internal static readonly string[] Medals = new string[] { "🥇", "🥈", "🥉" };
 
-        public static async Task GetScoreAsync(ICommandContext context, GameStateManager manager)
+        public static async Task GetScoreAsync(IGuild guild, IMessageChannel channel, GameStateManager manager)
         {
-            if (!manager.TryGet(context.Channel.Id, out GameState currentGame) ||
+            if (!manager.TryGet(channel.Id, out GameState currentGame) ||
                 currentGame?.ReaderId == null ||
-                !(context.Channel is IGuildChannel guildChannel))
+                !(channel is IGuildChannel guildChannel))
             {
                 return;
             }
 
-            IGuildUser guildBotUser = await context.Guild.GetCurrentUserAsync();
+            IGuildUser guildBotUser = await guild.GetCurrentUserAsync();
             ChannelPermissions channelPermissions = guildBotUser.GetPermissions(guildChannel);
             if (!channelPermissions.EmbedLinks)
             {
-                await context.Channel.SendMessageAsync(
+                await channel.SendMessageAsync(
                     "This bot must have \"Embed Links\" permissions to show the score");
                 return;
             }
@@ -44,20 +44,20 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             bool hasTeams = scoringSplits.Any(kvp => kvp.Key.IsOnTeam);
             int embedsSentCount = hasTeams ?
-                await ShowScoreForTeams(context, currentGame, scoringSplits, highestPointsLevel) :
-                await ShowScoreForShootout(context, currentGame, scoringSplits, highestPointsLevel);
+                await ShowScoreForTeams(guild, channel, currentGame, scoringSplits, highestPointsLevel) :
+                await ShowScoreForShootout(guild, channel, currentGame, scoringSplits, highestPointsLevel);
 
             if (embedsSentCount == 0)
             {
-                await context.Channel.SendMessageAsync("No one has scored yet");
+                await channel.SendMessageAsync("No one has scored yet");
             }
         }
 
-        public static async Task GetGameReportAsync(ICommandContext context, GameStateManager manager)
+        public static async Task GetGameReportAsync(IGuild guild, IMessageChannel channel, GameStateManager manager)
         {
-            if (!manager.TryGet(context.Channel.Id, out GameState currentGame) ||
+            if (!manager.TryGet(channel.Id, out GameState currentGame) ||
                 currentGame?.ReaderId == null ||
-                !(context.Channel is IGuildChannel guildChannel))
+                !(channel is IGuildChannel guildChannel))
             {
                 return;
             }
@@ -81,7 +81,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             IReadOnlyDictionary<string, string> teamIdToName = await currentGame.TeamManager.GetTeamIdToNames();
 
             int scoresByQuestionCount = phaseScores.Count();
-            int questionsReported = await context.Channel.SendAllEmbeds(
+            int questionsReported = await channel.SendAllEmbeds(
                 phaseScores,
                 () => new EmbedBuilder()
                 {
@@ -103,7 +103,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 Color = Color.Gold,
                 Description = "No questions read or answered yet."
             };
-            await context.Channel.SendMessageAsync(embed: embedBuilder.Build());
+            await channel.SendMessageAsync(embed: embedBuilder.Build());
         }
 
         private static int[] GetTopThreeScores(IOrderedEnumerable<KeyValuePair<string, int>> orderedTeamScores)
@@ -384,7 +384,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
         }
 
         private static async Task<int> ShowScoreForShootout(
-            ICommandContext context,
+            IGuild guild,
+            IMessageChannel channel,
             GameState currentGame,
             IEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> scoringSplits,
             HighestPointsLevel highestPointsLevel)
@@ -409,7 +410,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             int[] topThreeScores = GetTopThreeScores(orderedTeamScores);
 
             // We could have more than the embed limit, so split them up if necessary
-            return await context.Channel.SendAllEmbeds(
+            return await channel.SendAllEmbeds(
                 topOrderedScoringSplits,
                 () =>
                 {
@@ -428,7 +429,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     string name = kvp.Value.PlayerDisplayName;
                     if (name == null)
                     {
-                        IGuildUser user = await context.Guild.GetUserAsync(kvp.Key.PlayerId);
+                        IGuildUser user = await guild.GetUserAsync(kvp.Key.PlayerId);
                         name = user != null ? (user.Nickname ?? user.Username) : "<Unknown>";
                     }
 
@@ -478,7 +479,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
         }
 
         private static async Task<int> ShowScoreForTeams(
-            ICommandContext context,
+            IGuild guild,
+            IMessageChannel channel,
             GameState state,
             IEnumerable<KeyValuePair<PlayerTeamPair, LastScoringSplit>> scoringSplits,
             HighestPointsLevel highestPointsLevel)
@@ -529,7 +531,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     teamName = grouping.FirstOrDefault()?.PlayerDisplayName;
                     if (teamName == null)
                     {
-                        IGuildUser user = await context.Guild.GetUserAsync(lastSplit.PlayerId);
+                        IGuildUser user = await guild.GetUserAsync(lastSplit.PlayerId);
                         teamName = user != null ? (user.Nickname ?? user.Username) : "<Unknown>";
                     }
 
@@ -542,7 +544,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 string.Join(", ", teamScoresInTitle);
 
             // We could have more than the embed limit, so split them up if necessary
-            return await context.Channel.SendAllEmbeds(
+            return await channel.SendAllEmbeds(
                 topOrderedScoringSplits,
                 () =>
                 {
@@ -564,7 +566,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                         if (name == null)
                         {
                             // TODO: Find a way to not await in the loop
-                            IGuildUser user = await context.Guild.GetUserAsync(lastSplit.PlayerId);
+                            IGuildUser user = await guild.GetUserAsync(lastSplit.PlayerId);
                             name = user != null ? (user.Nickname ?? user.Username) : "<Unknown>";
                         }
 
