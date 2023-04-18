@@ -7,12 +7,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Commands;
-using Discord.Rest;
 using Discord.WebSocket;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using QuizBowlDiscordScoreTracker.Commands;
 using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.Scoresheet;
 using QuizBowlDiscordScoreTracker.Web;
@@ -52,7 +52,12 @@ namespace QuizBowlDiscordScoreTracker
             DiscordSocketConfig clientConfig = new DiscordSocketConfig()
             {
                 // May not be needed
-                MessageCacheSize = 1024 * 16
+                MessageCacheSize = 1024 * 16,
+                GatewayIntents =
+                    (GatewayIntents.AllUnprivileged & ~(GatewayIntents.GuildInvites | GatewayIntents.GuildScheduledEvents)) |
+                    GatewayIntents.MessageContent |
+                    GatewayIntents.GuildPresences |
+                    GatewayIntents.GuildMembers 
             };
             this.client = new DiscordSocketClient(clientConfig);
             IServiceCollection serviceCollection = new ServiceCollection();
@@ -85,7 +90,9 @@ namespace QuizBowlDiscordScoreTracker
                 this.options, this.dbActionFactory, hubContext, this.logger);
 
             this.client.MessageReceived += this.OnMessageCreated;
-            this.client.GuildMemberUpdated += this.OnPresenceUpdated;
+
+            this.client.GuildMemberUpdated += this.OnGuildMemberUpdated;
+            this.client.PresenceUpdated += this.OnPresenceUpdated;
             this.client.JoinedGuild += this.OnGuildJoined;
 
             this.configurationChangeCallback = this.options.OnChange((configuration, value) =>
@@ -103,7 +110,8 @@ namespace QuizBowlDiscordScoreTracker
 
             this.isDisposed = true;
             this.client.MessageReceived -= this.OnMessageCreated;
-            this.client.GuildMemberUpdated -= this.OnPresenceUpdated;
+            this.client.GuildMemberUpdated -= this.OnGuildMemberUpdated;
+            this.client.PresenceUpdated -= this.OnPresenceUpdated;
             this.discordNetEventLogger.Dispose();
             this.configurationChangeCallback.Dispose();
             this.client.Dispose();
@@ -204,7 +212,7 @@ namespace QuizBowlDiscordScoreTracker
             return Task.CompletedTask;
         }
 
-        private Task OnPresenceUpdated(Cacheable<SocketGuildUser, ulong> oldUser, SocketGuildUser newUser)
+        private Task OnGuildMemberUpdated(Cacheable<SocketGuildUser, ulong> oldUser, SocketGuildUser newUser)
         {
             IGuildUser user = newUser;
             if (user == null)
@@ -212,7 +220,21 @@ namespace QuizBowlDiscordScoreTracker
                 // Can't do anything, we don't know what game they were reading.
                 return Task.CompletedTask;
             }
+            return this.HandleReaderLeave(newUser);
+        }
 
+        private Task OnPresenceUpdated(SocketUser user, SocketPresence oldPresence, SocketPresence newPresence)
+        {
+            if (!(user is SocketGuildUser guildUser))
+            {
+                return Task.CompletedTask;
+            }
+
+            return this.HandleReaderLeave(guildUser);
+        }
+
+        private Task HandleReaderLeave(SocketGuildUser user)
+        {
             // TODO: See if there's a way to write this method without a hacky GetGameChannelPairs method
             KeyValuePair<ulong, GameState>[] readingGames = this.gameStateManager.GetGameChannelPairs()
                 .Where(kvp => kvp.Value.ReaderId == user.Id)
@@ -223,11 +245,11 @@ namespace QuizBowlDiscordScoreTracker
                 lock (this.readerRejoinedMapLock)
                 {
                     if (!this.readerRejoinedMap.TryGetValue(user, out bool hasRejoined) &&
-                        newUser.Status == UserStatus.Offline)
+                        user.Status == UserStatus.Offline)
                     {
                         this.readerRejoinedMap[user] = false;
                     }
-                    else if (hasRejoined == false && newUser.Status != UserStatus.Offline)
+                    else if (hasRejoined == false && user.Status != UserStatus.Offline)
                     {
                         this.readerRejoinedMap[user] = true;
                         return Task.CompletedTask;
@@ -252,25 +274,31 @@ namespace QuizBowlDiscordScoreTracker
 
                     if (!rejoined)
                     {
-                        Task<RestUserMessage>[] sendResetTasks = new Task<RestUserMessage>[readingGames.Length];
+                        Task[] sendResetTasks = new Task[readingGames.Length];
                         for (int i = 0; i < readingGames.Length; i++)
                         {
                             KeyValuePair<ulong, GameState> pair = readingGames[i];
-                            pair.Value.ClearAll();
-                            SocketTextChannel textChannel = newUser.Guild?.GetTextChannel(pair.Key);
+                            SocketTextChannel textChannel = user.Guild?.GetTextChannel(pair.Key);
                             if (textChannel != null)
                             {
                                 this.logger.Verbose(
                                     "Reader left game in guild '{0}' in channel '{1}'. Ending game",
                                     textChannel.Guild.Name,
                                     textChannel.Name);
-                                sendResetTasks[i] = (newUser.Guild.GetTextChannel(pair.Key)).SendMessageAsync(
-                                    $"Reader {newUser.Nickname ?? newUser.Username} has left. Ending the game.");
+
+                                sendResetTasks[i] = new Task(async () =>
+                                {
+                                    await ScoreHandler.GetScoreAsync(textChannel.Guild, textChannel, this.gameStateManager);
+                                    pair.Value.ClearAll();
+                                    await (user.Guild.GetTextChannel(pair.Key)).SendMessageAsync(
+                                        $"Reader {user.Nickname ?? user.Username} has left. Ending the game.");    
+                                });
+                                sendResetTasks[i].Start();
                             }
                             else
                             {
                                 // There's no channel, so return null
-                                sendResetTasks[i] = Task.FromResult<RestUserMessage>(null);
+                                sendResetTasks[i] = Task.CompletedTask;
                             }
                         }
 

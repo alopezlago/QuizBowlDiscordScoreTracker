@@ -424,7 +424,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            await ScoreHandler.GetScoreAsync(this.Context, this.Manager);
+            await ScoreHandler.GetScoreAsync(this.Context.Guild, this.Context.Channel, this.Manager);
 
             if (!this.Manager.TryRemove(this.Context.Channel.Id))
             {
