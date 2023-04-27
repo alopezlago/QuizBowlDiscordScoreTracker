@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -73,9 +74,10 @@ namespace QuizBowlDiscordScoreTracker
                 {
                     // We use Serilog, not the built-in logging framework
                     LoggerConfiguration loggerConfiguration = new LoggerConfiguration()
-                        .WriteTo.Console()
+                        .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
                         .WriteTo.File(
                             Path.Combine("logs", "bot.log"),
+                            formatProvider: CultureInfo.InvariantCulture,
                             fileSizeLimitBytes: maxLogfileSize,
                             rollingInterval: RollingInterval.Month,
                             retainedFileCountLimit: 3);
