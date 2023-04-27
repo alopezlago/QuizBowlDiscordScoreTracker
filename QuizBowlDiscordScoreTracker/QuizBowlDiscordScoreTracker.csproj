@@ -35,10 +35,10 @@
    
   <ItemGroup>
        <!-- The txt files aren't automatically copied to the bin folder-->
-    <None Include="discordToken.txt">
+    <None Include="discordToken.txt" Condition="$(CIBuild)!='true'">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="config.txt">
+    <None Include="config.txt" Condition="$(CIBuild)!='true'">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
