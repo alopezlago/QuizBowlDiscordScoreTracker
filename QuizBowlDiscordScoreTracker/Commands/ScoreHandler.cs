@@ -175,7 +175,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             string playersEtAlList = countDifferences == 0 ?
                 playersList :
                 $"{playersList}, and {countDifferences} other{(countDifferences == 1 ? string.Empty : "s")}";
-            valueBuilder.AppendLine($"> {playersEtAlList} {verb} in the lead.");
+            valueBuilder.AppendLine(CultureInfo.InvariantCulture, $"> {playersEtAlList} {verb} in the lead.");
         }
 
         private static async Task AppendTeamLeadersMessage(
@@ -210,7 +210,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             string teamScoresText = teamScores.Count > MaxLeadersShown ?
                 $"{string.Join(", ", teamNamesAndScores)}, ..." :
                 string.Join(", ", teamNamesAndScores);
-            valueBuilder.AppendLine($"> Top score{(teamScores.Count != 1 ? "s" : string.Empty)}: {teamScoresText}");
+            valueBuilder.AppendLine(CultureInfo.InvariantCulture, $"> Top score{(teamScores.Count != 1 ? "s" : string.Empty)}: {teamScoresText}");
         }
 
         private static void AddBonusStatline(StringBuilder valueBuilder, BonusStats bonusStats)
@@ -220,7 +220,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             string pointsPerBonus = bonusStats.Total == 0 ?
                 "0.00" :
                 string.Format(CultureInfo.InvariantCulture, "{0:#.00}", bonusStats.PointsPerBonus);
-            valueBuilder.AppendLine(
+            valueBuilder.AppendLine(CultureInfo.InvariantCulture, 
                 $"Bonuses heard: {bonusStats.Heard}    Points: {bonusStats.Total}    PPB: {pointsPerBonus}");
         }
 
@@ -240,7 +240,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 valueBuilder.Append('/');
             }
 
-            valueBuilder.Append($"{split.Gets}/{split.Negs})");
+            valueBuilder.Append(CultureInfo.InvariantCulture, $"{split.Gets}/{split.Negs})");
         }
 
         private static string EscapeText(string name)
@@ -312,12 +312,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
                         break;
                 }
 
-                valueBuilder.Append($"**{EscapeText(pair.Action.Buzz.PlayerDisplayName)}** ");
+                valueBuilder.Append(
+                    CultureInfo.InvariantCulture, $"**{EscapeText(pair.Action.Buzz.PlayerDisplayName)}** ");
 
                 if (pair.Action.Buzz.TeamId != null &&
                     teamIdToName.TryGetValue(pair.Action.Buzz.TeamId, out string teamName))
                 {
-                    valueBuilder.Append($"({teamName}) ");
+                    valueBuilder.Append(CultureInfo.InvariantCulture, $"({teamName}) ");
                 }
 
                 AddSplits(valueBuilder, pair.Split, highestPointsLevel);
@@ -455,13 +456,15 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
                     int totalPoints = split.Points + bonusStat.Total;
 
-                    valueBuilder.Append($"**{totalPoints}** ");
+                    valueBuilder.Append(CultureInfo.InvariantCulture, $"**{totalPoints}** ");
                     AddSplits(valueBuilder, split, highestPointsLevel);
 
                     int noPenalties = split.NoPenalties;
                     if (noPenalties > 0)
                     {
-                        valueBuilder.Append($" ({noPenalties} no penalty buzz{(noPenalties != 1 ? "es" : "")})");
+                        valueBuilder.Append(
+                            CultureInfo.InvariantCulture,
+                            $" ({noPenalties} no penalty buzz{(noPenalties != 1 ? "es" : "")})");
                     }
 
                     if (bonusStat != BonusStats.Default)
@@ -571,12 +574,14 @@ namespace QuizBowlDiscordScoreTracker.Commands
                         }
 
                         valueBuilder.Append(
-                            $"> {EscapeText(name)}:    {split.Points} ");
+                            CultureInfo.InvariantCulture, $"> {EscapeText(name)}:    {split.Points} ");
                         AddSplits(valueBuilder, split, highestPointsLevel);
                         int noPenalties = split.NoPenalties;
                         if (noPenalties > 0)
                         {
-                            valueBuilder.Append($" ({noPenalties} no penalty buzz{(noPenalties != 1 ? "es" : "")})");
+                            valueBuilder.Append(
+                                CultureInfo.InvariantCulture,
+                                $" ({noPenalties} no penalty buzz{(noPenalties != 1 ? "es" : "")})");
                         }
                         valueBuilder.AppendLine();
                     }
