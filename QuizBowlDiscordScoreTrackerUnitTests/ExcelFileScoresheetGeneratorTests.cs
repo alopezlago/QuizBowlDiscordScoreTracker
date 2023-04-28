@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Threading.Tasks;
 using ClosedXML.Excel;
+using ClosedXML.Graphics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using QuizBowlDiscordScoreTracker;
 using QuizBowlDiscordScoreTracker.Scoresheet;
@@ -13,6 +14,11 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
     {
         private const string FirstTeam = "Alpha";
         private const string SecondTeam = "Beta";
+
+        private static readonly LoadOptions ExcelLoadOptions = new LoadOptions()
+        {
+            GraphicEngine = new DefaultGraphicEngine("Arial")
+        };
 
         [TestMethod]
         public async Task TryCreateScoresheetSucceeds()
@@ -49,7 +55,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             IResult<Stream> result = await generator.TryCreateScoresheet(game, readerName, roomName);
             Assert.IsTrue(result.Success, $"Failed: {(result.Success ? "" : result.ErrorMessage)}");
 
-            using (IXLWorkbook workbook = new XLWorkbook(result.Value))
+            using (IXLWorkbook workbook = new XLWorkbook(result.Value, ExcelLoadOptions))
             {
                 Assert.AreEqual(1, workbook.Worksheets.Count, "Unexpected number of worksheets");
                 IXLWorksheet worksheet = workbook.Worksheet(1);
@@ -109,7 +115,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             IResult<Stream> result = await generator.TryCreateScoresheet(game, "Reader X", "Room A");
             Assert.IsTrue(result.Success, $"Creation should've succeeded at the limit.");
 
-            using (IXLWorkbook workbook = new XLWorkbook(result.Value))
+            using (IXLWorkbook workbook = new XLWorkbook(result.Value, ExcelLoadOptions))
             {
                 Assert.AreEqual(1, workbook.Worksheets.Count, "Unexpected number of worksheets");
                 IXLWorksheet worksheet = workbook.Worksheet(1);
@@ -168,7 +174,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             IResult<Stream> result = await generator.TryCreateScoresheet(game, "Reader X", "Room A");
             Assert.IsTrue(result.Success, $"Creation should've succeeded at the limit.");
 
-            using (IXLWorkbook workbook = new XLWorkbook(result.Value))
+            using (IXLWorkbook workbook = new XLWorkbook(result.Value, ExcelLoadOptions))
             {
                 Assert.AreEqual(1, workbook.Worksheets.Count, "Unexpected number of worksheets");
                 IXLWorksheet worksheet = workbook.Worksheet(1);
