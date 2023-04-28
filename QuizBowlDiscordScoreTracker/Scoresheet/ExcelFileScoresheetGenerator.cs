@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ClosedXML.Excel;
+using ClosedXML.Graphics;
 
 namespace QuizBowlDiscordScoreTracker.Scoresheet
 {
@@ -20,6 +21,11 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
         private const int PlayerNameRow = 7;
         private const string TemplateFilename = "naqt-scoresheet-electronic-template.xlsx";
         private static readonly string TemplateFile = Path.Combine("Scoresheet", TemplateFilename);
+
+        private static readonly LoadOptions ExcelLoadOptions = new LoadOptions()
+        {
+            GraphicEngine = new DefaultGraphicEngine("Arial")
+        };
 
         private static readonly int[] StartingColumns = new int[] { 2, 14 };
         private static readonly int[] BonusColumns = new int[] { 8, 20 };
@@ -66,7 +72,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             // Create the playerId -> column mapping
             IReadOnlyDictionary<ulong, int> playerIdToColumn = CreatePlayerIdToColumnMapping(playersByTeam);
 
-            using (XLWorkbook workbook = new XLWorkbook(stream))
+            using (XLWorkbook workbook = new XLWorkbook(stream, ExcelLoadOptions)) 
             {
                 IXLWorksheet worksheet = workbook.Worksheets.First();
 
