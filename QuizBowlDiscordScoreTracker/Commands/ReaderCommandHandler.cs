@@ -1,28 +1,30 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Discord;
-using Discord.Commands;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.Scoresheet;
 using QuizBowlDiscordScoreTracker.TeamManager;
+using QuizBowlDiscordScoreTracker.Web;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
     public class ReaderCommandHandler
     {
-        private static readonly ILogger Logger = Log.ForContext(typeof(ReaderCommandHandler));
+        private static readonly ILogger Logger = Log.ForContext<ReaderCommandHandler>();
 
         public ReaderCommandHandler(
-            ICommandContext context,
+            IInteractionContext context,
             GameStateManager manager,
             IOptionsMonitor<BotConfiguration> options,
             IDatabaseActionFactory dbActionFactory,
+            IHubContext<MonitorHub> hubContext,
             IFileScoresheetGenerator scoresheetGenerator,
             IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory)
         {
@@ -30,15 +32,18 @@ namespace QuizBowlDiscordScoreTracker.Commands
             this.Manager = manager;
             this.Options = options;
             this.DatabaseActionFactory = dbActionFactory;
+            this.HubContext = hubContext;
             this.ScoresheetGenerator = scoresheetGenerator;
             this.GoogleSheetsGeneratorFactory = googleSheetsGeneratorFactory;
         }
 
-        private ICommandContext Context { get; }
+        private IInteractionContext Context { get; }
 
         private IDatabaseActionFactory DatabaseActionFactory { get; }
 
         private IGoogleSheetsGeneratorFactory GoogleSheetsGeneratorFactory { get; }
+
+        private IHubContext<MonitorHub> HubContext { get; }
 
         private GameStateManager Manager { get; }
 
@@ -57,12 +62,12 @@ namespace QuizBowlDiscordScoreTracker.Commands
             if (!(game.TeamManager is ISelfManagedTeamManager teamManager))
             {
                 // TODO: Should we look at the database and see if the team prefix is set?
-                await this.Context.Channel.SendMessageAsync("Adding teams isn't supported in this mode.");
+                await this.Context.Interaction.RespondOrFollowupAsync("Adding teams isn't supported in this mode.");
                 return;
             }
 
             teamManager.TryAddTeam(teamName, out string message);
-            await this.Context.Channel.SendMessageAsync(message);
+            await this.Context.Interaction.RespondOrFollowupAsync(message);
         }
 
         public async Task RemoveTeamAsync(string teamName)
@@ -76,7 +81,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             if (!(game.TeamManager is ISelfManagedTeamManager teamManager))
             {
                 // TODO: Should we look at the database and see if the team prefix is set?
-                await this.Context.Channel.SendMessageAsync("Removing teams isn't supported in this mode.");
+                await this.Context.Interaction.RespondOrFollowupAsync("Removing teams isn't supported in this mode.");
                 return;
             }
 
@@ -94,13 +99,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 .FirstOrDefault();
             if (playerOnTeamWithScoreAction != null)
             {
-                await this.Context.Channel.SendMessageAsync(
+                await this.Context.Interaction.RespondOrFollowupAsync(
                     $"Unable to remove the team. **{playerOnTeamWithScoreAction}** has already been scored, so the player cannot be removed without affecting the score.");
                 return;
             }
 
             teamManager.TryRemoveTeam(teamName, out string message);
-            await this.Context.Channel.SendMessageAsync(message);
+            await this.Context.Interaction.RespondOrFollowupAsync(message);
         }
 
         public async Task ReloadTeamRoles()
@@ -113,12 +118,12 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             if (!(game.TeamManager is IByRoleTeamManager teamManager))
             {
-                await this.Context.Channel.SendMessageAsync("Reloading team roles isn't supported in this mode.");
+                await this.Context.Interaction.RespondOrFollowupAsync("Reloading team roles isn't supported in this mode.");
                 return;
             }
 
             string message = teamManager.ReloadTeamRoles();
-            await this.Context.Channel.SendMessageAsync(message);
+            await this.Context.Interaction.RespondOrFollowupAsync(message);
         }
 
 
@@ -135,19 +140,25 @@ namespace QuizBowlDiscordScoreTracker.Commands
             if (!(game.TeamManager is ISelfManagedTeamManager teamManager))
             {
                 // TODO: Should we look at the database and see if the team prefix is set?
-                await this.Context.Channel.SendMessageAsync("Removing players isn't supported in this mode.");
+                await this.Context.Interaction.RespondOrFollowupAsync("Removing players isn't supported in this mode.");
                 return;
             }
 
             string playerName = player.Nickname ?? player.Username;
             if (!teamManager.TryRemovePlayerFromTeam(player.Id))
             {
-                await this.Context.Channel.SendMessageAsync(
+                await this.Context.Interaction.RespondOrFollowupAsync(
                     $@"Couldn't remove player ""{playerName}"" from a team. Are they on a team?");
                 return;
             }
 
-            await this.Context.Channel.SendMessageAsync(
+            if (this.Context.Channel is ITextChannel textChannel)
+            {
+                await PromptHandler.WithdrawPlayerAsync(textChannel, this.Context.Client.CurrentUser.Id,
+                    game, player.Id, this.Options, this.DatabaseActionFactory, this.HubContext);
+            }
+
+            await this.Context.Interaction.RespondOrFollowupAsync(
                 $@"Player ""{playerName}"" removed from their team.");
         }
 
@@ -160,7 +171,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
             else if (game.Format.HighestPhaseIndexWithBonus < 0)
             {
-                await this.Context.Channel.SendMessageAsync("Bonuses are already untracked.");
+                await this.Context.Interaction.RespondOrFollowupAsync("Bonuses are already untracked.");
                 return;
             }
 
@@ -181,13 +192,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             if (alwaysUseBonuses)
             {
-                await this.Context.Channel.SendMessageAsync(
-                    "Bonuses are no longer being tracked for this game only. Run !disableBonusesByDefault to stop " +
+                await this.Context.Interaction.RespondOrFollowupAsync(
+                    "Bonuses are no longer being tracked for this game only. Run /disable-bonuses-by-default to stop " +
                     "tracking bonuses on this server by default.\nScores for the current question have been cleared.");
                 return;
             }
-            
-            await this.Context.Channel.SendMessageAsync(
+
+            await this.Context.Interaction.RespondOrFollowupAsync(
                 "Bonuses are no longer being tracked. Scores for the current question have been cleared.");
         }
 
@@ -200,7 +211,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
             else if (game.Format.HighestPhaseIndexWithBonus >= 0)
             {
-                await this.Context.Channel.SendMessageAsync("Bonuses are already tracked.");
+                await this.Context.Interaction.RespondOrFollowupAsync("Bonuses are already tracked.");
                 return;
             }
 
@@ -213,7 +224,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             // TODO: We should look into cloning the format and changing the HighestPhaseIndexWithBonus field. This
             // would require an argument for how many bonuses to read
             game.Format = Format.CreateTossupBonusesShootout(disableBuzzQueue);
-            await this.Context.Channel.SendMessageAsync(
+            await this.Context.Interaction.RespondOrFollowupAsync(
                 "Bonuses are now being tracked. Scores for the current question have been cleared.");
         }
 
@@ -243,7 +254,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             {
                 Logger.Information(
                     $"User {this.Context.User.Id}'s export failed because channel {guildChannel.Id} didn't have the Attach Files permission");
-                await this.Context.Channel.SendMessageAsync(
+                await this.Context.Interaction.RespondOrFollowupAsync(
                     "This bot must have \"Attach Files\" permissions to export a scoresheet to a file");
                 return;
             }
@@ -260,22 +271,20 @@ namespace QuizBowlDiscordScoreTracker.Commands
             if (!spreadsheetResult.Success)
             {
                 Logger.Information($"User {this.Context.User.Id}'s export failed because of this error: {spreadsheetResult.ErrorMessage}");
-                await this.Context.Channel.SendMessageAsync($"Export failed. Error: {spreadsheetResult.ErrorMessage}");
+                await this.Context.Interaction.RespondOrFollowupAsync($"Export failed. Error: {spreadsheetResult.ErrorMessage}");
                 return;
             }
 
             string readerNameInFilename = readerName.Length > 12 ? readerName.Substring(0, 12) : readerName;
             int newExportCount = userExportCount + 1;
             string filename = $"Scoresheet_{readerNameInFilename}_{newExportCount}.xlsx";
-            await this.Context.Channel.SendFileAsync(
+            await this.Context.Interaction.RespondOrFollowupWithFileAsync(
                 spreadsheetResult.Value,
                 filename,
                 text: "Scoresheet for this game. This scoresheet is based on NAQT's electronic scoresheet (© National Academic Quiz Tournaments, LLC).");
             Logger.Information($"User {this.Context.User.Id}'s export succeeded");
         }
 
-        [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
-            Justification = "Discord.Net can't parse the argument directly as a URI")]
         public async Task ExportToTJ(string sheetsUrl, int round)
         {
             if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
@@ -296,14 +305,14 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             if (round < 1)
             {
-                await this.Context.Channel.SendMessageAsync(
+                await this.Context.Interaction.RespondOrFollowupAsync(
                     "The round is out of range. The round number must be at least 1.");
                 return;
             }
 
             if (!Uri.TryCreate(sheetsUrl, UriKind.Absolute, out Uri sheetsUri))
             {
-                await this.Context.Channel.SendMessageAsync(
+                await this.Context.Interaction.RespondOrFollowupAsync(
                     "The link to the Google Sheet wasn't understandable. Be sure to copy the full URL from the address bar.");
                 return;
             }
@@ -320,15 +329,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
             IResult<string> result = await generator.TryCreateScoresheet(game, sheetsUri, round);
             if (!result.Success)
             {
-                await this.Context.Channel.SendMessageAsync(result.ErrorMessage);
+                await this.Context.Interaction.RespondOrFollowupAsync(result.ErrorMessage);
                 return;
             }
 
-            await this.Context.Channel.SendMessageAsync(result.Value);
+            await this.Context.Interaction.RespondOrFollowupAsync(result.Value);
         }
 
-        [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
-            Justification = "Discord.Net can't parse the argument directly as a URI")]
         public async Task ExportToUCSD(string sheetsUrl, int round)
         {
             if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
@@ -352,14 +359,14 @@ namespace QuizBowlDiscordScoreTracker.Commands
             // number to the interface, and then do the check there
             if (round < 1 || round > 15)
             {
-                await this.Context.Channel.SendMessageAsync(
+                await this.Context.Interaction.RespondOrFollowupAsync(
                     "The round is out of range. The round number must be between 1 and 15 (inclusive).");
                 return;
             }
 
             if (!Uri.TryCreate(sheetsUrl, UriKind.Absolute, out Uri sheetsUri))
             {
-                await this.Context.Channel.SendMessageAsync(
+                await this.Context.Interaction.RespondOrFollowupAsync(
                     "The link to the Google Sheet wasn't understandable. Be sure to copy the full URL from the address bar.");
                 return;
             }
@@ -376,11 +383,11 @@ namespace QuizBowlDiscordScoreTracker.Commands
             IResult<string> result = await generator.TryCreateScoresheet(game, sheetsUri, round);
             if (!result.Success)
             {
-                await this.Context.Channel.SendMessageAsync(result.ErrorMessage);
+                await this.Context.Interaction.RespondOrFollowupAsync(result.ErrorMessage);
                 return;
             }
 
-            await this.Context.Channel.SendMessageAsync(result.Value);
+            await this.Context.Interaction.RespondOrFollowupAsync(result.Value);
         }
 
         public async Task SetNewReaderAsync(IGuildUser newReader)
@@ -395,13 +402,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
                 if (!newReader.CanRead(this.Context.Guild, readerRolePrefix))
                 {
-                    await this.Context.Channel.SendMessageAsync(
+                    await this.Context.Interaction.RespondOrFollowupAsync(
                         @$"Cannot set {newReader.Mention} as the reader because they do not have a role with the reader prefix ""{readerRolePrefix}""");
                     return;
                 }
 
                 game.ReaderId = newReader.Id;
-                await this.Context.Channel.SendMessageAsync($"{newReader.Mention} is now the reader.");
+                await this.Context.Interaction.RespondOrFollowupAsync($"{newReader.Mention} is now the reader.");
                 return;
             }
 
@@ -414,7 +421,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     newReader?.Id);
             }
 
-            await this.Context.Channel.SendMessageAsync($"User could not be found. Could not set the new reader.");
+            await this.Context.Interaction.RespondOrFollowupAsync($"User could not be found. Could not set the new reader.");
         }
 
         public async Task ClearAllAsync()
@@ -439,7 +446,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     "Game ended in guild '{0}' in channel '{1}'", guildChannel.Guild.Name, guildChannel.Name);
             }
 
-            await this.Context.Channel.SendMessageAsync($"Reading over. All stats cleared.");
+            await this.Context.Interaction.RespondOrFollowupAsync($"Reading over. All stats cleared.");
         }
 
         public Task ClearAsync()
@@ -450,7 +457,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             game.ClearCurrentRound();
-            return this.Context.Channel.SendMessageAsync("Current cycle cleared of all buzzes.");
+            return this.Context.Interaction.RespondOrFollowupAsync("Current cycle cleared of all buzzes.");
         }
 
         public async Task NextAsync()
@@ -461,20 +468,51 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
             else if (game.PhaseNumber >= GameState.MaximumPhasesCount)
             {
-                await this.Context.Channel.SendMessageAsync($"Reached the limit for games ({GameState.MaximumPhasesCount} questions)");
+                await this.Context.Interaction.RespondOrFollowupAsync($"Reached the limit for games ({GameState.MaximumPhasesCount} questions)");
+                return;
             }
 
             game.NextQuestion();
 
             // TODO: Consider having an event handler in GameState that will trigger when the phase is changed, so we
             // can avoid duplicating this code
-            await this.Context.Channel.SendMessageAsync($"**TU {game.PhaseNumber}**");
+            await this.Context.Interaction.RespondOrFollowupAsync($"**TU {game.PhaseNumber}**");
+        }
+
+        public Task Score(string messageContent)
+        {
+            Verify.IsNotNull(messageContent, nameof(messageContent));
+
+            if (!this.Manager.TryGet(this.Context.Channel.Id, out GameState game))
+            {
+                return this.Context.Interaction.RespondOrFollowupAsync("No game is running in this channel.", ephemeral: true);
+            }
+            
+            if (!(this.Context.User is IGuildUser))
+            {
+                return this.Context.Interaction.RespondOrFollowupAsync("This command requires a server member.", ephemeral: true);
+            }
+
+            if (game.PhaseNumber >= GameState.MaximumPhasesCount)
+            {
+                return this.Context.Interaction.RespondOrFollowupAsync($"Reached the limit for games ({GameState.MaximumPhasesCount} questions)");
+            }
+
+            return game.CurrentStage switch
+            {
+                PhaseStage.Tossup => this.TryScoreBuzz(game, messageContent),
+                PhaseStage.Bonus => this.TryScoreBonus(game, messageContent),
+
+                // Can't score when the game is over
+                _ => this.Context.Interaction.RespondOrFollowupAsync("The game is complete.", ephemeral: true),
+            };
         }
 
         public async Task UndoAsync()
         {
             if (!(this.Manager.TryGet(this.Context.Channel.Id, out GameState game) && game.Undo(out ulong? nextUserId)))
             {
+                await this.Context.Interaction.RespondOrFollowupAsync("There is nothing to undo.", ephemeral: true);
                 return;
             }
 
@@ -482,12 +520,12 @@ namespace QuizBowlDiscordScoreTracker.Commands
             {
                 if (game.CurrentStage == PhaseStage.Bonus)
                 {
-                    await this.Context.Channel.SendMessageAsync($"**Bonus for TU {game.PhaseNumber}**");
+                    await this.Context.Interaction.RespondOrFollowupAsync($"**Bonus for TU {game.PhaseNumber}**");
                     return;
                 }
                 else
                 {
-                    await this.Context.Channel.SendMessageAsync($"**TU {game.PhaseNumber}**");
+                    await this.Context.Interaction.RespondOrFollowupAsync($"**TU {game.PhaseNumber}**");
                     return;
                 }
             }
@@ -530,7 +568,67 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 message = $"Undid scoring for {name}. {user.Mention}, your answer?";
             }
 
-            await this.Context.Channel.SendMessageAsync(message);
+            await this.Context.Interaction.RespondOrFollowupAsync(message);
+        }
+
+        private async Task TryScoreBonus(GameState state, string messageContent)
+        {
+            if (!state.TryScoreBonus(messageContent))
+            {
+                await this.Context.Interaction.RespondOrFollowupAsync("Couldn't score the bonus. Is the format correct?");
+                return;
+            }
+
+            await this.Context.Interaction.RespondOrFollowupAsync($"**TU {state.PhaseNumber}**");
+        }
+
+        private async Task TryScoreBuzz(GameState state, string messageContent)
+        {
+            if (!state.TryGetNextPlayer(out _))
+            {
+                await this.Context.Interaction.RespondOrFollowupAsync("No player is waiting to be scored.", ephemeral: true);
+                return;
+            }
+
+            if (messageContent.Trim() == "no penalty")
+            {
+                messageContent = "0";
+            }
+
+            if (int.TryParse(messageContent, out int points))
+            {
+                // Go back to only accepting -5/0/10/15/20, since we need to track splits now
+                switch (points)
+                {
+                    case -5:
+                    case 0:
+                    case 10:
+                    case 15:
+                    case 20:
+                        state.ScorePlayer(points);
+                        await this.Context.Interaction.RespondOrFollowupAsync(points.ToString(CultureInfo.CurrentCulture));
+
+                        await PromptHandler.PromptNextPlayerAsync(
+                            this.Context, state, this.Options, this.DatabaseActionFactory, this.HubContext,
+                            respondToInteraction: false);
+                        if (points > 0)
+                        {
+                            if (state.CurrentStage == PhaseStage.Bonus)
+                            {
+                                await this.Context.Interaction.RespondOrFollowupAsync($"**Bonus for {state.PhaseNumber}**");
+                            }
+                            else if (state.CurrentStage == PhaseStage.Tossup)
+                            {
+                                await this.Context.Interaction.RespondOrFollowupAsync($"**TU {state.PhaseNumber}**");
+                            }
+                        }
+                        return;
+                    default:
+                        break;
+                }
+            }
+            await this.Context.Interaction.RespondOrFollowupAsync(
+                "Use -5, 0, 10, 15, 20, or no penalty to score a tossup.", ephemeral: true);
         }
 
         private async Task<(bool belowExportLimit, int userExportCount)> VerifyBelowExportLimit()
@@ -549,7 +647,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 if (userExportCount >= this.Options.CurrentValue.DailyUserExportLimit)
                 {
                     Logger.Information($"User {this.Context.User.Id}'s export failed because of a daily user limit");
-                    await this.Context.Channel.SendMessageAsync(
+                    await this.Context.Interaction.RespondOrFollowupAsync(
                         "Cannot export a scoresheet. The user has already exceeded the number of scoresheets they can " +
                         $"export each day ({this.Options.CurrentValue.DailyUserExportLimit}). The limit resets at midnight GMT.");
                     return (false, userExportCount);
@@ -558,7 +656,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 {
                     Logger.Information(
                         $"User {this.Context.User.Id}'s export failed because of a daily server limit on server {this.Context.Guild.Id}");
-                    await this.Context.Channel.SendMessageAsync(
+                    await this.Context.Interaction.RespondOrFollowupAsync(
                         "Cannot export a scoresheet. The server has already exceeded the number of scoresheets it can " +
                         $"export each day ({this.Options.CurrentValue.DailyGuildExportLimit}). The count resets at midnight GMT.");
                     return (false, userExportCount);

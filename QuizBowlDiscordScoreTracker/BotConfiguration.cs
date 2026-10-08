@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Text.Json;
 
@@ -21,7 +20,6 @@ namespace QuizBowlDiscordScoreTracker
         // {
         //    "waitForRejoinMs": 10000,
         //    "muteDelayMs": 500,
-        //    "buzzEmojis": [":buzz:"],
         //    "webBaseUrl": "https://localhost:8080/index.html",
         //    "googleAppJsonFile": "C:\\Users\\Me\\Documents\\GoogleappName-f1111111111f.json
         // }
@@ -35,7 +33,6 @@ namespace QuizBowlDiscordScoreTracker
             this.DatabaseDataSource = null;
             this.DailyGuildExportLimit = 1000;
             this.DailyUserExportLimit = 50;
-            this.BuzzEmojis = Array.Empty<string>();
             this.BotToken = string.Empty;
             this.WebBaseURL = null;
         }
@@ -63,17 +60,8 @@ namespace QuizBowlDiscordScoreTracker
         /// DEPRECATED. The channels which the bot will listen to. It maps guild/server names to channels supported on that server.
         /// If this is null, then every channel is supported.
         /// </summary>
-        [SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "Needed for deserializer")]
-        [Obsolete("Users should use the !pairChannels/!unpairChannel commands instead")]
+        [Obsolete("Users should use the /pair-channels or /unpair-channel commands instead")]
         public IDictionary<string, ChannelPair[]> SupportedChannels { get; set; }
-        /// The emojis which represent buzzes. They should be of the form ":buzz:", which is the emoji text the user
-        /// types.
-        /// </summary>
-        // This has to be a string array because IOptionsMonitor doesn't parse the JSON array as an IEnumerable or
-        // IReadonlyCollection
-#pragma warning disable CA1819 // Properties should not return arrays
-        public string[] BuzzEmojis { get; set; }
-#pragma warning restore CA1819 // Properties should not return arrays
 
         /// <summary>
         /// The maximum number of export commands (inclusive) that can be called from a guild each day. The day is

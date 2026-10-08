@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
@@ -31,6 +32,7 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
 
         private string TeamRolePrefix { get; }
 
+        [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance", Justification = "We need to return this through a public method as an IReadOnlyDictionary")]
         private IReadOnlyDictionary<string, string> ChannelTeamIdToName { get; set; }
 
         private IReadOnlyDictionary<string, string> ServerTeamIdToName { get; set; }

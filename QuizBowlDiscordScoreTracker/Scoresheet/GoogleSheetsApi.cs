@@ -13,7 +13,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
 {
     public sealed class GoogleSheetsApi : IGoogleSheetsApi
     {
-        private static readonly Serilog.ILogger Logger = Log.ForContext(typeof(GoogleSheetsApi));
+        private static readonly Serilog.ILogger Logger = Log.ForContext<GoogleSheetsApi>();
         internal const int MaxRetries = 5;
 
         public GoogleSheetsApi(IOptionsMonitor<BotConfiguration> options)

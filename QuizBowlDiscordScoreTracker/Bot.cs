@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Discord;
-using Discord.Commands;
+using Discord.Interactions;
 using Discord.WebSocket;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,6 +16,7 @@ using Microsoft.Extensions.Options;
 using QuizBowlDiscordScoreTracker.Commands;
 using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.Scoresheet;
+using QuizBowlDiscordScoreTracker.TeamManager;
 using QuizBowlDiscordScoreTracker.Web;
 using Serilog;
 
@@ -22,23 +24,26 @@ namespace QuizBowlDiscordScoreTracker
 {
     public sealed class Bot : BackgroundService
     {
+        internal const GatewayIntents RequiredGatewayIntents =
+            GatewayIntents.Guilds | GatewayIntents.GuildMembers | GatewayIntents.GuildVoiceStates;
+
         // TODO: We may need a lock for this, and this lock would need to be accessible form BotCommands. We could wrap
         // this in an object which would do the locking for us.
         private readonly GameStateManager gameStateManager;
         private readonly IOptionsMonitor<BotConfiguration> options;
+        private readonly IHubContext<MonitorHub> hubContext;
         private readonly DiscordSocketClient client;
         private readonly IServiceProvider serviceProvider;
         private readonly ILogger logger;
         private readonly DiscordNetEventLogger discordNetEventLogger;
         private readonly IDisposable configurationChangeCallback;
+
+        [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance", Justification = "Needs to be an interface for dependency injection to work")]
         private readonly IDatabaseActionFactory dbActionFactory;
-        private readonly MessageHandler messageHandler;
 
-        [SuppressMessage("Code Quality", "CA2213:Disposable fields should be disposed", Justification = "Dispose method is inaccessible")]
-        private readonly CommandService commandService;
-
-        private readonly Dictionary<IGuildUser, bool> readerRejoinedMap;
-        private readonly object readerRejoinedMapLock = new object();
+        private readonly InteractionService interactionService;
+        private readonly SlashCommandDispatcher slashCommandDispatcher;
+        private ModuleInfo[] interactionModules;
 
         private bool isDisposed;
 
@@ -46,18 +51,11 @@ namespace QuizBowlDiscordScoreTracker
         {
             this.gameStateManager = new GameStateManager();
             this.options = options ?? throw new ArgumentNullException(nameof(options));
+            this.hubContext = hubContext;
             this.dbActionFactory = new SqliteDatabaseActionFactory(this.options.CurrentValue.DatabaseDataSource);
-            this.readerRejoinedMap = new Dictionary<IGuildUser, bool>();
-
             DiscordSocketConfig clientConfig = new DiscordSocketConfig()
             {
-                // May not be needed
-                MessageCacheSize = 1024 * 16,
-                GatewayIntents =
-                    (GatewayIntents.AllUnprivileged & ~(GatewayIntents.GuildInvites | GatewayIntents.GuildScheduledEvents)) |
-                    GatewayIntents.MessageContent |
-                    GatewayIntents.GuildPresences |
-                    GatewayIntents.GuildMembers 
+                GatewayIntents = RequiredGatewayIntents
             };
             this.client = new DiscordSocketClient(clientConfig);
             IServiceCollection serviceCollection = new ServiceCollection();
@@ -65,35 +63,30 @@ namespace QuizBowlDiscordScoreTracker
             serviceCollection.AddSingleton(this.gameStateManager);
             serviceCollection.AddSingleton(this.options);
             serviceCollection.AddSingleton(this.dbActionFactory);
+            serviceCollection.AddSingleton(hubContext);
             serviceCollection.AddSingleton<IFileScoresheetGenerator>(new ExcelFileScoresheetGenerator());
 
             IGoogleSheetsApi googleSheetsApi = new GoogleSheetsApi(this.options);
             serviceCollection.AddSingleton<IGoogleSheetsGeneratorFactory>(
                 new GoogleSheetsGeneratorFactory(googleSheetsApi));
 
-            this.serviceProvider = serviceCollection.BuildServiceProvider();
-
-            this.commandService = new CommandService(new CommandServiceConfig()
+            this.interactionService = new InteractionService(this.client, new InteractionServiceConfig()
             {
-                CaseSensitiveCommands = false,
+                DefaultRunMode = RunMode.Sync,
                 LogLevel = LogSeverity.Info,
-                DefaultRunMode = RunMode.Async,
+                UseCompiledLambda = true,
             });
-            this.commandService.Log += this.OnLogAsync;
+            this.interactionService.Log += this.OnLogAsync;
+            serviceCollection.AddSingleton(this.interactionService);
+            this.serviceProvider = serviceCollection.BuildServiceProvider();
+            this.slashCommandDispatcher = new SlashCommandDispatcher(this.dbActionFactory);
 
             this.logger = Log.ForContext(this.GetType());
-            this.discordNetEventLogger = new DiscordNetEventLogger(this.client, this.commandService);
-
-            this.commandService.AddModulesAsync(Assembly.GetExecutingAssembly(), this.serviceProvider).Wait();
-
-            this.messageHandler = new MessageHandler(
-                this.options, this.dbActionFactory, hubContext, this.logger);
-
-            this.client.MessageReceived += this.OnMessageCreated;
-
-            this.client.GuildMemberUpdated += this.OnGuildMemberUpdated;
-            this.client.PresenceUpdated += this.OnPresenceUpdated;
+            this.discordNetEventLogger = new DiscordNetEventLogger(this.client, this.interactionService);
             this.client.JoinedGuild += this.OnGuildJoined;
+            this.client.InteractionCreated += this.OnInteractionCreated;
+            this.client.GuildMemberUpdated += this.OnGuildMemberUpdated;
+            this.client.Ready += this.OnClientReady;
 
             this.configurationChangeCallback = this.options.OnChange((configuration, value) =>
             {
@@ -109,9 +102,11 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             this.isDisposed = true;
-            this.client.MessageReceived -= this.OnMessageCreated;
+            this.interactionService.Log -= this.OnLogAsync;
+            this.client.Ready -= this.OnClientReady;
+            this.client.JoinedGuild -= this.OnGuildJoined;
+            this.client.InteractionCreated -= this.OnInteractionCreated;
             this.client.GuildMemberUpdated -= this.OnGuildMemberUpdated;
-            this.client.PresenceUpdated -= this.OnPresenceUpdated;
             this.discordNetEventLogger.Dispose();
             this.configurationChangeCallback.Dispose();
             this.client.Dispose();
@@ -142,6 +137,71 @@ namespace QuizBowlDiscordScoreTracker
             return base.StopAsync(cancellationToken);
         }
 
+        private async Task OnClientReady()
+        {
+            if (this.interactionModules == null)
+            {
+                this.interactionModules = (await this.interactionService.AddModulesAsync(
+                    Assembly.GetExecutingAssembly(), this.serviceProvider)).ToArray();
+            }
+            await this.interactionService.AddModulesGloballyAsync(deleteMissing: true, modules: this.interactionModules);
+        }
+
+        private Task OnInteractionCreated(SocketInteraction interaction)
+        {
+            if (interaction is SocketSlashCommand)
+            {
+                _ = Task.Run(() => this.HandleInteractionAsync(interaction));
+            }
+            return Task.CompletedTask;
+        }
+
+        private async Task HandleInteractionAsync(SocketInteraction interaction)
+        {
+            try
+            {
+                SocketInteractionContext context = new SocketInteractionContext(this.client, interaction);
+                await this.slashCommandDispatcher.ExecuteAsync(
+                    context, () => this.interactionService.ExecuteCommandAsync(context, this.serviceProvider));
+            }
+            catch (Exception ex)
+            {
+                this.logger.Error(ex, "Exception responding to interaction");
+            }
+        }
+
+        private Task OnGuildMemberUpdated(Cacheable<SocketGuildUser, ulong> oldUser, SocketGuildUser newUser)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    foreach (KeyValuePair<ulong, GameState> pair in this.gameStateManager.GetGameChannelPairs())
+                    {
+                        ITextChannel channel = newUser.Guild.GetTextChannel(pair.Key);
+                        if (channel != null && pair.Value.TeamManager is IByRoleTeamManager)
+                        {
+                            IReadOnlyDictionary<string, string> teams = await pair.Value.TeamManager.GetTeamIdToNames();
+                            ulong currentTeamRole = newUser.Roles.Select(role => role.Id).FirstOrDefault(
+                                roleId => teams.ContainsKey(roleId.ToString(CultureInfo.InvariantCulture)));
+                            ulong? previousTeamRole = oldUser.HasValue ? oldUser.Value.Roles.Select(role => role.Id).FirstOrDefault(
+                                roleId => teams.ContainsKey(roleId.ToString(CultureInfo.InvariantCulture))) : null;
+                            if (currentTeamRole == 0 || (previousTeamRole.HasValue && previousTeamRole != currentTeamRole))
+                            {
+                                await PromptHandler.WithdrawPlayerAsync(channel, this.client.CurrentUser.Id,
+                                    pair.Value, newUser.Id, this.options, this.dbActionFactory, this.hubContext);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this.logger.Error(ex, "Exception withdrawing player after guild member update");
+                }
+            });
+            return Task.CompletedTask;
+        }
+
         private Task OnGuildJoined(SocketGuild guild)
         {
             if (!guild.CurrentUser.GuildPermissions.SendMessages)
@@ -150,56 +210,7 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             return guild.DefaultChannel.SendMessageAsync(
-                "Thank you for adding the QuizBowlScoreTracker bot to your server. Post *!help* to see a list of commands that the bot supports.");
-        }
-
-        private async Task OnMessageCreated(SocketMessage message)
-        {
-            // Ignore messages from the bot or from non user messages (in channel or DMs).
-            if (message.Author.Id == this.client.CurrentUser.Id || !(message is IUserMessage userMessage))
-            {
-                return;
-            }
-
-            int argPosition = 0;
-            if (userMessage.HasCharPrefix('!', ref argPosition))
-            {
-                // Make sure the user isn't banned. Don't block unban, in case of an accidental self-ban
-                if (!userMessage.Content.StartsWith("!unban", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    using (DatabaseAction action = this.dbActionFactory.Create())
-                    {
-                        if (await action.GetCommandBannedAsync(message.Author.Id))
-                        {
-                            return;
-                        }
-                    }
-                }
-
-                ICommandContext context = new CommandContext(this.client, userMessage);
-                await this.commandService.ExecuteAsync(context, argPosition, this.serviceProvider);
-                return;
-            }
-
-            // Some commands may need to be taken in DM channels. Everything for handling buzzes and scoring should be
-            // on the main channel 
-            if (!(userMessage.Channel is ITextChannel channel &&
-                this.gameStateManager.TryGet(channel.Id, out GameState state) &&
-                userMessage.Author is IGuildUser guildUser))
-            {
-                return;
-            }
-
-            ulong botId = this.client.CurrentUser.Id;
-            bool answersScored = await this.messageHandler.TryScore(state, guildUser, channel, botId, message.Content);
-            if (answersScored)
-            {
-                return;
-            }
-
-            // Don't block on this
-            _ = Task.Run(() => this.messageHandler.HandlePlayerMessage(
-                state, guildUser, channel, botId, message.Content));
+                "Thank you for adding the QuizBowlScoreTracker bot to your server. Type in */help* to see a list of commands that the bot supports.");
         }
 
         private Task OnLogAsync(LogMessage logMessage)
@@ -212,107 +223,5 @@ namespace QuizBowlDiscordScoreTracker
             return Task.CompletedTask;
         }
 
-        private Task OnGuildMemberUpdated(Cacheable<SocketGuildUser, ulong> oldUser, SocketGuildUser newUser)
-        {
-            IGuildUser user = newUser;
-            if (user == null)
-            {
-                // Can't do anything, we don't know what game they were reading.
-                return Task.CompletedTask;
-            }
-            return this.HandleReaderLeave(newUser);
-        }
-
-        private Task OnPresenceUpdated(SocketUser user, SocketPresence oldPresence, SocketPresence newPresence)
-        {
-            if (!(user is SocketGuildUser guildUser))
-            {
-                return Task.CompletedTask;
-            }
-
-            return this.HandleReaderLeave(guildUser);
-        }
-
-        private Task HandleReaderLeave(SocketGuildUser user)
-        {
-            // TODO: See if there's a way to write this method without a hacky GetGameChannelPairs method
-            KeyValuePair<ulong, GameState>[] readingGames = this.gameStateManager.GetGameChannelPairs()
-                .Where(kvp => kvp.Value.ReaderId == user.Id)
-                .ToArray();
-
-            if (readingGames.Length > 0)
-            {
-                lock (this.readerRejoinedMapLock)
-                {
-                    if (!this.readerRejoinedMap.TryGetValue(user, out bool hasRejoined) &&
-                        user.Status == UserStatus.Offline)
-                    {
-                        this.readerRejoinedMap[user] = false;
-                    }
-                    else if (hasRejoined == false && user.Status != UserStatus.Offline)
-                    {
-                        this.readerRejoinedMap[user] = true;
-                        return Task.CompletedTask;
-                    }
-                    else
-                    {
-                        return Task.CompletedTask;
-                    }
-                }
-
-                // The if-statement is structured so that we can call Task.Delay later without holding onto the lock
-                // We should only be here if the first condition was true
-                Task t = new Task(async () =>
-                {
-                    await Task.Delay(this.options.CurrentValue.WaitForRejoinMs);
-                    bool rejoined = false;
-                    lock (this.readerRejoinedMapLock)
-                    {
-                        this.readerRejoinedMap.TryGetValue(user, out rejoined);
-                        this.readerRejoinedMap.Remove(user);
-                    }
-
-                    if (!rejoined)
-                    {
-                        Task[] sendResetTasks = new Task[readingGames.Length];
-                        for (int i = 0; i < readingGames.Length; i++)
-                        {
-                            KeyValuePair<ulong, GameState> pair = readingGames[i];
-                            SocketTextChannel textChannel = user.Guild?.GetTextChannel(pair.Key);
-                            if (textChannel != null)
-                            {
-                                this.logger.Verbose(
-                                    "Reader left game in guild '{0}' in channel '{1}'. Ending game",
-                                    textChannel.Guild.Name,
-                                    textChannel.Name);
-
-                                sendResetTasks[i] = new Task(async () =>
-                                {
-                                    await ScoreHandler.GetScoreAsync(textChannel.Guild, textChannel, this.gameStateManager);
-                                    pair.Value.ClearAll();
-                                    await (user.Guild.GetTextChannel(pair.Key)).SendMessageAsync(
-                                        $"Reader {user.Nickname ?? user.Username} has left. Ending the game.");    
-                                });
-                                sendResetTasks[i].Start();
-                            }
-                            else
-                            {
-                                // There's no channel, so return null
-                                sendResetTasks[i] = Task.CompletedTask;
-                            }
-                        }
-
-                        await Task.WhenAll(sendResetTasks);
-                    }
-                });
-
-                t.Start();
-                // This is a lie, but await seems to block the event handlers from receiving other events, so say that
-                // we have completed.
-                return Task.CompletedTask;
-            }
-
-            return Task.CompletedTask;
-        }
     }
 }

@@ -12,6 +12,6 @@ namespace QuizBowlDiscordScoreTracker
         bool TryGetNextPlayer(out ulong nextPlayerId);
         bool TryScoreBuzz(int score);
         bool Undo(out ulong? userId);
-        bool WithdrawPlayer(ulong userId, string userTeamId);
+        bool WithdrawPlayer(ulong userId);
     }
 }

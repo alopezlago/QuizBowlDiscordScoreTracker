@@ -68,6 +68,63 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             return mockCommandContext.Object;
         }
 
+        public static IInteractionContext CreateInteractionContext(
+            MessageStore messageStore,
+            HashSet<ulong> existingUserIds,
+            ulong guildId,
+            ulong messageChannelId,
+            ulong userId,
+            Action<Mock<IGuild>, IGuildTextChannel> updateMockGuild,
+            out IGuildTextChannel guildTextChannel)
+        {
+            return CreateInteractionContext(
+                messageStore, existingUserIds, guildId, messageChannelId, userId, updateMockGuild, null, out guildTextChannel);
+        }
+
+        public static IInteractionContext CreateInteractionContext(
+             MessageStore messageStore,
+             HashSet<ulong> existingUserIds,
+             ulong guildId,
+             ulong messageChannelId,
+             ulong userId,
+             Action<Mock<IGuild>, IGuildTextChannel> updateMockGuild,
+             Action<Mock<IGuildUser>> updateMockUser,
+             out IGuildTextChannel guildTextChannel)
+        {
+            Mock<IInteractionContext> mockInteractionContext = new Mock<IInteractionContext>();
+            IGuild guild = CreateGuild(
+                messageStore,
+                existingUserIds,
+                guildId,
+                messageChannelId,
+                updateMockGuild,
+                null,
+                out guildTextChannel);
+
+            mockInteractionContext
+                .Setup(context => context.User)
+                .Returns(CreateGuildUser(userId, updateMockUser));
+            mockInteractionContext
+                .Setup(context => context.Channel)
+                .Returns(guildTextChannel);
+            mockInteractionContext
+                .Setup(context => context.Guild)
+                .Returns(guild);
+
+            InteractionLifecycleMock interaction = new InteractionLifecycleMock(messageStore);
+            Mock<ISelfUser> botUser = new Mock<ISelfUser>();
+            botUser.SetupGet(user => user.Id).Returns(80);
+            Mock<IDiscordClient> client = new Mock<IDiscordClient>();
+            client.SetupGet(value => value.CurrentUser).Returns(botUser.Object);
+            mockInteractionContext.SetupGet(context => context.Client).Returns(client.Object);
+
+            mockInteractionContext
+                .Setup(context => context.Interaction)
+                .Returns(interaction.Interaction.Object);
+
+            return mockInteractionContext.Object;
+        }
+
         public static IGuild CreateGuild(
             MessageStore messageStore,
             HashSet<ulong> existingUserIds,
@@ -181,10 +238,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
         public static string GetMockEmbedText(IEmbed embed)
         {
-            if (embed == null)
-            {
-                throw new ArgumentNullException(nameof(embed));
-            }
+            ArgumentNullException.ThrowIfNull(embed);
 
             return GetMockEmbedText(
                 embed.Title, embed.Description, embed.Fields.ToDictionary(field => field.Name, field => field.Value));
@@ -229,9 +283,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     It.IsAny<MessageComponent>(),
                     It.IsAny<ISticker[]>(),
                     It.IsAny<Embed[]>(),
-                    It.IsAny<MessageFlags>()))
-                .Returns<string, bool, Embed, RequestOptions, AllowedMentions, MessageReference, MessageComponent, ISticker[], Embed[], MessageFlags>(
-                    (message, isTTS, embed, options, allowedMentions, messageReference, components, stickers, embeds, flags) =>
+                    It.IsAny<MessageFlags>(),
+                    It.IsAny<PollProperties>()))
+                .Returns<string, bool, Embed, RequestOptions, AllowedMentions, MessageReference, MessageComponent, ISticker[], Embed[], MessageFlags, PollProperties>(
+                    (message, isTTS, embed, options, allowedMentions, messageReference, components, stickers, embeds, flags, poll) =>
                     {
                         messageStore.ChannelMessages.Add(message);
                         return Task.FromResult(mockUserMessage.Object);
@@ -247,9 +302,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     It.IsAny<MessageComponent>(),
                     It.IsAny<ISticker[]>(),
                     It.IsAny<Embed[]>(),
-                    It.IsAny<MessageFlags>()))
-                .Returns<string, bool, Embed, RequestOptions, AllowedMentions, MessageReference, MessageComponent, ISticker[], Embed[], MessageFlags>(
-                    (message, isTTS, embed, options, allowedMentions, messageReference, components, stickers, embeds, flags) =>
+                    It.IsAny<MessageFlags>(),
+                    It.IsAny<PollProperties>()))
+                .Returns<string, bool, Embed, RequestOptions, AllowedMentions, MessageReference, MessageComponent, ISticker[], Embed[], MessageFlags, PollProperties>(
+                    (message, isTTS, embed, options, allowedMentions, messageReference, components, stickers, embeds, flags, poll) =>
                     {
                         messageStore.ChannelEmbeds.Add(GetMockEmbedText(embed));
                         return Task.FromResult(mockUserMessage.Object);
@@ -271,9 +327,10 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                     It.IsAny<MessageComponent>(),
                     It.IsAny<ISticker[]>(),
                     It.IsAny<Embed[]>(),
-                    It.IsAny<MessageFlags>()))
-                .Returns<Stream, string, string, bool, Embed, RequestOptions, bool, AllowedMentions, MessageReference, MessageComponent, ISticker[], Embed[], MessageFlags>(
-                    (stream, filename, text, isTTS, embed, requestOptions, isSpoiler, allowedMentions, messageReference, components, stickers, embeds, flags) =>
+                    It.IsAny<MessageFlags>(),
+                    It.IsAny<PollProperties>()))
+                .Returns<Stream, string, string, bool, Embed, RequestOptions, bool, AllowedMentions, MessageReference, MessageComponent, ISticker[], Embed[], MessageFlags, PollProperties>(
+                    (stream, filename, text, isTTS, embed, requestOptions, isSpoiler, allowedMentions, messageReference, components, stickers, embeds, flags, poll) =>
                     {
                         messageStore.Files.Add((stream, filename, text));
                         return Task.FromResult(mockUserMessage.Object);

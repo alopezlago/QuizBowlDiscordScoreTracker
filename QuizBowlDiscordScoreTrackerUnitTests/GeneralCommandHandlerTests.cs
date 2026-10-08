@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Discord;
-using Discord.Commands;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -81,19 +80,6 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
-        public async Task CannotSetReaderToNonexistentUser()
-        {
-            // This will fail, but in our use case this would be impossible.
-            ulong readerId = GetNonexistentUserId();
-            this.InitializeHandler(
-                DefaultIds,
-                readerId);
-            await this.Handler.SetReaderAsync();
-
-            Assert.IsNull(this.Game.ReaderId, "Reader should not be set for nonexistent user.");
-        }
-
-        [TestMethod]
         public async Task CanSetReaderToUserWithReaderRole()
         {
             this.InitializeHandler(DefaultIds, DefaultReaderId, TeamManagerType.Solo, (mockGuildUser) =>
@@ -154,7 +140,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             await this.Handler.SetReaderAsync();
 
             Assert.AreEqual(existingReaderId, this.Game.ReaderId, "Reader ID was not overwritten.");
-            Assert.AreEqual(0, this.MessageStore.ChannelMessages.Count, "No messages should be sent.");
+            this.MessageStore.VerifyChannelMessages("Someone is already the reader.");
         }
 
         [TestMethod]
@@ -1635,7 +1621,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Action<Mock<IGuildUser>> updateUser)
         {
             this.MessageStore = new MessageStore();
-            ICommandContext commandContext = CommandMocks.CreateCommandContext(
+            IInteractionContext commandContext = CommandMocks.CreateInteractionContext(
                 this.MessageStore,
                 existingIds,
                 DefaultGuildId,
@@ -1683,6 +1669,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                             return Task.FromResult(users);
                         });
                 },
+                updateMockUser: updateUser,
                 out _);
             IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
                 this.BotConfigurationfactory);
@@ -1716,7 +1703,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             game.TeamManager = teamManager;
 
             this.Game = game;
-            this.Handler = new GeneralCommandHandler(commandContext, manager, options, dbActionFactory);
+            this.Handler = new GeneralCommandHandler(commandContext, manager, options, dbActionFactory,
+                CommandMocks.CreateHubContext());
         }
 
         private Task SetDefaultTeamRolePrefix()

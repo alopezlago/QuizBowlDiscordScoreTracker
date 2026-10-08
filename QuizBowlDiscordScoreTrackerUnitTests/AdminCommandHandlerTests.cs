@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Discord;
-using Discord.Commands;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -563,7 +562,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             await setRosters("http://localhost/sheetsUrl");
 
             this.MessageStore.VerifyChannelMessages(
-                "Couldn't export to the rosters sheet. This server is not using the team role prefix. Use !setTeamRolePrefix to set the prefix for role names to use for teams.");
+                "Couldn't export to the rosters sheet. This server is not using the team role prefix. Use /set-team-role-prefix to set the prefix for role names to use for teams.");
             mockFactory.Verify(factory => factory.Create(It.IsAny<GoogleSheetsType>()), Times.Never);
         }
 
@@ -601,7 +600,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory = null)
         {
             this.MessageStore = new MessageStore();
-            ICommandContext commandContext = CommandMocks.CreateCommandContext(
+            IInteractionContext commandContext = CommandMocks.CreateInteractionContext(
                 this.MessageStore,
                 DefaultIds,
                 DefaultGuildId,
@@ -637,6 +636,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                             return mockRole.Object;
                         }).ToArray());
                 },
+                null,
                 out IGuildTextChannel guildTextChannel);
             this.GuildTextChannel = guildTextChannel;
             IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();

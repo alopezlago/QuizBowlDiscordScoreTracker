@@ -111,17 +111,16 @@ namespace QuizBowlDiscordScoreTracker
             return true;
         }
 
-        public bool WithdrawPlayer(ulong userId, string userTeamId)
+        public bool WithdrawPlayer(ulong userId)
         {
             int count = 0;
             lock (this.collectionLock)
             {
-                if (this.AlreadyBuzzedPlayerIds.Remove(userId))
+                if (this.BuzzQueue.Any(buzz => buzz.UserId == userId) && this.AlreadyBuzzedPlayerIds.Remove(userId))
                 {
                     // Unless we change Buzz's Equals to only take the User into account then we have to go through the
                     // whole set to withdraw.
                     count = this.BuzzQueue.RemoveWhere(buzz => buzz.UserId == userId);
-                    this.AlreadyScoredTeamIds.Remove(GetTeamId(userTeamId, userId));
                     Debug.Assert(count <= 1, "The same user should not be in the queue more than once.");
                 }
             }

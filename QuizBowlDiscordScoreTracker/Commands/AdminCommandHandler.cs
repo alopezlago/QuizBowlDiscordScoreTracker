@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Discord;
-using Discord.Commands;
+using Discord.Interactions;
 using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.Scoresheet;
 using QuizBowlDiscordScoreTracker.TeamManager;
@@ -17,10 +16,10 @@ namespace QuizBowlDiscordScoreTracker.Commands
     // parameter results and setting up dependency injection
     public class AdminCommandHandler
     {
-        private static readonly ILogger Logger = Log.ForContext(typeof(AdminCommandHandler));
+        private static readonly ILogger Logger = Log.ForContext<AdminCommandHandler>();
 
         public AdminCommandHandler(
-            ICommandContext context,
+            IInteractionContext context,
             IDatabaseActionFactory dbActionFactory,
             IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory)
         {
@@ -29,7 +28,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             this.GoogleSheetsGeneratorFactory = googleSheetsGeneratorFactory;
         }
 
-        private ICommandContext Context { get; }
+        private IInteractionContext Context { get; }
 
         private IDatabaseActionFactory DatabaseActionFactory { get; }
 
@@ -70,7 +69,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             if (!channelPermissions.AttachFiles)
             {
-                builder.AppendLine("> - Cannot attach files, so !exportToFile will fail. Add the \"Attach Files\" " +
+                builder.AppendLine("> - Cannot attach files, so /export-to-file will fail. Add the \"Attach Files\" " +
                     "permission in the guild or channel settings.");
             }
 
@@ -85,7 +84,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 IVoiceChannel pairedVoiceChannel = await this.Context.Guild.GetVoiceChannelAsync(voiceChannelId.Value);
                 if (pairedVoiceChannel == null)
                 {
-                    builder.AppendLine("> - Paired voice channel no longer exists. Please use !pairChannels to " +
+                    builder.AppendLine("> - Paired voice channel no longer exists. Please use /pair-channels to " +
                         "pair this channel to a new voice channel.");
                 }
                 else if (pairedVoiceChannel is IGuildChannel pairedGuildChannel &&
@@ -110,7 +109,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 return;
             }
 
-            await this.Context.Channel.SendMessageAsync(builder.ToString());
+            await this.Context.Interaction.RespondOrFollowupAsync(builder.ToString(), ephemeral: true);
         }
 
         public async Task ClearReaderRolePrefixAsync()
@@ -121,7 +120,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             Logger.Information($"Reader prefix cleared in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
-            await this.Context.Channel.SendMessageAsync("Prefix unset. Roles no longer determine who can use !read.");
+            await this.Context.Interaction.RespondOrFollowupAsync(
+                "Prefix unset. Roles no longer determine who can use /read.", ephemeral: true);
         }
 
         public async Task ClearTeamRolePrefixAsync()
@@ -132,7 +132,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             Logger.Information($"Team prefix cleared in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
-            await this.Context.Channel.SendMessageAsync("Prefix unset. Roles no longer determine who is on a team.");
+            await this.Context.Interaction.RespondOrFollowupAsync(
+                "Prefix unset. Roles no longer determine who is on a team.", ephemeral: true);
         }
 
         public async Task DisableBonusesByDefaultAsync()
@@ -143,8 +144,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             Logger.Information($"Use Bonuses set to false in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
-            await this.Context.Channel.SendMessageAsync(
-                "Scoring bonuses will no longer be enabled for every game in this server.");
+            await this.Context.Interaction.RespondOrFollowupAsync(
+                "Scoring bonuses will no longer be enabled for every game in this server.", ephemeral: true);
         }
 
         public async Task DisableBuzzQueueAsync()
@@ -155,9 +156,10 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             Logger.Information($"Buzz queue disabled in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
-            await this.Context.Channel.SendMessageAsync(
+            await this.Context.Interaction.RespondOrFollowupAsync(
                 "The buzz queue is disabled for future games. The bot will only recognize the first player who buzzed " +
-                "in. Other players must buzz in again after the reader scores the current player.");
+                "in. Other players must buzz in again after the reader scores the current player.",
+                ephemeral: true);
         }
 
         public async Task EnableBonusesByDefaultAsync()
@@ -168,7 +170,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             Logger.Information($"Use Bonuses set to true in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
-            await this.Context.Channel.SendMessageAsync("Scoring bonuses is now enabled for every game in this server.");
+            await this.Context.Interaction.RespondOrFollowupAsync(
+                "Scoring bonuses is now enabled for every game in this server.", ephemeral: true);
         }
 
         public async Task EnableBuzzQueueAsync()
@@ -179,9 +182,10 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             Logger.Information($"Buzz queue enabled in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
-            await this.Context.Channel.SendMessageAsync(
+            await this.Context.Interaction.RespondOrFollowupAsync(
                 "The buzz queue is enabled for future games. The bot will recognize players in the order that they " +
-                "buzzed in.");
+                "buzzed in.",
+                ephemeral: true);
         }
 
         public async Task GetDefaultFormatAsync()
@@ -218,7 +222,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 "Team role prefix?", teamRolePrefix.Result == null ? "None set" : @$"Yes: ""{teamRolePrefix.Result}""");
 #pragma warning restore CA1849 // Call async methods when in an async method
 
-            await this.Context.Channel.SendMessageAsync(embed: builder.Build());
+            await this.Context.Interaction.RespondOrFollowupAsync(embed: builder.Build(), ephemeral: true);
         }
 
         public async Task GetPairedChannelAsync([Summary("Text channel mention (#textChannelName)")] ITextChannel textChannel)
@@ -237,7 +241,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             if (voiceChannelId == null)
             {
-                await this.Context.Channel.SendMessageAsync("Channel isn't paired");
+                await this.Context.Interaction.RespondOrFollowupAsync("Channel isn't paired", ephemeral: true);
                 return;
             }
 
@@ -245,7 +249,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             string message = voiceChannel == null ?
                 "The paired voice channel no longer exists" :
                 @$"Paired voice channel: ""{voiceChannel.Name}""";
-            await this.Context.Channel.SendMessageAsync(message);
+            await this.Context.Interaction.RespondOrFollowupAsync(message, ephemeral: true);
         }
 
         public async Task GetReaderRolePrefixAsync()
@@ -257,7 +261,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             string message = prefix == null ? "No reader prefix used" : @$"Reader prefix: ""{prefix}""";
-            await this.Context.Channel.SendMessageAsync(message);
+            await this.Context.Interaction.RespondOrFollowupAsync(message, ephemeral: true);
         }
 
         public async Task GetTeamRolePrefixAsync()
@@ -269,7 +273,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             string message = prefix == null ? "No team prefix used" : @$"Team prefix: ""{prefix}""";
-            await this.Context.Channel.SendMessageAsync(message);
+            await this.Context.Interaction.RespondOrFollowupAsync(message, ephemeral: true);
         }
 
         public async Task PairChannelsAsync(ITextChannel textChannel, string voiceChannelName)
@@ -287,7 +291,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             if (voiceChannel == null)
             {
                 Logger.Information("Could not find voice channel with the given name");
-                await this.Context.Channel.SendMessageAsync("Cannot find a voice channel with that name");
+                await this.Context.Interaction.RespondOrFollowupAsync("Cannot find a voice channel with that name", ephemeral: true);
                 return;
             }
 
@@ -298,7 +302,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             Logger.Information(
                 $"Channels {textChannel.Id} and {voiceChannel.Id} paired successfully by user {this.Context.User.Id}");
-            await this.Context.Channel.SendMessageAsync("Text and voice channel paired successfully");
+            await this.Context.Interaction.RespondOrFollowupAsync("Text and voice channel paired successfully", ephemeral: true);
         }
 
         public async Task SetReaderRolePrefixAsync(string prefix)
@@ -309,19 +313,16 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             Logger.Information($"Reader prefix set in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
-            await this.Context.Channel.SendMessageAsync(
-                @$"Prefix set. Only users who have arole starting with ""{prefix}"" will be able to use !read.");
+            await this.Context.Interaction.RespondOrFollowupAsync(
+                @$"Prefix set. Only users who have arole starting with ""{prefix}"" will be able to use /read.",
+                ephemeral: true);
         }
 
-        [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
-            Justification = "Discord.Net can't parse the argument directly as a URI")]
         public Task SetRostersFromRolesForTJ(string sheetsUrl)
         {
             return this.SetRostersFromRolesForSheets(sheetsUrl, GoogleSheetsType.TJ);
         }
 
-        [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
-            Justification = "Discord.Net can't parse the argument directly as a URI")]
         public Task SetRostersFromRolesForUCSD(string sheetsUrl)
         {
             return this.SetRostersFromRolesForSheets(sheetsUrl, GoogleSheetsType.UCSD);
@@ -335,8 +336,9 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             Logger.Information($"Team prefix set in guild {this.Context.Guild.Id} by user {this.Context.User.Id}");
-            await this.Context.Channel.SendMessageAsync(
-                @$"Prefix set. Players who have the same role starting with ""{prefix}"" will be on the same team.");
+            await this.Context.Interaction.RespondOrFollowupAsync(
+                @$"Prefix set. Players who have the same role starting with ""{prefix}"" will be on the same team.",
+                ephemeral: true);
         }
 
         public async Task UnpairChannelAsync(ITextChannel textChannel)
@@ -353,7 +355,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
 
             Logger.Information($"Channel {textChannel.Id} unpaired successfully by user {this.Context.User.Id}");
-            await this.Context.Channel.SendMessageAsync("Text and voice channel unpaired successfully");
+            await this.Context.Interaction.RespondOrFollowupAsync(
+                "Text and voice channel unpaired successfully", ephemeral: true);
         }
 
         private async Task SetRostersFromRolesForSheets(string sheetsUrl, GoogleSheetsType type)
@@ -365,8 +368,9 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             if (!Uri.TryCreate(sheetsUrl, UriKind.Absolute, out Uri sheetsUri))
             {
-                await this.Context.Channel.SendMessageAsync(
-                    "The link to the Google Sheet wasn't understandable. Be sure to copy the full URL from the address bar.");
+                await this.Context.Interaction.RespondOrFollowupAsync(
+                    "The link to the Google Sheet wasn't understandable. Be sure to copy the full URL from the address bar.",
+                    ephemeral: true);
                 return;
             }
 
@@ -381,8 +385,9 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             if (string.IsNullOrEmpty(teamRolePrefix))
             {
-                await this.Context.Channel.SendMessageAsync(
-                    "Couldn't export to the rosters sheet. This server is not using the team role prefix. Use !setTeamRolePrefix to set the prefix for role names to use for teams.");
+                await this.Context.Interaction.RespondOrFollowupAsync(
+                    "Couldn't export to the rosters sheet. This server is not using the team role prefix. Use /set-team-role-prefix to set the prefix for role names to use for teams.",
+                    ephemeral: true);
                 return;
             }
 
@@ -392,11 +397,11 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             if (!result.Success)
             {
-                await this.Context.Channel.SendMessageAsync(result.ErrorMessage);
+                await this.Context.Interaction.RespondOrFollowupAsync(result.ErrorMessage, ephemeral: true);
                 return;
             }
 
-            await this.Context.Channel.SendMessageAsync("Rosters updated.");
+            await this.Context.Interaction.RespondOrFollowupAsync("Rosters updated.", ephemeral: true);
         }
     }
 }

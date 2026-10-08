@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -19,10 +18,6 @@ namespace QuizBowlDiscordScoreTracker.Web
 
         public IConfiguration Configuration { get; }
 
-        [SuppressMessage(
-            "Performance",
-            "CA1822:Mark members as static",
-            Justification = "Used by ASP.Net Core, and must be an instance method")]
         public void ConfigureServices(IServiceCollection services)
         {
             // TODO: Initialize the BotConfigurationContext here with AddDbContext. You need a service scope to use it,
@@ -50,10 +45,6 @@ namespace QuizBowlDiscordScoreTracker.Web
             }
         }
 
-        [SuppressMessage(
-            "Performance",
-            "CA1822:Mark members as static",
-            Justification = "Used by ASP.Net Core, and must be an instance method")]
         public void Configure(IApplicationBuilder app, IHostEnvironment env)
         {
             // TODO: See if there's a way we can avoid initializing SignalR if the url setting isn't set

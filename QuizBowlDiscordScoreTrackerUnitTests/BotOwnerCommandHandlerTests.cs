@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Discord.Commands;
+using Discord;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -88,12 +88,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         private void CreateHandler(out BotOwnerCommandHandler handler, out MessageStore messageStore)
         {
             messageStore = new MessageStore();
-            ICommandContext commandContext = CommandMocks.CreateCommandContext(
+            IInteractionContext commandContext = CommandMocks.CreateInteractionContext(
                 messageStore,
                 DefaultIds,
                 DefaultGuildId,
                 DefaultChannelId,
-                DefaultReaderId);
+                DefaultReaderId,
+                null,
+                out _);
             IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
                 this.botConfigurationfactory);
             IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();

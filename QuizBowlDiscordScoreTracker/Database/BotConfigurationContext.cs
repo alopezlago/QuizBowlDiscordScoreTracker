@@ -49,10 +49,7 @@ namespace QuizBowlDiscordScoreTracker.Database
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            if (optionsBuilder == null)
-            {
-                throw new ArgumentNullException(nameof(optionsBuilder));
-            }
+            ArgumentNullException.ThrowIfNull(optionsBuilder);
 
             if (!optionsBuilder.IsConfigured)
             {

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using Discord;
-using Discord.Commands;
+using Discord.Interactions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -41,12 +41,12 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task RejectIfNoGameRunning()
         {
             RequireReaderAttribute attribute = new RequireReaderAttribute();
-            ICommandContext context = CreateCommandContext(DefaultChannelId, AdminId);
+            IInteractionContext context = CreateCommandContext(DefaultChannelId, AdminId);
 
             GameStateManager gameStateManager = new GameStateManager();
             IServiceProvider serviceProvider = CreateServiceProvider(gameStateManager);
 
-            PreconditionResult result = await attribute.CheckPermissionsAsync(context, null, serviceProvider);
+            PreconditionResult result = await attribute.CheckRequirementsAsync(context, null, serviceProvider);
             Assert.IsFalse(result.IsSuccess, "Check should have failed.");
         }
 
@@ -60,28 +60,28 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         public async Task RejectIfWrongChannel()
         {
             RequireReaderAttribute attribute = new RequireReaderAttribute();
-            ICommandContext context = CreateCommandContext(DefaultChannelId + 1, AdminId);
+            IInteractionContext context = CreateCommandContext(DefaultChannelId + 1, AdminId);
 
             GameStateManager gameStateManager = new GameStateManager();
             gameStateManager.TryCreate(DefaultChannelId, out GameState gameState);
             gameState.ReaderId = ReaderId;
             IServiceProvider serviceProvider = CreateServiceProvider(gameStateManager);
 
-            PreconditionResult result = await attribute.CheckPermissionsAsync(context, null, serviceProvider);
+            PreconditionResult result = await attribute.CheckRequirementsAsync(context, null, serviceProvider);
             Assert.IsFalse(result.IsSuccess, "Check should have failed.");
         }
 
         private static async Task TestUser(ulong userId, bool acceptanceExpected)
         {
             RequireReaderAttribute attribute = new RequireReaderAttribute();
-            ICommandContext context = CreateCommandContext(DefaultChannelId, userId);
+            IInteractionContext context = CreateCommandContext(DefaultChannelId, userId);
 
             GameStateManager gameStateManager = new GameStateManager();
             gameStateManager.TryCreate(DefaultChannelId, out GameState gameState);
             gameState.ReaderId = ReaderId;
             IServiceProvider serviceProvider = CreateServiceProvider(gameStateManager);
 
-            PreconditionResult result = await attribute.CheckPermissionsAsync(context, null, serviceProvider);
+            PreconditionResult result = await attribute.CheckRequirementsAsync(context, null, serviceProvider);
             if (acceptanceExpected)
             {
                 Assert.IsTrue(result.IsSuccess, "User should have been accepted as a reader.");
@@ -99,7 +99,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             return serviceCollection.BuildServiceProvider();
         }
 
-        private static ICommandContext CreateCommandContext(ulong channelId, ulong userId)
+        private static IInteractionContext CreateCommandContext(ulong channelId, ulong userId)
         {
             Mock<IMessageChannel> mockChannel = new Mock<IMessageChannel>();
             mockChannel
@@ -119,7 +119,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 .Setup(guild => guild.OwnerId)
                 .Returns(OwnerId);
 
-            Mock<ICommandContext> mockContext = new Mock<ICommandContext>();
+            Mock<IInteractionContext> mockContext = new Mock<IInteractionContext>();
             mockContext
                 .Setup(context => context.Channel)
                 .Returns(mockChannel.Object);
