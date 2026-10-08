@@ -72,7 +72,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                 phaseScores = phaseScores.Take(this.PhasesLimit);
             }
 
-            IReadOnlyDictionary<ulong, SpreadsheetColumn> playerIdToColumn = this.CreatePlayerIdToColumnMapping(playersByTeam);
+            Dictionary<ulong, SpreadsheetColumn> playerIdToColumn = this.CreatePlayerIdToColumnMapping(playersByTeam);
             string sheetName = this.GetSheetName(roundNumber);
             List<ValueRange> ranges = new List<ValueRange>();
 
@@ -207,7 +207,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
         protected abstract IResult<List<ValueRange>> GetUpdateRangesForRoster(
             IReadOnlyDictionary<string, string> teamIdToNames, IEnumerable<IGrouping<string, PlayerTeamPair>> groupings);
 
-        private IReadOnlyDictionary<ulong, SpreadsheetColumn> CreatePlayerIdToColumnMapping(
+        private Dictionary<ulong, SpreadsheetColumn> CreatePlayerIdToColumnMapping(
             IEnumerable<IGrouping<string, PlayerTeamPair>> playersByTeam)
         {
             Dictionary<ulong, SpreadsheetColumn> playerIdToColumn = new Dictionary<ulong, SpreadsheetColumn>();

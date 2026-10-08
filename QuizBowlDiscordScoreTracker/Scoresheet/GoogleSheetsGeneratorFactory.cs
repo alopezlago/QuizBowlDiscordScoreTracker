@@ -18,7 +18,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
                 GoogleSheetsType.UCSD => new UCSDGoogleSheetsGenerator(this.SheetsApi),
                 GoogleSheetsType.TJ => new TJSheetsGenerator(this.SheetsApi),
                 _ => throw new ArgumentException(
-$"Cannot create a generator for type {Enum.GetName(typeof(GoogleSheetsType), sheetsType)}"),
+$"Cannot create a generator for type {Enum.GetName(sheetsType)}"),
             };
         }
     }

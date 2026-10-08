@@ -1,8 +1,7 @@
 ﻿using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using Discord;
-using Discord.Commands;
+using Discord.Interactions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace QuizBowlDiscordScoreTracker.Commands
@@ -10,9 +9,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
     public sealed class RequireReaderAttribute : PreconditionAttribute
     {
-        [SuppressMessage("Design", "CA1062:Validate arguments of public methods", Justification = "Discord.Net will pass in non-null CommandContext")]
-        public override Task<PreconditionResult> CheckPermissionsAsync(
-            ICommandContext context, CommandInfo command, IServiceProvider services)
+        public override Task<PreconditionResult> CheckRequirementsAsync(
+            IInteractionContext context, ICommandInfo commandInfo, IServiceProvider services)
         {
             GameStateManager manager = services.GetService<GameStateManager>();
             if (!manager.TryGet(context.Channel.Id, out GameState state))

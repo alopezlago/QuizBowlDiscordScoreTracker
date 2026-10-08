@@ -6,7 +6,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Discord;
-using Discord.Commands;
 
 namespace QuizBowlDiscordScoreTracker.Commands
 {
@@ -18,6 +17,33 @@ namespace QuizBowlDiscordScoreTracker.Commands
         // These characters are two characters in length, so we can't use string indexing as a trick
         // Used by tests
         internal static readonly string[] Medals = new string[] { "🥇", "🥈", "🥉" };
+
+        public static async Task GetScoreAsync(IInteractionContext context, GameStateManager manager)
+        {
+            bool ownsResponse = !context.Interaction.HasResponded;
+            if (ownsResponse)
+            {
+                await context.Interaction.DeferAsync(ephemeral: true);
+            }
+
+            try
+            {
+                if (!manager.TryGet(context.Channel.Id, out GameState game) || game.ReaderId == null)
+                {
+                    await context.Interaction.RespondOrFollowupAsync("No game is running in this channel.", ephemeral: true);
+                    return;
+                }
+
+                await GetScoreAsync(context.Guild, context.Channel, manager);
+            }
+            finally
+            {
+                if (ownsResponse)
+                {
+                    await context.Interaction.DeleteOriginalResponseAsync();
+                }
+            }
+        }
 
         public static async Task GetScoreAsync(IGuild guild, IMessageChannel channel, GameStateManager manager)
         {
@@ -53,57 +79,75 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
         }
 
-        public static async Task GetGameReportAsync(IGuild guild, IMessageChannel channel, GameStateManager manager)
+        public static async Task GetGameReportAsync(IInteractionContext context, GameStateManager manager)
         {
-            if (!manager.TryGet(channel.Id, out GameState currentGame) ||
-                currentGame?.ReaderId == null ||
-                !(channel is IGuildChannel guildChannel))
+            bool ownsResponse = !context.Interaction.HasResponded;
+            if (ownsResponse)
             {
-                return;
+                await context.Interaction.DeferAsync(ephemeral: true);
             }
 
-            IEnumerable<PhaseScore> phaseScores = await currentGame.GetPhaseScores();
-
-            // If there's been no buzzes in the last question, don't show it in the report (could be end of the packet)
-            PhaseScore lastQuestion = phaseScores.LastOrDefault();
-            if (lastQuestion?.ScoringSplitsOnActions?.Any() != true)
+            try
             {
-                phaseScores = phaseScores.SkipLast(1);
-            }
+                IMessageChannel channel = context.Channel;
+                if (!manager.TryGet(channel.Id, out GameState currentGame) ||
+                    currentGame?.ReaderId == null ||
+                    !(channel is IGuildChannel guildChannel))
+                {
+                    await context.Interaction.RespondOrFollowupAsync("No game is running in this channel.", ephemeral: true);
+                    return;
+                }
 
-            IEnumerable<ScoringSplit> splits = phaseScores
-                .SelectMany(pairs => pairs.ScoringSplitsOnActions.Select(pair => pair.Split));
-            HighestPointsLevel highestPointsLevel = FindHighestPointLevel(splits);
+                IEnumerable<PhaseScore> phaseScores = await currentGame.GetPhaseScores();
 
-            // Because we only have the scoring splits here, we have to rely on buzzes having a team ID
-            bool hasTeams = phaseScores
-                .Any(scoresInPhase => scoresInPhase.ScoringSplitsOnActions.Any(pair => pair.Action.Buzz.TeamId != null));
-            IReadOnlyDictionary<string, string> teamIdToName = await currentGame.TeamManager.GetTeamIdToNames();
+                // If there's been no buzzes in the last question, don't show it in the report (could be end of the packet)
+                PhaseScore lastQuestion = phaseScores.LastOrDefault();
+                if (lastQuestion?.ScoringSplitsOnActions?.Any() != true)
+                {
+                    phaseScores = phaseScores.SkipLast(1);
+                }
 
-            int scoresByQuestionCount = phaseScores.Count();
-            int questionsReported = await channel.SendAllEmbeds(
-                phaseScores,
-                () => new EmbedBuilder()
+                IEnumerable<ScoringSplit> splits = phaseScores
+                    .SelectMany(pairs => pairs.ScoringSplitsOnActions.Select(pair => pair.Split));
+                HighestPointsLevel highestPointsLevel = FindHighestPointLevel(splits);
+
+                // Because we only have the scoring splits here, we have to rely on buzzes having a team ID
+                bool hasTeams = phaseScores
+                    .Any(scoresInPhase => scoresInPhase.ScoringSplitsOnActions.Any(pair => pair.Action.Buzz.TeamId != null));
+                IReadOnlyDictionary<string, string> teamIdToName = await currentGame.TeamManager.GetTeamIdToNames();
+
+                int scoresByQuestionCount = phaseScores.Count();
+                int questionsReported = await channel.SendAllEmbeds(
+                    phaseScores,
+                    () => new EmbedBuilder()
+                    {
+                        Title = GameReportTitle,
+                        Color = Color.Gold
+                    },
+                    (phaseScore, index) =>
+                        GetEmbedFieldForPhase(
+                            currentGame, phaseScore, teamIdToName, highestPointsLevel, index, index == scoresByQuestionCount - 1));
+
+                if (questionsReported > 0)
+                {
+                    return;
+                }
+
+                EmbedBuilder embedBuilder = new EmbedBuilder()
                 {
                     Title = GameReportTitle,
-                    Color = Color.Gold
-                },
-                (phaseScore, index) =>
-                    GetEmbedFieldForPhase(
-                        currentGame, phaseScore, teamIdToName, highestPointsLevel, index, index == scoresByQuestionCount - 1));
-
-            if (questionsReported > 0)
-            {
-                return;
+                    Color = Color.Gold,
+                    Description = "No questions read or answered yet."
+                };
+                await channel.SendMessageAsync(embed: embedBuilder.Build());
             }
-
-            EmbedBuilder embedBuilder = new EmbedBuilder()
+            finally
             {
-                Title = GameReportTitle,
-                Color = Color.Gold,
-                Description = "No questions read or answered yet."
-            };
-            await channel.SendMessageAsync(embed: embedBuilder.Build());
+                if (ownsResponse)
+                {
+                    await context.Interaction.DeleteOriginalResponseAsync();
+                }
+            }
         }
 
         private static int[] GetTopThreeScores(IOrderedEnumerable<KeyValuePair<string, int>> orderedTeamScores)
@@ -136,12 +180,12 @@ namespace QuizBowlDiscordScoreTracker.Commands
             IEnumerable<LastScoringSplit> lastSplits = (await state.GetLastScoringSplits()).Values;
             IReadOnlyDictionary<string, BonusStats> bonusStats = await state.GetBonusStats();
 
-            IDictionary<string, LastScoringSplit> playerIdSplitPairs = lastSplits
+            Dictionary<string, LastScoringSplit> playerIdSplitPairs = lastSplits
                 .Where(lastSplit => lastSplit.PlayerDisplayName != null)
                 .ToDictionary(
                     lastSplit => lastSplit.PlayerId.ToString(CultureInfo.InvariantCulture),
                     lastSplit => lastSplit);
-            IDictionary<LastScoringSplit, int> playerTotalPoints = new Dictionary<LastScoringSplit, int>(
+            Dictionary<LastScoringSplit, int> playerTotalPoints = new Dictionary<LastScoringSplit, int>(
                 playerIdSplitPairs.Count);
             foreach (KeyValuePair<string, LastScoringSplit> playerIdSplitPair in playerIdSplitPairs)
             {
@@ -367,7 +411,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
                     .GroupBy(
                         kvp => kvp.Key.TeamId ?? kvp.Key.PlayerId.ToString(CultureInfo.InvariantCulture),
                         kvp => kvp.Value.Split.Points);
-            IDictionary<string, int> scores = lastScoringSplits
+            Dictionary<string, int> scores = lastScoringSplits
                 .ToDictionary(grouping => grouping.Key, grouping => grouping.Sum());
 
             IReadOnlyDictionary<string, BonusStats> bonusStats = await state.GetBonusStats();
@@ -395,7 +439,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             IOrderedEnumerable<KeyValuePair<string, int>> orderedTeamScores = teamScores
                 .OrderByDescending(kvp => kvp.Value);
-            IDictionary<string, int> topOrderedTeamScoresMap = teamScores
+            Dictionary<string, int> topOrderedTeamScoresMap = teamScores
                 .OrderByDescending(kvp => kvp.Value)
                 .Take(GameState.ScoresListLimit)
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
@@ -489,7 +533,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             HighestPointsLevel highestPointsLevel)
         {
             IDictionary<string, int> teamScores = await GetTeamScores(state);
-            IDictionary<string, int> topOrderedTeamScoresMap = teamScores
+            Dictionary<string, int> topOrderedTeamScoresMap = teamScores
                 .OrderByDescending(kvp => kvp.Value)
                 .Take(GameState.ScoresListLimit)
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);

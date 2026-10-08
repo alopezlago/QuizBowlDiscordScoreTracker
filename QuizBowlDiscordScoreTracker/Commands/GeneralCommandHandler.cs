@@ -1,13 +1,15 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Discord;
-using Discord.Commands;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.TeamManager;
+using QuizBowlDiscordScoreTracker.Web;
 using Serilog;
 
 namespace QuizBowlDiscordScoreTracker.Commands
@@ -15,23 +17,27 @@ namespace QuizBowlDiscordScoreTracker.Commands
     public class GeneralCommandHandler
     {
         internal const int MaxTeamsShown = 10;
-        private static readonly ILogger Logger = Log.ForContext(typeof(GeneralCommandHandler));
+        private static readonly ILogger Logger = Log.ForContext<GeneralCommandHandler>();
 
         public GeneralCommandHandler(
-            ICommandContext context,
+            IInteractionContext context,
             GameStateManager manager,
             IOptionsMonitor<BotConfiguration> options,
-            IDatabaseActionFactory dbActionFactory)
+            IDatabaseActionFactory dbActionFactory,
+            IHubContext<MonitorHub> hubContext)
         {
             this.Context = context;
             this.DatabaseActionFactory = dbActionFactory;
             this.Manager = manager;
             this.Options = options;
+            this.HubContext = hubContext;
         }
 
-        private ICommandContext Context { get; }
+        private IInteractionContext Context { get; }
 
         private IDatabaseActionFactory DatabaseActionFactory { get; }
+
+        private IHubContext<MonitorHub> HubContext { get; }
 
         private GameStateManager Manager { get; }
 
@@ -48,7 +54,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 $"https://github.com/alopezlago/QuizBowlDiscordScoreTracker/releases/tag/v{version}. For the privacy" +
                 $"policy, visit https://www.quizbowlreader.com/privacy.html."
             };
-            return this.Context.Channel.SendMessageAsync(embed: embedBuilder.Build());
+
+            return this.Context.Interaction.RespondOrFollowupAsync(embed: embedBuilder.Build());
         }
 
         public async Task JoinTeamAsync(string teamName)
@@ -63,14 +70,14 @@ namespace QuizBowlDiscordScoreTracker.Commands
             if (!(game.TeamManager is ISelfManagedTeamManager teamManager))
             {
                 // TODO: Should we look at the database and see if the team prefix is set?
-                await this.Context.Channel.SendMessageAsync("Joining teams isn't supported in this mode.");
+                await this.Context.Interaction.RespondOrFollowupAsync("Joining teams isn't supported in this mode.");
                 return;
             }
 
             if (!teamManager.TryAddPlayerToTeam(
                 this.Context.User.Id, guildUser.Nickname ?? guildUser.Username, teamName))
             {
-                await this.Context.Channel.SendMessageAsync(
+                await this.Context.Interaction.RespondOrFollowupAsync(
                     $@"Couldn't join team ""{teamName}"". Make sure it is not misspelled.");
                 return;
             }
@@ -78,32 +85,40 @@ namespace QuizBowlDiscordScoreTracker.Commands
             string teamId = await game.TeamManager.GetTeamIdOrNull(this.Context.User.Id);
             IReadOnlyDictionary<string,string> teamNames= await game.TeamManager.GetTeamIdToNames();
             teamName = teamNames[teamId];
-            await this.Context.Channel.SendMessageAsync($@"{guildUser.Mention} is on team ""{teamName}""");
+            await this.Context.Interaction.RespondOrFollowupAsync($@"{guildUser.Mention} is on team ""{teamName}""");
         }
 
-        public Task LeaveTeamAsync()
+        public async Task LeaveTeamAsync()
         {
             if (!(this.Manager.TryGet(this.Context.Channel.Id, out GameState game) &&
                 this.Context.User is IGuildUser guildUser))
             {
                 // This command only works during a game
-                return Task.CompletedTask;
+                return;
             }
 
             if (!(game.TeamManager is ISelfManagedTeamManager teamManager))
             {
                 // TODO: Should we look at the database and see if the team prefix is set?
-                return this.Context.Channel.SendMessageAsync("Leaving teams isn't supported in this mode.");
+                await this.Context.Interaction.RespondOrFollowupAsync("Leaving teams isn't supported in this mode.");
+                return;
             }
 
             string name = guildUser.Nickname ?? guildUser.Username;
             if (!teamManager.TryRemovePlayerFromTeam(this.Context.User.Id))
             {
-                return this.Context.Channel.SendMessageAsync($@"""{name}"" isn't on a team.");
+                await this.Context.Interaction.RespondOrFollowupAsync($@"""{name}"" isn't on a team.");
+                return;
+            }
+
+            if (this.Context.Channel is ITextChannel textChannel)
+            {
+                await PromptHandler.WithdrawPlayerAsync(textChannel, this.Context.Client.CurrentUser.Id,
+                    game, guildUser.Id, this.Options, this.DatabaseActionFactory, this.HubContext);
             }
 
             // We don't want to ping the user when they left, so use their nickname/username
-            return this.Context.Channel.SendMessageAsync($@"""{name}"" left their team.");
+            await this.Context.Interaction.RespondOrFollowupAsync($@"""{name}"" left their team.");
         }
 
         public async Task GetTeamsAsync()
@@ -118,7 +133,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             IEnumerable<string> teamNames = (await game.TeamManager.GetTeamIdToNames()).Values;
             if (!teamNames.Any())
             {
-                await this.Context.Channel.SendMessageAsync(game.TeamManager.JoinTeamDescription);
+                await this.Context.Interaction.RespondOrFollowupAsync(game.TeamManager.JoinTeamDescription);
                 return;
             }
 
@@ -136,17 +151,17 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 teams = string.Join(", ", orderedTeamNames);
             }
 
-            await this.Context.Channel.SendMessageAsync($"Teams: {teams}");
+            await this.Context.Interaction.RespondOrFollowupAsync($"Teams: {teams}");
         }
 
         public Task GetGameReportAsync()
         {
-            return ScoreHandler.GetGameReportAsync(this.Context.Guild, this.Context.Channel, this.Manager);
+            return ScoreHandler.GetGameReportAsync(this.Context, this.Manager);
         }
 
         public async Task SetReaderAsync()
         {
-            IGuildUser user = await this.Context.Guild.GetUserAsync(this.Context.User.Id);
+            IGuildUser user = this.Context.User as IGuildUser;
             if (user == null)
             {
                 // If the reader doesn't exist anymore, don't start a game.
@@ -162,7 +177,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
 
             if (!user.CanRead(this.Context.Guild, readerRolePrefix))
             {
-                await this.Context.Channel.SendMessageAsync(
+                await this.Context.Interaction.RespondOrFollowupAsync(
                     @$"{user.Mention} can't read because they don't have a role starting with the prefix ""{readerRolePrefix}"".");
                 return;
             }
@@ -171,11 +186,13 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 this.Manager.TryCreate(this.Context.Channel.Id, out state)))
             {
                 // Couldn't add a new reader.
+                await this.Context.Interaction.RespondOrFollowupAsync("Couldn't add a new reader, as no game exists.");
                 return;
             }
             else if (state.ReaderId != null)
             {
                 // We already have a reader, so do nothing.
+                await this.Context.Interaction.RespondOrFollowupAsync("Someone is already the reader.");
                 return;
             }
 
@@ -188,6 +205,8 @@ namespace QuizBowlDiscordScoreTracker.Commands
             }
             else
             {
+                Logger.Error(
+                     "Tried to start game, but we're not in a guild channel. Channel ID: {0}", this.Context.Channel.Id);
                 return;
             }
 
@@ -226,14 +245,14 @@ namespace QuizBowlDiscordScoreTracker.Commands
                 $"{this.Context.User.Mention} is the reader." :
                 $"{this.Context.User.Mention} is the reader. Please visit {this.Options.CurrentValue.WebBaseURL}?{this.Context.Channel.Id} to hear buzzes.";
             string teamManagementMessage = teamRolePrefix == null ?
-                "The reader can add teams through !addTeam *teamName*, and players can join teams with !join *teamName*. See !help for more team-based commands." :
+                "The reader can add teams through /add-team *teamName*, and players can join teams with /join *teamName*. See /help for more team-based commands." :
                 $@"Teams are set by the server role. Team roles begin with ""{teamRolePrefix}"".";
-            await this.Context.Channel.SendMessageAsync($"{baseMessage}\n{teamManagementMessage}");
+            await this.Context.Interaction.RespondOrFollowupAsync($"{baseMessage}{Environment.NewLine}{teamManagementMessage}");
         }
 
         public Task GetScoreAsync()
         {
-            return ScoreHandler.GetScoreAsync(this.Context.Guild, this.Context.Channel, this.Manager);
+            return ScoreHandler.GetScoreAsync(this.Context, this.Manager);
         }
     }
 }

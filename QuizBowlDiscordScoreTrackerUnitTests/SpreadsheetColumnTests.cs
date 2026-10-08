@@ -10,14 +10,14 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         [TestMethod]
         public void ThrowIfLessThanOne()
         {
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => new SpreadsheetColumn(0));
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => new SpreadsheetColumn(-1));
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new SpreadsheetColumn(0));
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new SpreadsheetColumn(-1));
         }
 
         [TestMethod]
         public void ThrowIfGreaterThanLimit()
         {
-            Assert.ThrowsException<ArgumentOutOfRangeException>(
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(
                 () => new SpreadsheetColumn(SpreadsheetColumn.MaximumColumnNumber + 1));
         }
 
@@ -68,7 +68,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             SpreadsheetColumn column = new SpreadsheetColumn(SpreadsheetColumn.MaximumColumnNumber);
             Assert.AreEqual("ZZ", column.ToString(), "Unexpected column for the limit");
 
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => column + 1);
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => column + 1);
         }
 
         [TestMethod]
@@ -77,7 +77,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             SpreadsheetColumn column = new SpreadsheetColumn(1);
             Assert.AreEqual("A", column.ToString(), "Unexpected column for #1");
 
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => column - 1);
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => column - 1);
         }
     }
 }

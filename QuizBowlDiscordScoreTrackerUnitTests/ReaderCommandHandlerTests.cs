@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Discord;
-using Discord.Commands;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -15,6 +15,7 @@ using QuizBowlDiscordScoreTracker.Commands;
 using QuizBowlDiscordScoreTracker.Database;
 using QuizBowlDiscordScoreTracker.Scoresheet;
 using QuizBowlDiscordScoreTracker.TeamManager;
+using QuizBowlDiscordScoreTracker.Web;
 using Format = QuizBowlDiscordScoreTracker.Format;
 
 namespace QuizBowlDiscordScoreTrackerUnitTests
@@ -165,8 +166,8 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             this.Game = game;
 
             MessageStore messageStore = new MessageStore();
-            ICommandContext commandContext = CommandMocks.CreateCommandContext(
-                messageStore, DefaultIds, DefaultGuildId, DefaultChannelId, DefaultReaderId);
+            IInteractionContext commandContext = CommandMocks.CreateInteractionContext(
+                messageStore, DefaultIds, DefaultGuildId, DefaultChannelId, DefaultReaderId, null, out _);
             IDatabaseActionFactory dbActionFactory = CommandMocks.CreateDatabaseActionFactory(
                 this.botConfigurationfactory);
             IOptionsMonitor<BotConfiguration> options = CommandMocks.CreateConfigurationOptionsMonitor();
@@ -178,7 +179,13 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             this.Game.ScorePlayer(10);
 
             ReaderCommandHandler handler = new ReaderCommandHandler(
-                commandContext, manager, options, dbActionFactory, scoresheetGenerator, googleSheetsGeneratorFactory);
+                commandContext,
+                manager,
+                options,
+                dbActionFactory,
+                new Mock<IHubContext<MonitorHub>>().Object,
+                scoresheetGenerator,
+                googleSheetsGeneratorFactory);
 
             await handler.ClearAllAsync();
 
@@ -480,7 +487,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             Assert.AreEqual(1, this.MessageStore.ChannelMessages.Count, "Unexpected number of channel messages.");
             string message = this.MessageStore.ChannelMessages.First();
             Assert.AreEqual(
-                "Bonuses are no longer being tracked for this game only. Run !disableBonusesByDefault to stop tracking bonuses on this server by default.\nScores for the current question have been cleared.",
+                "Bonuses are no longer being tracked for this game only. Run /disable-bonuses-by-default to stop tracking bonuses on this server by default.\nScores for the current question have been cleared.",
                 message,
                 $"Unexpected message");
             Assert.AreEqual(Format.CreateTossupShootout(false), this.Game.Format, "Unexpected format");
@@ -676,7 +683,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 resultStream.Position = 0;
                 Assert.AreEqual(streamText.Length, resultStream.Length, "Unexpected stream length");
                 byte[] resultBytes = new byte[streamText.Length];
-                resultStream.Read(resultBytes, 0, resultBytes.Length);
+                resultStream.ReadExactly(resultBytes);
                 string resultString = Encoding.UTF8.GetString(resultBytes);
                 Assert.AreEqual(streamText, resultString, "Unexpected result from the stream");
             }
@@ -1096,7 +1103,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         private void InitializeHandler(HashSet<ulong> existingIds)
         {
             this.MessageStore = new MessageStore();
-            ICommandContext commandContext = CommandMocks.CreateCommandContext(
+            IInteractionContext commandContext = CommandMocks.CreateInteractionContext(
                 this.MessageStore,
                 existingIds,
                 DefaultGuildId,
@@ -1120,6 +1127,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 manager,
                 options,
                 dbActionFactory,
+                new Mock<IHubContext<MonitorHub>>().Object,
                 scoresheetGenerator,
                 this.GoogleSheetsGeneratorFactory);
         }
@@ -1128,7 +1136,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             IOptionsMonitor<BotConfiguration> options, IFileScoresheetGenerator scoresheetGenerator)
         {
             this.MessageStore = new MessageStore();
-            ICommandContext commandContext = CommandMocks.CreateCommandContext(
+            IInteractionContext commandContext = CommandMocks.CreateInteractionContext(
                 this.MessageStore,
                 DefaultIds,
                 DefaultGuildId,
@@ -1150,6 +1158,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 manager,
                 options,
                 dbActionFactory,
+                new Mock<IHubContext<MonitorHub>>().Object,
                 scoresheetGenerator,
                 this.GoogleSheetsGeneratorFactory);
         }
@@ -1158,7 +1167,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
             IOptionsMonitor<BotConfiguration> options, IGoogleSheetsGeneratorFactory googleSheetsGeneratorFactory)
         {
             this.MessageStore = new MessageStore();
-            ICommandContext commandContext = CommandMocks.CreateCommandContext(
+            IInteractionContext commandContext = CommandMocks.CreateInteractionContext(
                 this.MessageStore,
                 DefaultIds,
                 DefaultGuildId,
@@ -1181,6 +1190,7 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
                 manager,
                 options,
                 dbActionFactory,
+                new Mock<IHubContext<MonitorHub>>().Object,
                 scoresheetGenerator,
                 this.GoogleSheetsGeneratorFactory);
         }

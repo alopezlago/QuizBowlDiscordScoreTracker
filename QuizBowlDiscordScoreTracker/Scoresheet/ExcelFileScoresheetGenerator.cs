@@ -70,7 +70,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             }
 
             // Create the playerId -> column mapping
-            IReadOnlyDictionary<ulong, int> playerIdToColumn = CreatePlayerIdToColumnMapping(playersByTeam);
+            Dictionary<ulong, int> playerIdToColumn = CreatePlayerIdToColumnMapping(playersByTeam);
 
             using (XLWorkbook workbook = new XLWorkbook(stream, ExcelLoadOptions)) 
             {
@@ -148,7 +148,7 @@ namespace QuizBowlDiscordScoreTracker.Scoresheet
             return new SuccessResult<Stream>(stream);
         }
 
-        private static IReadOnlyDictionary<ulong, int> CreatePlayerIdToColumnMapping(
+        private static Dictionary<ulong, int> CreatePlayerIdToColumnMapping(
             IEnumerable<IGrouping<string, PlayerTeamPair>> playersByTeam)
         {
             Dictionary<ulong, int> playerIdToColumn = new Dictionary<ulong, int>();

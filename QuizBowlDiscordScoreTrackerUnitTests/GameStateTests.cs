@@ -20,6 +20,27 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
+        public async Task WithdrawalAfterTeamSwitchDoesNotAllowScoredTeamToBuzzAgain()
+        {
+            ByCommandTeamManager teams = new ByCommandTeamManager();
+            teams.TryAddTeam("First team", out _);
+            teams.TryAddTeam("Second team", out _);
+            teams.TryAddPlayerToTeam(1, "Scored player", "First team");
+            teams.TryAddPlayerToTeam(2, "Queued player", "Second team");
+            teams.TryAddPlayerToTeam(3, "Teammate", "First team");
+            GameState gameState = new GameState { TeamManager = teams };
+            Assert.IsTrue(await gameState.AddPlayer(1, "Scored player"));
+            gameState.ScorePlayer(-5);
+            Assert.IsTrue(await gameState.AddPlayer(2, "Queued player"));
+            teams.TryAddPlayerToTeam(2, "Queued player", "First team");
+
+            Assert.IsTrue(await gameState.WithdrawPlayer(2));
+
+            Assert.IsFalse(await gameState.AddPlayer(3, "Teammate"));
+            Assert.AreEqual(1, (await gameState.GetPhaseScores()).First().ScoringSplitsOnActions.Count());
+        }
+
+        [TestMethod]
         public void TryGetNextPlayerFalseWhenQueueIsEmpty()
         {
             GameState gameState = new GameState();
@@ -479,11 +500,9 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
 
             KeyValuePair<PlayerTeamPair, LastScoringSplit> scoreGrouping = lastSplits
                 .FirstOrDefault(pair => pair.Key.PlayerId == firstId);
-            Assert.IsNotNull(scoreGrouping, "We should have a pair which relates to the first player.");
             Assert.AreEqual(-5, scoreGrouping.Value.Split.Points, "The first player should have negged.");
 
             scoreGrouping = lastSplits.FirstOrDefault(pair => pair.Key.PlayerId == secondId);
-            Assert.IsNotNull(scoreGrouping, "We should have a pair which relates to the second player.");
             Assert.AreEqual(10, scoreGrouping.Value.Split.Points, "The second player should have negged.");
         }
 

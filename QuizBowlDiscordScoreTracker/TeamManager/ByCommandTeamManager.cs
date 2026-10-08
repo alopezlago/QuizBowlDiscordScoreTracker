@@ -18,13 +18,13 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
             this.TeamIdToName = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
         }
 
-        public string JoinTeamDescription => @"No teams. Use ""!addTeam *teamName*"" to add a team.";
+        public string JoinTeamDescription => @"No teams. Use ""/add-team *teamName*"" to add a team.";
 
         // The Team ID is the team name, which must be unique
-        private IDictionary<ulong, (string teamId, string playerName)> PlayerIdToTeamId { get; }
+        private Dictionary<ulong, (string teamId, string playerName)> PlayerIdToTeamId { get; }
 
         // we use a dictionary instead of a Set to easilsy support the GetTeamIdToName method
-        private IDictionary<string, string> TeamIdToName { get; }
+        private Dictionary<string, string> TeamIdToName { get; }
 
         public Task<IEnumerable<PlayerTeamPair>> GetKnownPlayers()
         {
@@ -65,13 +65,13 @@ namespace QuizBowlDiscordScoreTracker.TeamManager
             Verify.IsNotNull(teamName, nameof(teamName));
 
             teamName = teamName.Trim();
-            if (!this.TeamIdToName.ContainsKey(teamName))
+            if (!this.TeamIdToName.TryGetValue(teamName, out string value))
             {
                 return false;
             }
 
             // Correct any case irregularities from the player by replacing with "default" casing
-            teamName = this.TeamIdToName[teamName];
+            teamName = value;
             this.PlayerIdToTeamId[userId] = (teamName, playerDisplayName);
             return true;
         }

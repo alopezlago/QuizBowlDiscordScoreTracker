@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using Discord;
-using Discord.Commands;
+using Discord.Interactions;
 using Discord.WebSocket;
 using Serilog;
 using Serilog.Events;
@@ -12,9 +12,10 @@ namespace QuizBowlDiscordScoreTracker
     {
         private readonly ILogger logger;
         private DiscordSocketClient client;
-        private CommandService commandService;
+        private InteractionService interactionService;
 
-        public DiscordNetEventLogger(DiscordSocketClient client, CommandService commandService)
+        public DiscordNetEventLogger(
+            DiscordSocketClient client, InteractionService interactionService)
         {
             if (client == null)
             {
@@ -22,17 +23,14 @@ namespace QuizBowlDiscordScoreTracker
                 // to deal with this.
                 throw new ArgumentNullException(nameof(client));
             }
-            else if (commandService == null)
-            {
-                throw new ArgumentNullException(nameof(commandService));
-            }
+            else ArgumentNullException.ThrowIfNull(interactionService);
 
             this.logger = Log.ForContext(this.GetType());
             this.client = client;
             this.client.Log += this.LogMessageAsync;
 
-            this.commandService = commandService;
-            this.commandService.Log += this.LogMessageAsync;
+            this.interactionService = interactionService;
+            this.interactionService.Log += this.LogMessageAsync;
         }
 
         public void Dispose()
@@ -41,8 +39,8 @@ namespace QuizBowlDiscordScoreTracker
             {
                 this.client.Log -= this.LogMessageAsync;
                 this.client = null;
-                this.commandService.Log -= this.LogMessageAsync;
-                this.commandService = null;
+                this.interactionService.Log -= this.LogMessageAsync;
+                this.interactionService = null;
             }
         }
 

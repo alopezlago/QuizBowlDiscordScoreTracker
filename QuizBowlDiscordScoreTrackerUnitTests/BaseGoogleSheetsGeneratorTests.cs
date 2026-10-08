@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading.Tasks;
 using Google.Apis.Sheets.v4.Data;
@@ -229,11 +228,6 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         {
             public string Range { get; set; }
 
-
-            [SuppressMessage(
-                "Usage",
-                "CA2227:Collection properties should be read only",
-                Justification = "Only used to set the values in a property-initializer constructor")]
             public IList<object> Values { get; set; }
         }
     }

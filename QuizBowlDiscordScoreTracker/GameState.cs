@@ -149,19 +149,17 @@ namespace QuizBowlDiscordScoreTracker
             }
         }
 
-        public async Task<bool> WithdrawPlayer(ulong userId)
+        public Task<bool> WithdrawPlayer(ulong userId)
         {
             // readers cannot withdraw themselves
             if (userId == this.ReaderId)
             {
-                return false;
+                return Task.FromResult(false);
             }
-
-            string teamId = await this.TeamManager.GetTeamIdOrNull(userId);
 
             lock (this.phasesLock)
             {
-                return this.CurrentPhase.WithdrawPlayer(userId, teamId);
+                return Task.FromResult(this.CurrentPhase.WithdrawPlayer(userId));
             }
         }
 
@@ -303,7 +301,7 @@ namespace QuizBowlDiscordScoreTracker
             }
 
             List<PhaseScore> splitsPerPhase = new List<PhaseScore>();
-            IDictionary<PlayerTeamPair, LastScoringSplit> lastScoringSplits = knownPlayers
+            Dictionary<PlayerTeamPair, LastScoringSplit> lastScoringSplits = knownPlayers
                 .ToDictionary(
                     pair => pair,
                     pair => new LastScoringSplit()
@@ -312,7 +310,7 @@ namespace QuizBowlDiscordScoreTracker
                         Split = new ScoringSplit(),
                         TeamId = pair.TeamId
                     });
-            IDictionary<string, BonusStats> combinedBonusStats = new Dictionary<string, BonusStats>();
+            Dictionary<string, BonusStats> combinedBonusStats = new Dictionary<string, BonusStats>();
 
             foreach (PhaseState phase in this.phases)
             {
