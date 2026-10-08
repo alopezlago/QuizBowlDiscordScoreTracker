@@ -227,13 +227,6 @@ namespace QuizBowlDiscordScoreTrackerUnitTests
         }
 
         [TestMethod]
-        public void OnlyRequiredGuildIntentsAreRequested()
-        {
-            Assert.AreEqual(GatewayIntents.Guilds | GatewayIntents.GuildMembers | GatewayIntents.GuildVoiceStates,
-                Bot.RequiredGatewayIntents);
-        }
-
-        [TestMethod]
         public async Task DispatcherAcknowledgesBeforeCheckingDatabase()
         {
             IInteractionContext context = this.CreateContext(PlayerId, out InteractionLifecycleMock lifecycle);

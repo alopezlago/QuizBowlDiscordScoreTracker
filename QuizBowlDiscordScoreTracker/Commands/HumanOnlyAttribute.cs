@@ -14,7 +14,7 @@ namespace QuizBowlDiscordScoreTracker.Commands
             "CA1062:Validate arguments of public methods",
             Justification = "Discord.Net will pass in non-null CommandContext")]
         public override Task<PreconditionResult> CheckRequirementsAsync(
-            IInteractionContext context, ICommandInfo command, IServiceProvider services)
+            IInteractionContext context, ICommandInfo commandInfo, IServiceProvider services)
         {
             if (context.User.IsBot)
             {
